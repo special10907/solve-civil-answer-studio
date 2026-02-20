@@ -19,21 +19,33 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [2/4] 백엔드 서버 시작...
-start "Civil Answer Backend" cmd /k "cd /d "%~dp0backend" && npm start"
+for /f "usebackq delims=" %%s in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$a=Get-NetTCPConnection -LocalPort 8787,8000 -State Listen -ErrorAction SilentlyContinue; if($a){'RUNNING'} else {'STOPPED'}"`) do set "RUN_STATE=%%s"
 
-echo [3/4] 웹 서버 시작...
-start "Civil Answer Web" cmd /k "cd /d "%~dp0" && py -3 -m http.server 8000"
+if /I "%~1"=="stop" goto stop_services
+if /I "%RUN_STATE%"=="RUNNING" goto stop_services
 
-echo [4/4] 브라우저 열기...
+echo [2/4] 서버 시작...
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath node -ArgumentList 'server.js' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden -PassThru; $p.Id"`) do set "BACKEND_PID=%%p"
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath py -ArgumentList '-3','-m','http.server','8000' -WorkingDirectory '%~dp0' -WindowStyle Hidden -PassThru; $p.Id"`) do set "WEB_PID=%%p"
+
+echo [3/4] 브라우저 열기...
 timeout /t 2 >nul
 start "" "http://localhost:8000/solve_120.html"
 
+echo [4/4] 완료
 echo.
 echo 실행 완료:
-echo - 백엔드: http://localhost:8787
-echo - 웹앱:   http://localhost:8000/solve_120.html
+echo - 백엔드: http://localhost:8787 ^(PID: %BACKEND_PID%^) 
+echo - 웹앱:   http://localhost:8000/solve_120.html ^(PID: %WEB_PID%^) 
 echo.
-echo 종료하려면 새로 열린 두 개의 cmd 창을 닫으세요.
+echo 다시 run-local.bat 를 실행하면 서버가 자동 종료됩니다.
+exit /b 0
+
+:stop_services
+echo [2/2] 실행 중인 서버 종료...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=(Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess); if($p){Stop-Process -Id $p -Force}" >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess); if($p){Stop-Process -Id $p -Force}" >nul 2>nul
+echo 서버 종료 완료 ^(8787 / 8000^)
+exit /b 0
 
 exit /b 0
