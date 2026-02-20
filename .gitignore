@@ -1,0 +1,22 @@
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
+
+# Secrets
+backend/.env
+*.env
+*.env.local
+
+# Runtime logs
+*.log
+logs/
+
+# Dependencies
+backend/node_modules/
+
+# OS / editor artifacts
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/

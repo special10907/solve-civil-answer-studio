@@ -1,0 +1,3116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>토목구조기술사 회차 누적 분석 및 고득점 전략 노트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Chosen Palette: Warm Neutrals (Stone/Gray) with Professional Blue/Indigo Accents -->
+    <!-- Application Structure Plan: A Dashboard-style SPA with a left sidebar for navigation. 
+         Content is divided into Strategy, Exam Analysis, and Core Theoretical Modules (Dynamics, Steel, Concrete). 
+         This structure mimics a structured "Sub-note" used by successful candidates. -->
+    <!-- Visualization & Content Choices: 
+         1. Strategy Radar: To visualize the multi-faceted requirement of the exam.
+         2. Topic Doughnut: To show the distribution of the 120th exam questions.
+         3. Vibration Line Chart: To interactively demonstrate structural dynamics concepts.
+         4. Buckling Curve: To visualize steel column stability (LSD).
+         Confirming NO SVG graphics used. NO Mermaid JS used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f5f5f4; /* Stone-100 */
+        }
+
+        /* Custom Chart Container Styling as per requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px; /* Base height */
+            max-height: 400px;
+        }
+
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 1);
+        }
+        
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <nav class="bg-slate-800 text-white w-full md:w-64 flex-shrink-0 flex flex-col justify-between shadow-lg z-20">
+        <div class="p-6">
+            <h1 class="text-xl font-bold tracking-wider mb-1"><i class="fas fa-archway mr-2"></i>토목구조기술사</h1>
+            <p class="text-xs text-slate-400">회차 누적형 기출/답안 분석</p>
+            <div class="mt-3">
+                <label class="block text-[11px] text-slate-400 mb-1">전역 회차 선택</label>
+                <select id="globalRoundSelect" class="w-full text-xs p-2 rounded bg-slate-700 text-white border border-slate-600">
+                    <option value="">전체 회차</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto px-4 space-y-2 mb-4">
+            <button onclick="showSection('dashboard')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center bg-slate-700 font-medium" data-target="dashboard">
+                <i class="fas fa-tachometer-alt w-6"></i> 합격 전략 (Strategy)
+            </button>
+            <button onclick="showSection('analysis')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="analysis">
+                <i class="fas fa-chart-pie w-6"></i> 회차별 기출 분석
+            </button>
+            <button onclick="showSection('mechanics')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="mechanics">
+                <i class="fas fa-wave-square w-6"></i> 구조역학 & 동역학
+            </button>
+            <button onclick="showSection('design')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="design">
+                <i class="fas fa-industry w-6"></i> 강구조 & LSD
+            </button>
+            <button onclick="showSection('concrete')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="concrete">
+                <i class="fas fa-cube w-6"></i> RC & PSC (D-Region)
+            </button>
+            <button onclick="showSection('datahub')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="datahub">
+                <i class="fas fa-database w-6"></i> 문제/답안 데이터
+            </button>
+        </div>
+
+        <div class="p-4 bg-slate-900 text-xs text-center text-slate-500">
+            Multi-Round Exam Knowledge Base
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-8 relative">
+        
+        <!-- SECTION 1: DASHBOARD & STRATEGY -->
+        <section id="dashboard" class="content-section active max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2"><span class="global-round-label">전체 회차</span> 고득점 합격 전략 (High Score Strategy)</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
+                    <strong>Context:</strong> 토목구조기술사 시험은 단순한 계산 능력을 넘어, 공학적 판단력과 논리적 서술 능력을 요구합니다. 최근 회차 경향은 한계상태설계법(LSD), 유지관리, 구조적 직관을 묻는 문제가 증가하고 있습니다. 이 섹션에서는 합격권 답안 작성을 위한 핵심 요소를 분석합니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Strategy Chart -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-bold mb-4 border-b pb-2">합격자 역량 분석 (Competency Radar)</h3>
+                    <div class="chart-container">
+                        <canvas id="strategyChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-sm text-slate-600 text-center">
+                        <i class="fas fa-info-circle mr-1"></i> 고득점을 위해서는 이론적 깊이뿐만 아니라 답안의 가시성(Formatting)과 시간 관리가 필수적입니다.
+                    </div>
+                </div>
+
+                <!-- Strategic Keys -->
+                <div class="space-y-6">
+                    <div class="glass-panel p-6 rounded-xl shadow-sm h-full">
+                        <h3 class="text-lg font-bold mb-4 text-indigo-700">답안 작성 차별화 포인트 (Key Differentiators)</h3>
+                        <ul class="space-y-4">
+                            <li class="flex items-start">
+                                <span class="bg-indigo-100 text-indigo-800 p-2 rounded-lg mr-3 mt-1"><i class="fas fa-pen-fancy"></i></span>
+                                <div>
+                                    <h4 class="font-bold">키워드 강조 (Highlighting)</h4>
+                                    <p class="text-sm text-slate-600">채점관의 눈에 띄도록 핵심 용어(예: Redundancy, Ductility)는 <strong>영어/한자</strong>를 병기하고, 중요한 수치는 밑줄이나 괄호로 강조합니다.</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start">
+                                <span class="bg-emerald-100 text-emerald-800 p-2 rounded-lg mr-3 mt-1"><i class="fas fa-table"></i></span>
+                                <div>
+                                    <h4 class="font-bold">도해 및 도표화 (Visualization)</h4>
+                                    <p class="text-sm text-slate-600">줄글(Text) 대신 <strong>비교표(Table)</strong>를 사용하여 논리적 명확성을 높입니다. (예: 강성기초 vs 연성기초, ASD vs LSD)</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start">
+                                <span class="bg-rose-100 text-rose-800 p-2 rounded-lg mr-3 mt-1"><i class="fas fa-balance-scale"></i></span>
+                                <div>
+                                    <h4 class="font-bold">공학적 소견 (Engineering Judgment)</h4>
+                                    <p class="text-sm text-slate-600">결론부에는 단순 요약이 아닌, 시공성, 경제성, 유지관리를 고려한 <strong>기술사로서의 제언</strong>을 반드시 포함합니다.</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formula Reference -->
+            <div class="mt-6 glass-panel p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-bold mb-4">주요 암기 공식 및 수학적 기초 (Mathematical Basics)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                        <div class="font-bold text-indigo-600 mb-1">Taylor Series (테일러 급수)</div>
+                        <p class="font-mono text-slate-700">sin(x) ≈ x - x³/3!</p>
+                        <p class="font-mono text-slate-700">cos(x) ≈ 1 - x²/2!</p>
+                        <p class="text-xs text-slate-500 mt-2">미소변위 해석 시 필수 가정</p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                        <div class="font-bold text-indigo-600 mb-1">Euler Formula (오일러 공식)</div>
+                        <p class="font-mono text-slate-700">e^(ix) = cos(x) + i·sin(x)</p>
+                        <p class="text-xs text-slate-500 mt-2">동역학 및 복소수 해석의 기초</p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                        <div class="font-bold text-indigo-600 mb-1">Buckling Load (좌굴 하중)</div>
+                        <p class="font-mono text-slate-700">P_cr = (π²EI) / (KL)²</p>
+                        <p class="text-xs text-slate-500 mt-2">유효좌굴길이(KL) 산정이 핵심</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: ROUND-WISE EXAM ANALYSIS -->
+        <section id="analysis" class="content-section max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2"><span class="global-round-label">전체 회차</span> 기출문제 심층 분석</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-sky-500">
+                    <strong>Context:</strong> 회차별 시험은 구조역학의 기본 원리와 실무적 이슈(PSC 유지관리 등)가 혼합된 형태입니다. 1교시 단답형은 개념 명확성을, 2~4교시 서술형은 복합 해석 능력을 평가합니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Exam Distribution Chart -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm lg:col-span-1">
+                    <h3 class="text-lg font-bold mb-4 text-center"><span class="global-round-label">전체 회차</span> 출제 경향 분포</h3>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="examDistChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <span class="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full mr-1">구조역학</span>
+                        <span class="inline-block px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full mr-1">콘크리트(PSC)</span>
+                        <span class="inline-block px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">강구조/동역학</span>
+                    </div>
+                </div>
+
+                <!-- Problem Breakdown -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm lg:col-span-2">
+                    <h3 class="text-lg font-bold mb-4">교시별 핵심 문제 (Key Problems)</h3>
+                    <div class="flex space-x-2 mb-4 border-b border-slate-200">
+                        <button onclick="switchTab('p1')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600 active-tab" data-tab="p1">1교시 (용어)</button>
+                        <button onclick="switchTab('p2')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600" data-tab="p2">2~4교시 (서술)</button>
+                    </div>
+
+                    <div id="p1" class="tab-content block animate-fade-in">
+                        <ul class="space-y-3">
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow cursor-pointer group">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-indigo-700">Q1. 응력교란구역 (D-Region)</span>
+                                    <span class="text-xs text-slate-400">RC 구조</span>
+                                </div>
+                                <p class="text-sm text-slate-600 mt-1 group-hover:text-slate-800">Bernoulli 가정이 성립하지 않는 구간. 스트럿-타이 모델(STM) 적용 필수. (상세 내용은 RC 섹션 참조)</p>
+                            </li>
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow">
+                                <div class="font-bold text-indigo-700">Q. PSC 긴장재 부식 및 그라우팅</div>
+                                <p class="text-sm text-slate-600 mt-1">정릉천 고가교 사고 사례 연계. 부동태 피막 파괴 메커니즘 및 블리딩 대책 기술.</p>
+                            </li>
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow">
+                                <div class="font-bold text-indigo-700">Q. 한계상태설계법(LSD) 하중조합</div>
+                                <p class="text-sm text-slate-600 mt-1">KDS 24 12 11 기준. 극한한계상태, 사용한계상태의 하중계수 적용 원리.</p>
+                            </li>
+                        </ul>
+                    </div>
+                    <div id="p2" class="tab-content hidden animate-fade-in">
+                        <ul class="space-y-3">
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-orange-700">매트릭스 해석 (Matrix Method)</span>
+                                    <span class="text-xs text-slate-400">구조해석</span>
+                                </div>
+                                <p class="text-sm text-slate-600 mt-1">직접강도법을 이용한 트러스/프레임 해석. 자유도(DOF) 설정 및 강성행렬(K) 구성 능력 평가.</p>
+                            </li>
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow">
+                                <div class="font-bold text-orange-700">동역학 (Structural Dynamics)</div>
+                                <p class="text-sm text-slate-600 mt-1">고유진동수(Natural Frequency) 및 감쇠비(Damping Ratio) 산정. 응답스펙트럼 해석의 기초.</p>
+                            </li>
+                            <li class="bg-white p-3 rounded border border-slate-200 hover:shadow-md transition-shadow">
+                                <div class="font-bold text-orange-700">강구조 연결부 (Steel Connections)</div>
+                                <p class="text-sm text-slate-600 mt-1">볼트 및 용접 접합부의 파괴 모드 검토 (블록전단파단 등). KDS 14 30 25 기준 적용.</p>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: MECHANICS & DYNAMICS -->
+        <section id="mechanics" class="content-section max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2">구조역학 및 동역학 (Structural Dynamics)</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
+                    <strong>Context:</strong> 동역학 문제는 고유값(Eigenvalue) 해석과 감쇠 자유진동(Damped Free Vibration)의 이해를 묻습니다. 아래 시뮬레이션은 감쇠비(ξ)가 진동 소산에 미치는 영향을 보여줍니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Interactive Vibration Chart -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm lg:col-span-2">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold">감쇠 자유 진동 (Damped Free Vibration)</h3>
+                        <div class="text-xs bg-slate-100 px-2 py-1 rounded">Interactive</div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="vibrationChart"></canvas>
+                    </div>
+                    
+                    <!-- Controls -->
+                    <div class="mt-4 grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">감쇠비 (Damping Ratio, ξ): <span id="zetaValue">0.05</span></label>
+                            <input type="range" id="zetaInput" min="0" max="0.5" step="0.01" value="0.05" class="w-full accent-purple-600 cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">고유주기 (Period, Tn): <span id="tnValue">1.0</span>s</label>
+                            <input type="range" id="tnInput" min="0.5" max="3.0" step="0.1" value="1.0" class="w-full accent-purple-600 cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theory Highlights -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-bold mb-4 text-purple-700">핵심 이론 노트</h3>
+                    <div class="space-y-4 text-sm">
+                        <div class="border-l-2 border-purple-300 pl-3">
+                            <h4 class="font-bold text-slate-800">운동 방정식 (Equation of Motion)</h4>
+                            <p class="font-mono text-xs mt-1 text-slate-600">mü + c u̇ + ku = p(t)</p>
+                            <p class="mt-1 text-slate-600">관성력 + 감쇠력 + 복원력 = 외력</p>
+                        </div>
+                        <div class="border-l-2 border-purple-300 pl-3">
+                            <h4 class="font-bold text-slate-800">고유값 해석 (Eigenvalue Analysis)</h4>
+                            <p class="text-slate-600 mt-1">det(K - ω²M) = 0</p>
+                            <p class="text-slate-600">구조물의 고유진동수(ω)와 모드형상(Φ) 결정.</p>
+                        </div>
+                        <div class="border-l-2 border-purple-300 pl-3">
+                            <h4 class="font-bold text-slate-800">로그 감쇠율 (Logarithmic Decrement)</h4>
+                            <p class="font-mono text-xs mt-1 text-slate-600">δ = ln(u_i / u_{i+1}) ≈ 2πξ</p>
+                            <p class="text-slate-600">자유진동 실험을 통한 감쇠비 추정에 활용.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: STEEL & LSD -->
+        <section id="design" class="content-section max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2">강구조 및 한계상태설계법 (Steel & LSD)</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+                    <strong>Context:</strong> 강구조 설계의 핵심은 '좌굴(Buckling)'입니다. 오일러 탄성좌굴과 비탄성좌굴의 경계를 이해하고, 잔류응력과 초기결함이 기둥 강도에 미치는 영향을 KDS 기준에 맞춰 설명할 수 있어야 합니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Column Curve Chart -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-bold mb-4">기둥 강도 곡선 (Column Strength Curve)</h3>
+                    <div class="chart-container">
+                        <canvas id="bucklingChart"></canvas>
+                    </div>
+                    <div class="mt-2 text-xs text-slate-500 text-center">
+                        세장비(KL/r) 증가에 따른 임계응력(Fcr)의 감소
+                    </div>
+                </div>
+
+                <!-- LSD Concept Table -->
+                <div class="glass-panel p-6 rounded-xl shadow-sm flex flex-col justify-center">
+                    <h3 class="text-lg font-bold mb-4 text-red-700">설계법 비교 (Design Philosophies)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                    <th class="px-4 py-2 rounded-tl-lg">구분</th>
+                                    <th class="px-4 py-2">허용응력설계법 (ASD)</th>
+                                    <th class="px-4 py-2 rounded-tr-lg">한계상태설계법 (LSD)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200">
+                                <tr>
+                                    <td class="px-4 py-3 font-medium bg-slate-50">안전율</td>
+                                    <td class="px-4 py-3">단일 안전율 (Safety Factor)</td>
+                                    <td class="px-4 py-3 text-red-600 font-bold">부분 안전 계수 (Partial Safety Factors)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 font-medium bg-slate-50">하중</td>
+                                    <td class="px-4 py-3">사용 하중 (Service Load)</td>
+                                    <td class="px-4 py-3">계수 하중 (Factored Load)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 font-medium bg-slate-50">기반 이론</td>
+                                    <td class="px-4 py-3">탄성 이론 (Elastic)</td>
+                                    <td class="px-4 py-3">확률론적 신뢰성 이론 (Reliability)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 font-medium bg-slate-50">파괴 모드</td>
+                                    <td class="px-4 py-3">고려 미흡</td>
+                                    <td class="px-4 py-3">다양한 한계상태(ULS, SLS, FLS) 명확</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 p-3 bg-red-50 text-red-800 text-xs rounded border border-red-100">
+                        <i class="fas fa-check-circle mr-1"></i> <strong>Tip:</strong> 답안 작성 시 위와 같은 표를 활용하여 LSD의 확률론적 배경을 강조하면 고득점에 유리합니다.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: RC & D-REGION -->
+        <section id="concrete" class="content-section max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2">철근콘크리트 & 응력교란구역 (RC & D-Region)</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-teal-500">
+                    <strong>Context:</strong> 대표 기출 주제인 응력교란구역(D-Region)은 평면유지가정이 성립하지 않는 구간으로, KDS 14 20 24에 따라 스트럿-타이 모델(STM)을 적용해야 합니다.
+                </p>
+            </div>
+
+            <!-- Conceptual Diagram (CSS/HTML Implementation) -->
+            <div class="glass-panel p-8 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-6 text-center">스트럿-타이 모델 (Strut-and-Tie Model) 메커니즘</h3>
+                
+                <div class="relative w-full max-w-3xl mx-auto h-64 border-2 border-slate-300 rounded-lg bg-slate-50 p-4 flex flex-col justify-between items-center overflow-hidden">
+                    <!-- Beam Outline -->
+                    <div class="absolute top-0 left-0 bg-slate-200 text-[10px] p-1 rounded-br">Deep Beam / Corbel</div>
+
+                    <!-- Load P -->
+                    <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -mt-4 text-center">
+                        <div class="text-red-600 font-bold text-lg">↓ P (Load)</div>
+                    </div>
+
+                    <!-- Struts (Compression) -->
+                    <div class="absolute top-8 left-1/2 w-0.5 h-32 bg-transparent border-l-4 border-dotted border-red-400 transform -rotate-45 origin-top -translate-x-full"></div>
+                    <div class="absolute top-8 left-1/2 w-0.5 h-32 bg-transparent border-l-4 border-dotted border-red-400 transform rotate-45 origin-top"></div>
+                    
+                    <div class="absolute top-20 left-1/4 text-red-500 text-xs font-bold bg-white px-1">Strut (압축)</div>
+                    <div class="absolute top-20 right-1/4 text-red-500 text-xs font-bold bg-white px-1">Strut (압축)</div>
+
+                    <!-- Tie (Tension) -->
+                    <div class="absolute bottom-10 left-10 right-10 h-1 bg-blue-500"></div>
+                    <div class="absolute bottom-6 w-full text-center text-blue-600 text-xs font-bold">Tie (인장 철근)</div>
+
+                    <!-- Nodes -->
+                    <div class="absolute top-8 left-1/2 w-4 h-4 bg-slate-800 rounded-full transform -translate-x-1/2 shadow-lg z-10" title="CCC Node"></div>
+                    <div class="absolute bottom-10 left-12 w-4 h-4 bg-slate-800 rounded-full transform -translate-y-1/2 shadow-lg z-10" title="CCT Node"></div>
+                    <div class="absolute bottom-10 right-12 w-4 h-4 bg-slate-800 rounded-full transform -translate-y-1/2 shadow-lg z-10" title="CCT Node"></div>
+
+                    <!-- Supports -->
+                    <div class="absolute bottom-0 left-10 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px] border-b-slate-400"></div>
+                    <div class="absolute bottom-0 right-10 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px] border-b-slate-400"></div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div class="p-3 bg-red-50 rounded border border-red-100">
+                        <div class="font-bold text-red-700">Strut (압축대)</div>
+                        <p class="text-xs text-slate-600">콘크리트가 압축력을 전달하는 경로. 병형(Prismatic) 또는 부채꼴(Fan) 형상.</p>
+                    </div>
+                    <div class="p-3 bg-blue-50 rounded border border-blue-100">
+                        <div class="font-bold text-blue-700">Tie (인장대)</div>
+                        <p class="text-xs text-slate-600">철근이 배치되어 인장력을 부담하는 요소. 정착 길이 확보 필수.</p>
+                    </div>
+                    <div class="p-3 bg-slate-100 rounded border border-slate-200">
+                        <div class="font-bold text-slate-700">Node (절점)</div>
+                        <p class="text-xs text-slate-600">힘이 교차하는 영역. 응력 집중 발생. (CCC, CCT, CTT 등급)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Answer Content -->
+            <div class="glass-panel p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-bold mb-4 border-b pb-2">모범 답안 구성 (Key Points)</h3>
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-bold text-teal-700">1. 정의 (Definition)</h4>
+                        <p class="text-sm text-slate-700">
+                            하중 작용점이나 지점 부근, 단면 변화부 등 <strong>Saint-Venant의 원리</strong>가 적용되지 않아 평면유지 가정이 성립하지 않는 구간. (Beam Theory 불가)
+                        </p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-teal-700">2. 설계 원칙 (Design Principles)</h4>
+                        <ul class="list-disc list-inside text-sm text-slate-700 ml-2">
+                            <li><strong>B-Region (Beam):</strong> 휨 이론 적용 (평면 유지 가정).</li>
+                            <li><strong>D-Region (Discontinuity):</strong> 스트럿-타이 모델(STM) 또는 유한요소해석(FEM) 적용.</li>
+                            <li>KDS 14 20 24 기준에 의거하여 트러스 모델로 이상화하여 설계.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-teal-700">3. 검토 사항 (Checklist)</h4>
+                        <p class="text-sm text-slate-700">
+                            ① 스트럿의 유효 압축강도 (fce) 검토<br>
+                            ② 타이(철근)의 항복 강도 및 정착<br>
+                            ③ 절점 영역(Nodal Zone)의 지압 강도 및 앵커링
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="datahub" class="content-section max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800 mb-2">문제/모범답안 데이터 허브</h2>
+                <p class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-emerald-500">
+                    <strong>Context:</strong> NotebookLM/Flowith에서 만든 결과를 JSON으로 붙여넣고, 즉시 페이지 내에서 문제/모범답안을 렌더링합니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="glass-panel p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-bold mb-3">JSON 입력</h3>
+                    <p class="text-sm text-slate-600 mb-3">필수 구조: <strong>questions</strong> 배열 (각 항목: id, title, modelAnswer)</p>
+                    <textarea id="answerJsonInput" class="w-full h-80 p-3 text-sm border border-slate-300 rounded-lg bg-slate-50 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400" placeholder='{"questions":[{"id":"Q1","title":"문제 제목","modelAnswer":"모범답안"}]}'></textarea>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button onclick="loadSampleData()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">샘플 로드</button>
+                        <button onclick="applyAnswerData()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">JSON 적용</button>
+                        <button onclick="saveAnswerData()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">브라우저 저장</button>
+                        <button onclick="loadAnswerData()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">저장본 불러오기</button>
+                        <button onclick="exportAnswerDataToFile()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">JSON 파일 내보내기</button>
+                        <button onclick="openImportFileDialog()" class="px-3 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700">JSON 파일 가져오기</button>
+                    </div>
+                    <input id="importJsonFileInput" type="file" accept="application/json,.json" class="hidden" onchange="importAnswerDataFromFile(event)">
+                    <p id="dataStatus" class="mt-3 text-sm text-slate-600"></p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-bold mb-3">연계 워크플로우 (권장)</h3>
+                    <ol class="list-decimal list-inside text-sm text-slate-700 space-y-2">
+                        <li>NotebookLM/Flowith에서 문제별 모범답안을 생성</li>
+                        <li>아래 JSON 스키마에 맞춰 결과를 정리</li>
+                        <li>본 페이지에 붙여넣고 <strong>JSON 적용</strong> 클릭</li>
+                        <li>필요 시 <strong>브라우저 저장</strong>으로 임시 보관</li>
+                    </ol>
+                    <div class="mt-4 p-3 rounded border border-slate-200 bg-slate-50 text-xs text-slate-600">
+                        권장 필드: <strong>questions</strong>(id/title/examRound/tags/modelAnswer/source/reviewed), <strong>theories</strong>(id/title/category/content/examRound/tags/source)
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">PDF 업로드 & 자동 작성 (MVP)</h3>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">기출 PDF 업로드</label>
+                        <input id="pdfFileInput" type="file" accept="application/pdf,.pdf" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button onclick="extractPdfText()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">PDF 텍스트 추출</button>
+                            <button onclick="extractQuestionsFromPdfText()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">문제 자동 추출</button>
+                            <button id="runPipelineBtn" onclick="runAutoPipeline()" class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800">자동 배치 실행</button>
+                        </div>
+                        <div id="pipelineReport" class="mt-3 hidden text-xs rounded border border-emerald-200 bg-emerald-50 p-3 text-emerald-800"></div>
+                        <p id="pdfStatus" class="mt-2 text-xs text-slate-500"></p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">추출 텍스트</label>
+                        <textarea id="pdfExtractedText" class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 font-mono" placeholder="PDF 텍스트가 여기에 표시됩니다."></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-4 border-t border-slate-200 pt-4">
+                    <label class="inline-flex items-center text-sm text-slate-700 mb-3">
+                        <input id="overwriteGenerated" type="checkbox" class="mr-2 accent-indigo-600">
+                        기존 모범답안이 있어도 덮어쓰기
+                    </label>
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <button onclick="generateDraftAnswersLocal()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">초안 자동 작성 (로컬 규칙)</button>
+                        <button onclick="generateDraftAnswersByApi()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">초안 자동 작성 (외부 API)</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input id="aiEndpointUrl" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="외부 API URL (예: https://.../generate)">
+                        <input id="aiApiKey" type="password" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="API Key (선택)">
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <button onclick="checkBackendConnection()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">백엔드 연결 확인</button>
+                        <span id="backendStatus" class="text-xs text-slate-500 self-center">백엔드 상태 미확인</span>
+                    </div>
+                    <div id="backendDiagnostics" class="mt-2 text-xs rounded border border-slate-200 bg-slate-50 p-2 text-slate-600">Provider 진단 정보 없음</div>
+                    <p class="mt-2 text-xs text-slate-500">외부 API는 서버를 직접 운영할 때 사용하세요. 브라우저 단독 환경에서는 로컬 규칙 생성이 기본입니다.</p>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">첨부 자료 분석 스튜디오 (파일/웹사이트)</h3>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">파일 첨부 (동영상/이미지/PDF/텍스트)</label>
+                        <input id="attachmentFiles" type="file" multiple accept="video/*,image/*,application/pdf,.pdf,.txt,.md,.csv" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
+                        <textarea id="attachmentFocus" class="w-full h-24 mt-2 p-2 text-xs border border-slate-300 rounded bg-slate-50" placeholder="분석 초점(예: PSC 긴장재 부식 대책 중심으로 요약)"></textarea>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button onclick="analyzeAttachedFiles()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">파일 분석 실행</button>
+                            <button onclick="analyzeAttachedWebsite()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">웹사이트 분석 실행</button>
+                        </div>
+                        <input id="attachmentWebsiteUrl" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white mt-2" placeholder="웹사이트 URL 첨부 (예: https://...)">
+                        <p id="attachmentStatus" class="mt-2 text-xs text-slate-500"></p>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-600 mb-1">분석 결과 적용</div>
+                        <select id="attachmentTargetQuestion" class="w-full p-2 text-sm border border-slate-300 rounded bg-white mb-2">
+                            <option value="">보강 적용할 문제 선택</option>
+                        </select>
+                        <button onclick="applyAttachmentInsightToQuestion()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">선택 문제에 보강 반영</button>
+                        <div class="mt-3 p-3 rounded border border-slate-200 bg-slate-50">
+                            <div id="attachmentInsightSummary" class="text-sm text-slate-700"></div>
+                            <ul id="attachmentInsightPoints" class="mt-2 text-xs text-slate-700 list-disc list-inside space-y-1"></ul>
+                            <pre id="attachmentInsightBoost" class="mt-2 whitespace-pre-wrap text-xs text-slate-700"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">모범답안 추가</h3>
+                <input id="editingIndex" type="hidden" value="">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">회차</label>
+                        <input id="newQRound" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="예: 120회">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">문제 ID</label>
+                        <input id="newQId" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="예: Q3">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">문제 제목</label>
+                        <input id="newQTitle" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="예: 매트릭스 해석 절차 설명">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">태그 (쉼표 구분)</label>
+                        <input id="newQTags" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="예: 구조역학, Matrix, KDS">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">출처</label>
+                        <input id="newQSource" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="예: NotebookLM Draft">
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-xs font-bold text-slate-600 mb-1">모범답안</label>
+                    <textarea id="newQAnswer" class="w-full h-36 p-3 text-sm border border-slate-300 rounded bg-white" placeholder="모범답안 본문을 입력하세요."></textarea>
+                </div>
+                <div class="mt-3 flex items-center gap-3">
+                    <label class="inline-flex items-center text-sm text-slate-700">
+                        <input id="newQReviewed" type="checkbox" class="mr-2 accent-emerald-600">
+                        검토완료
+                    </label>
+                    <button id="entrySubmitBtn" onclick="addModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">모범답안 추가</button>
+                    <button onclick="cancelEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
+                </div>
+                <p class="mt-2 text-xs text-slate-500">추가 시 JSON 입력창과 렌더링 결과에 즉시 반영됩니다.</p>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">이론 지식 베이스 (누적 관리)</h3>
+                <input id="editingTheoryIndex" type="hidden" value="">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input id="theoryId" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="이론 ID (예: TH-001)">
+                    <input id="theoryTitle" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="이론 제목">
+                    <input id="theoryCategory" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="카테고리 (예: RC/강구조/동역학)">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <input id="theoryRound" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="회차 (예: 121회)">
+                    <input id="theoryTags" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="태그 (쉼표 구분)">
+                    <input id="theorySource" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="출처 (예: PDF/메모/경험)">
+                </div>
+                <textarea id="theoryContent" class="w-full h-32 mt-3 p-3 text-sm border border-slate-300 rounded bg-white" placeholder="이론 내용을 입력하세요. (정의/메커니즘/설계기준/KDS/도해 포인트)"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button id="theorySubmitBtn" onclick="upsertTheoryEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">이론 추가</button>
+                    <button onclick="cancelTheoryEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
+                    <button onclick="analyzeTheoryKnowledge()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">중복/보강 자동 분석</button>
+                    <button onclick="generateTheoryMergeDrafts()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">보강 병합 초안 생성</button>
+                    <button onclick="applyTheoryCleanup()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">중복 정리 적용</button>
+                </div>
+                <p class="mt-2 text-xs text-slate-500">분석 기준: 유사도 기반 중복 판단 + 보완 키워드 기반 보강 판단</p>
+                <div id="theoryStatus" class="mt-2 text-xs text-slate-500"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">이론 목록</h3>
+                <div id="theoryList" class="space-y-3"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">이론 중복/보강 분석 결과</h3>
+                <div id="theoryAnalysisSummary" class="text-sm text-slate-700 mb-3"></div>
+                <div id="theoryAnalysisList" class="space-y-3"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">보강 병합 초안</h3>
+                <div class="mb-3 flex items-center gap-2 text-sm">
+                    <label class="text-slate-600">최소 품질 점수</label>
+                    <select id="mergeQualityThreshold" class="p-2 text-sm border border-slate-300 rounded bg-white">
+                        <option value="0">전체</option>
+                        <option value="60">60점 이상</option>
+                        <option value="70" selected>70점 이상</option>
+                        <option value="80">80점 이상</option>
+                        <option value="90">90점 이상</option>
+                    </select>
+                </div>
+                <div id="theoryMergeSummary" class="text-sm text-slate-700 mb-3"></div>
+                <div id="theoryMergeList" class="space-y-3"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">검색/필터</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <input id="filterKeyword" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="제목/답안 검색">
+                    <select id="filterRound" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
+                        <option value="">전체 회차</option>
+                    </select>
+                    <select id="filterTag" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
+                        <option value="">전체 태그</option>
+                    </select>
+                    <label class="inline-flex items-center text-sm text-slate-700 px-2">
+                        <input id="filterLowScore" type="checkbox" class="mr-2 accent-rose-600">
+                        저득점 우선 보기 (&lt;70)
+                    </label>
+                </div>
+                <div id="roundSummary" class="mt-3 text-xs text-slate-500"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+                <h3 class="text-lg font-bold mb-4">회차별 통계 대시보드</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                    <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                        <div class="text-xs text-slate-500">누적 회차 수</div>
+                        <div id="statTotalRounds" class="text-xl font-bold text-slate-800 mt-1">0</div>
+                    </div>
+                    <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                        <div class="text-xs text-slate-500">누적 문항 수</div>
+                        <div id="statTotalQuestions" class="text-xl font-bold text-slate-800 mt-1">0</div>
+                    </div>
+                    <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                        <div class="text-xs text-slate-500">전체 평균 점수</div>
+                        <div id="statAvgScore" class="text-xl font-bold text-indigo-700 mt-1">0</div>
+                    </div>
+                    <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                        <div class="text-xs text-slate-500">저득점 비율 (&lt;70)</div>
+                        <div id="statLowScoreRate" class="text-xl font-bold text-rose-700 mt-1">0%</div>
+                    </div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-lg p-3 mb-4">
+                    <div class="text-xs text-slate-500 mb-2">회차별 평균점 / 저득점 문항 수</div>
+                    <div style="position: relative; width: 100%; height: 260px;">
+                        <canvas id="roundStatsChart"></canvas>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm border border-slate-200 rounded overflow-hidden">
+                        <thead class="bg-slate-100 text-slate-700">
+                            <tr>
+                                <th class="px-3 py-2 text-left">회차</th>
+                                <th class="px-3 py-2 text-left">문항 수</th>
+                                <th class="px-3 py-2 text-left">평균 점수</th>
+                                <th class="px-3 py-2 text-left">저득점 문항 수</th>
+                                <th class="px-3 py-2 text-left">보강 우선도</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roundStatsBody" class="divide-y divide-slate-200 bg-white">
+                            <tr><td colspan="5" class="px-3 py-3 text-slate-500">통계 데이터가 없습니다.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-bold mb-4">렌더링 결과</h3>
+                <div id="answerList" class="space-y-4"></div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mt-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h3 class="text-lg font-bold">자동 검토 및 보강 제안</h3>
+                    <button onclick="evaluateRenderedAnswers()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">자동 평가 실행</button>
+                </div>
+                <p class="text-sm text-slate-600 mb-4">
+                    평가 기준: 분량 적정성, 도해/표/그래프 활용, 핵심 키워드(영어 병기), KDS 코드 명시, 개조식/넘버링 구조.
+                </p>
+                <div id="evaluationSummary" class="mb-4 text-sm text-slate-700"></div>
+                <div id="evaluationList" class="space-y-3"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="deleteConfirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+        <div class="w-full max-w-md rounded-xl bg-white border border-slate-200 shadow-xl p-5">
+            <h4 class="text-lg font-bold text-slate-800 mb-2">항목 삭제 확인</h4>
+            <p class="text-sm text-slate-600 mb-4">선택한 모범답안을 삭제하면 JSON과 평가 결과에서도 즉시 제거됩니다.</p>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeDeleteConfirmModal()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">취소</button>
+                <button onclick="confirmDeleteModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">삭제</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Navigation Logic ---
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(el => {
+                el.classList.remove('active');
+            });
+            // Show target section
+            document.getElementById(sectionId).classList.add('active');
+            
+            // Update Nav State
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if(btn.dataset.target === sectionId) {
+                    btn.classList.add('bg-slate-700');
+                } else {
+                    btn.classList.remove('bg-slate-700');
+                }
+            });
+        }
+
+        function switchTab(tabId) {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            // Show target tab content
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            // Update Tab Styles
+            document.querySelectorAll('.exam-tab').forEach(t => {
+                t.classList.remove('active-tab', 'border-indigo-600', 'text-indigo-600');
+                t.classList.add('border-transparent');
+            });
+            const activeBtn = document.querySelector(`button[data-tab="${tabId}"]`);
+            activeBtn.classList.add('active-tab', 'border-indigo-600', 'text-indigo-600');
+            activeBtn.classList.remove('border-transparent');
+        }
+
+        // --- Chart Initialization ---
+        
+        // 1. Strategy Radar Chart
+        const ctxStrategy = document.getElementById('strategyChart').getContext('2d');
+        new Chart(ctxStrategy, {
+            type: 'radar',
+            data: {
+                labels: ['이론 이해도', '계산 정확성', '답안 형식/가독성', '시간 관리', '설계기준(KDS) 암기', '실무/시공 연계'],
+                datasets: [{
+                    label: '합격권 (Passing Score)',
+                    data: [85, 90, 95, 90, 80, 85],
+                    fill: true,
+                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                    borderColor: 'rgb(99, 102, 241)',
+                    pointBackgroundColor: 'rgb(99, 102, 241)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(99, 102, 241)'
+                }, {
+                    label: '일반 응시자 (Typical)',
+                    data: [80, 70, 50, 60, 40, 30],
+                    fill: true,
+                    backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                    borderColor: 'rgb(148, 163, 184)',
+                    pointBackgroundColor: 'rgb(148, 163, 184)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(148, 163, 184)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        angleLines: { display: false },
+                        suggestedMin: 0,
+                        suggestedMax: 100
+                    }
+                }
+            }
+        });
+
+        // 2. Exam Distribution Chart (Doughnut)
+        const ctxExam = document.getElementById('examDistChart').getContext('2d');
+        new Chart(ctxExam, {
+            type: 'doughnut',
+            data: {
+                labels: ['구조역학 (Matrix/Dynamics)', '철근콘크리트 (RC/PSC)', '강구조 (Steel)', '교량/유지관리', '기타'],
+                datasets: [{
+                    data: [30, 25, 20, 15, 10],
+                    backgroundColor: [
+                        'rgba(59, 130, 246, 0.8)', // Blue
+                        'rgba(20, 184, 166, 0.8)', // Teal
+                        'rgba(249, 115, 22, 0.8)', // Orange
+                        'rgba(168, 85, 247, 0.8)', // Purple
+                        'rgba(148, 163, 184, 0.8)'  // Grey
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' }
+                }
+            }
+        });
+
+        // 3. Vibration Chart (Interactive Line)
+        let vibrationChart;
+        function initVibrationChart() {
+            const ctxVib = document.getElementById('vibrationChart').getContext('2d');
+            const dataPoints = [];
+            const labels = [];
+            
+            // Initial calc
+            const zeta = 0.05;
+            const Tn = 1.0;
+            const wn = 2 * Math.PI / Tn;
+            const wd = wn * Math.sqrt(1 - zeta*zeta);
+            
+            for(let t=0; t<=5; t+=0.05) {
+                const u = Math.exp(-zeta * wn * t) * Math.cos(wd * t);
+                dataPoints.push(u);
+                labels.push(t.toFixed(2));
+            }
+
+            vibrationChart = new Chart(ctxVib, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '변위 u(t)',
+                        data: dataPoints,
+                        borderColor: 'rgb(147, 51, 234)',
+                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Time (sec)' } },
+                        y: { title: { display: true, text: 'Displacement (normalized)' }, min: -1, max: 1 }
+                    },
+                    animation: { duration: 0 } // Disable animation for slider performance
+                }
+            });
+        }
+
+        // 4. Buckling Chart (Column Strength)
+        const ctxBuckling = document.getElementById('bucklingChart').getContext('2d');
+        const slenderness = [];
+        const eulerStress = [];
+        const designStress = [];
+
+        for(let lam=0; lam<=200; lam+=5) {
+            slenderness.push(lam);
+            // Euler: Fe = pi^2 * E / (KL/r)^2. Assume E=205000, Fy=235
+            const E = 205000;
+            const Fy = 235;
+            let Fe = (Math.PI * Math.PI * E) / (lam * lam);
+            if(lam === 0) Fe = Fy; // Prevent infinity
+
+            eulerStress.push(Math.min(Fe, Fy * 1.5)); // Cap for graph
+
+            // Simplified Inelastic (Concept)
+            let Fcr;
+            if (Fe >= 0.44 * Fy) {
+                Fcr = Fy * Math.pow(0.658, (Fy/Fe));
+            } else {
+                Fcr = 0.877 * Fe;
+            }
+            designStress.push(Fcr);
+        }
+
+        new Chart(ctxBuckling, {
+            type: 'line',
+            data: {
+                labels: slenderness,
+                datasets: [{
+                    label: '오일러 탄성좌굴 (Euler Elastic)',
+                    data: eulerStress,
+                    borderColor: 'rgb(148, 163, 184)',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    pointRadius: 0
+                }, {
+                    label: '설계 강도 (Design Strength - Inelastic)',
+                    data: designStress,
+                    borderColor: 'rgb(220, 38, 38)',
+                    borderWidth: 3,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: '세장비 (Slenderness Ratio, KL/r)' } },
+                    y: { title: { display: true, text: '임계 응력 (Critical Stress, MPa)' } }
+                }
+            }
+        });
+
+        // Initialize Vibration Chart
+        initVibrationChart();
+
+        // --- Interaction Logic ---
+        const zetaInput = document.getElementById('zetaInput');
+        const tnInput = document.getElementById('tnInput');
+        const zetaValue = document.getElementById('zetaValue');
+        const tnValue = document.getElementById('tnValue');
+
+        function updateVibration() {
+            const zeta = parseFloat(zetaInput.value);
+            const Tn = parseFloat(tnInput.value);
+            
+            zetaValue.innerText = zeta;
+            tnValue.innerText = Tn.toFixed(1);
+
+            const wn = 2 * Math.PI / Tn;
+            const wd = wn * Math.sqrt(1 - zeta*zeta);
+            
+            const newData = [];
+            for(let t=0; t<=5; t+=0.05) {
+                const u = Math.exp(-zeta * wn * t) * Math.cos(wd * t);
+                newData.push(u);
+            }
+
+            vibrationChart.data.datasets[0].data = newData;
+            vibrationChart.update();
+        }
+
+        zetaInput.addEventListener('input', updateVibration);
+        tnInput.addEventListener('input', updateVibration);
+
+        const ANSWER_STORAGE_KEY = 'solve120_answer_data_v1';
+        const AI_ENDPOINT_STORAGE_KEY = 'solve120_ai_endpoint_v1';
+        let lastEvaluationResults = [];
+        let pendingDeleteIndex = -1;
+        let roundStatsChart = null;
+        let pipelineRunning = false;
+        let theoryAnalysisCache = { duplicates: [], reinforcements: [], mergedDrafts: [] };
+        let latestAttachmentInsight = null;
+
+        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        const sampleAnswerData = {
+            meta: {
+                exam: '토목구조기술사 120회',
+                source: 'NotebookLM/Flowith',
+                version: 'v1.0'
+            },
+            questions: [
+                {
+                    id: 'Q1',
+                    title: '응력교란구역(D-Region)의 정의 및 설계 원칙',
+                    examRound: '120회',
+                    tags: ['RC', 'STM', 'KDS 14 20 24'],
+                    modelAnswer: 'D-Region은 평면유지 가정이 성립하지 않는 불연속 영역으로, 스트럿-타이 모델을 통해 힘의 흐름을 이상화하여 설계한다. 설계 시 strut, tie, node 강도와 정착 길이를 종합 검토한다.',
+                    source: 'Flowith Draft',
+                    reviewed: false
+                },
+                {
+                    id: 'Q2',
+                    title: 'PS 긴장재 부식 및 지연파괴 대책',
+                    examRound: '120회',
+                    tags: ['PSC', '유지관리', '그라우팅'],
+                    modelAnswer: '염소이온과 수분 환경에서 수소취성이 가속될 수 있으므로, 그라우팅 품질관리와 피복 두께 확보, 정기 점검 및 비파괴검사를 병행한다.',
+                    source: 'NotebookLM Notes',
+                    reviewed: true
+                }
+            ],
+            theories: [
+                {
+                    id: 'TH-001',
+                    title: '응력교란구역(D-Region) 기본 개념',
+                    category: 'RC',
+                    examRound: '120회',
+                    tags: ['RC', 'STM', 'D-Region'],
+                    source: 'Subnote',
+                    content: 'D-Region은 평면유지 가정이 성립하지 않는 불연속 구간이며 STM으로 힘의 전달 경로를 이상화하여 설계한다. KDS 14 20 24 기준으로 Strut/Tie/Node 강도를 검토한다.'
+                },
+                {
+                    id: 'TH-002',
+                    title: 'D-Region 설계 보강 포인트',
+                    category: 'RC',
+                    examRound: '121회',
+                    tags: ['RC', '정착', '절점'],
+                    source: 'PDF Upload',
+                    content: 'STM 적용 시 절점(Nodal Zone)의 지압강도와 인장 철근 정착길이 확보를 우선 검토한다. 도해와 비교표를 활용하면 채점 가독성이 높아진다.'
+                }
+            ]
+        };
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function setDataStatus(message, type = 'info') {
+            const statusEl = document.getElementById('dataStatus');
+            const colorMap = {
+                info: 'text-slate-600',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `mt-3 text-sm ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function setPdfStatus(message, type = 'info') {
+            const statusEl = document.getElementById('pdfStatus');
+            const colorMap = {
+                info: 'text-slate-500',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `mt-2 text-xs ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function setAttachmentStatus(message, type = 'info') {
+            const statusEl = document.getElementById('attachmentStatus');
+            if (!statusEl) {
+                return;
+            }
+            const colorMap = {
+                info: 'text-slate-500',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `mt-2 text-xs ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function renderAttachmentInsight(insight) {
+            const summaryEl = document.getElementById('attachmentInsightSummary');
+            const pointsEl = document.getElementById('attachmentInsightPoints');
+            const boostEl = document.getElementById('attachmentInsightBoost');
+
+            if (!summaryEl || !pointsEl || !boostEl) {
+                return;
+            }
+
+            if (!insight) {
+                summaryEl.textContent = '아직 분석 결과가 없습니다.';
+                pointsEl.innerHTML = '';
+                boostEl.textContent = '';
+                return;
+            }
+
+            summaryEl.textContent = insight.summary || '요약 결과 없음';
+            const keyPoints = Array.isArray(insight.keyPoints) ? insight.keyPoints : [];
+            const keywordPoints = !keyPoints.length && Array.isArray(insight.keywords)
+                ? insight.keywords.slice(0, 5).map(keyword => `핵심 키워드: ${keyword}`)
+                : [];
+            const points = keyPoints.length ? keyPoints : keywordPoints;
+            pointsEl.innerHTML = points.map(point => `<li>${escapeHtml(point)}</li>`).join('');
+            boostEl.textContent = insight.answerBoost || '';
+        }
+
+        function refreshAttachmentTargetOptions(questions) {
+            const select = document.getElementById('attachmentTargetQuestion');
+            if (!select) {
+                return;
+            }
+
+            const currentValue = select.value;
+            const list = Array.isArray(questions) ? questions : [];
+            const options = ['<option value="">보강 적용할 문제 선택</option>'];
+            list.forEach((item, index) => {
+                const label = `${item.id || `Q${index + 1}`} · ${item.title || '제목 없음'} (${item.examRound || '미지정'})`;
+                options.push(`<option value="${index}">${escapeHtml(label)}</option>`);
+            });
+            select.innerHTML = options.join('');
+
+            if (currentValue && Number.isInteger(Number(currentValue)) && list[Number(currentValue)]) {
+                select.value = currentValue;
+            }
+        }
+
+        async function readAttachmentTextExcerpt(file) {
+            const ext = (file.name || '').toLowerCase().split('.').pop() || '';
+            const type = file.type || '';
+
+            if (type.startsWith('text/') || ['txt', 'md', 'csv', 'json'].includes(ext)) {
+                const text = await file.text();
+                return text.slice(0, 5000);
+            }
+
+            if ((type === 'application/pdf' || ext === 'pdf') && window.pdfjsLib) {
+                const buffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+                const pages = Math.min(pdf.numPages, 5);
+                const parts = [];
+                for (let pageNum = 1; pageNum <= pages; pageNum += 1) {
+                    const page = await pdf.getPage(pageNum);
+                    const content = await page.getTextContent();
+                    const pageText = content.items.map(item => item.str).join(' ');
+                    parts.push(pageText);
+                }
+                return parts.join('\n').slice(0, 5000);
+            }
+
+            if (type.startsWith('image/')) {
+                return `이미지 파일 메타정보: ${file.name}, ${Math.round(file.size / 1024)}KB`;
+            }
+
+            if (type.startsWith('video/')) {
+                return `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
+            }
+
+            return `파일 메타정보: ${file.name}, type=${type || 'unknown'}, size=${file.size}`;
+        }
+
+        function buildLocalAttachmentInsight(items, focus, title = '첨부자료') {
+            const rawText = items.map(item => item.textExcerpt || '').join(' ').replace(/\s+/g, ' ').trim();
+            const fallback = rawText || `${title} 분석 결과를 기반으로 핵심 포인트를 정리합니다.`;
+            const firstChunk = fallback.slice(0, 240);
+            const words = fallback
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+                .split(/\s+/)
+                .filter(token => token.length >= 2)
+                .slice(0, 120);
+
+            const freq = new Map();
+            words.forEach(word => freq.set(word, (freq.get(word) || 0) + 1));
+            const keyPoints = [...freq.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([word]) => `핵심 키워드: ${word}`);
+
+            return {
+                summary: `${title} 요약: ${firstChunk}${fallback.length > 240 ? '...' : ''}`,
+                keyPoints: keyPoints.length ? keyPoints : ['핵심 포인트를 추출할 텍스트가 부족합니다.'],
+                answerBoost: [
+                    `- 첨부자료 분석 초점: ${focus || '일반'} 관점에서 근거를 보강함.`,
+                    '- 기준/정의 → 원인/메커니즘 → 대책/결론 순으로 답안을 구조화함.',
+                    '- 수치·도해·비교표 제시 시 채점 가독성이 향상됨.'
+                ].join('\n')
+            };
+        }
+
+        async function analyzeAttachedFiles() {
+            const input = document.getElementById('attachmentFiles');
+            const files = Array.from(input.files || []);
+            const focus = document.getElementById('attachmentFocus').value.trim();
+
+            if (!files.length) {
+                setAttachmentStatus('분석할 파일을 먼저 첨부하세요.', 'error');
+                return;
+            }
+
+            setAttachmentStatus('첨부 파일 분석 준비 중...', 'info');
+
+            const items = [];
+            for (const file of files) {
+                try {
+                    const textExcerpt = await readAttachmentTextExcerpt(file);
+                    items.push({
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        textExcerpt
+                    });
+                } catch {
+                    items.push({
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        textExcerpt: `파일 읽기 실패: ${file.name}`
+                    });
+                }
+            }
+
+            const baseUrl = getBackendBaseUrl();
+            try {
+                setAttachmentStatus('백엔드 파일 분석 실행 중...', 'info');
+                const response = await fetch(`${baseUrl}/api/analyze-attachments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items, focus })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const insight = await response.json();
+                latestAttachmentInsight = insight;
+                renderAttachmentInsight(insight);
+                setAttachmentStatus(`첨부 파일 분석 완료 (${insight.mode || 'backend'} 모드)`, 'success');
+                return;
+            } catch {
+                const localInsight = buildLocalAttachmentInsight(items, focus, `${files.length}개 파일`);
+                latestAttachmentInsight = { ...localInsight, mode: 'local' };
+                renderAttachmentInsight(latestAttachmentInsight);
+                setAttachmentStatus('백엔드 연결 실패로 로컬 분석 결과를 표시했습니다.', 'info');
+            }
+        }
+
+        async function analyzeAttachedWebsite() {
+            const url = document.getElementById('attachmentWebsiteUrl').value.trim();
+            const focus = document.getElementById('attachmentFocus').value.trim();
+            if (!url) {
+                setAttachmentStatus('분석할 웹사이트 URL을 입력하세요.', 'error');
+                return;
+            }
+
+            const baseUrl = getBackendBaseUrl();
+            try {
+                setAttachmentStatus('웹사이트 분석 실행 중...', 'info');
+                const response = await fetch(`${baseUrl}/api/analyze-webpage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, focus })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const insight = await response.json();
+                latestAttachmentInsight = insight;
+                renderAttachmentInsight(insight);
+                setAttachmentStatus(`웹사이트 분석 완료 (${insight.mode || 'backend'} 모드)`, 'success');
+                return;
+            } catch {
+                const localInsight = buildLocalAttachmentInsight([{ textExcerpt: url }], focus, '웹사이트');
+                latestAttachmentInsight = { ...localInsight, mode: 'local' };
+                renderAttachmentInsight(latestAttachmentInsight);
+                setAttachmentStatus('웹사이트 원문 분석 실패로 로컬 템플릿 결과를 표시했습니다.', 'info');
+            }
+        }
+
+        function applyAttachmentInsightToQuestion() {
+            if (!latestAttachmentInsight || !latestAttachmentInsight.answerBoost) {
+                setAttachmentStatus('적용할 분석 결과가 없습니다. 먼저 분석을 실행하세요.', 'error');
+                return;
+            }
+
+            const select = document.getElementById('attachmentTargetQuestion');
+            const selectedIndex = Number(select.value);
+            if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+                setAttachmentStatus('보강을 적용할 문제를 선택하세요.', 'error');
+                return;
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setAttachmentStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const target = data.questions[selectedIndex];
+            if (!target) {
+                setAttachmentStatus('선택한 문제를 찾지 못했습니다.', 'error');
+                return;
+            }
+
+            const boostBlock = `\n\n[첨부자료 보강]\n${latestAttachmentInsight.answerBoost}`;
+            const currentAnswer = target.modelAnswer || '';
+            target.modelAnswer = currentAnswer.includes('[첨부자료 보강]')
+                ? `${currentAnswer}\n${latestAttachmentInsight.answerBoost}`
+                : `${currentAnswer}${boostBlock}`.trim();
+
+            if (!target.source || target.source === '-') {
+                target.source = 'Attachment Studio';
+            } else if (!target.source.includes('Attachment')) {
+                target.source = `${target.source} + Attachment`; 
+            }
+
+            syncJsonAndRender(data, `${target.id || `Q${selectedIndex + 1}`} 문제에 첨부자료 보강을 반영했습니다.`);
+            setAttachmentStatus('선택 문제에 보강 내용을 반영했습니다.', 'success');
+        }
+
+        function setTheoryStatus(message, type = 'info') {
+            const statusEl = document.getElementById('theoryStatus');
+            if (!statusEl) {
+                return;
+            }
+            const colorMap = {
+                info: 'text-slate-500',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `mt-2 text-xs ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function setPipelineReport(reportText, type = 'success') {
+            const el = document.getElementById('pipelineReport');
+            const styleMap = {
+                success: 'mt-3 text-xs rounded border border-emerald-200 bg-emerald-50 p-3 text-emerald-800',
+                info: 'mt-3 text-xs rounded border border-slate-200 bg-slate-50 p-3 text-slate-700',
+                error: 'mt-3 text-xs rounded border border-rose-200 bg-rose-50 p-3 text-rose-800'
+            };
+            el.className = styleMap[type] || styleMap.info;
+            el.textContent = reportText;
+            el.classList.remove('hidden');
+        }
+
+        function calculateAverageScore(questions) {
+            if (!Array.isArray(questions) || !questions.length) {
+                return 0;
+            }
+            const scores = questions.map((q, i) => evaluateOneAnswer(q, i).score);
+            const sum = scores.reduce((acc, cur) => acc + cur, 0);
+            return Math.round(sum / scores.length);
+        }
+
+        function inferExamRoundFromText(text) {
+            const match = String(text || '').match(/(\d{2,3})\s*회/);
+            return match ? `${match[1]}회` : '미지정';
+        }
+
+        function getBackendBaseUrl() {
+            const endpoint = document.getElementById('aiEndpointUrl').value.trim();
+            if (!endpoint) {
+                return 'http://localhost:8787';
+            }
+            return endpoint.replace(/\/api\/generate-answer\/?$/i, '').replace(/\/$/, '');
+        }
+
+        function setBackendStatus(message, type = 'info') {
+            const statusEl = document.getElementById('backendStatus');
+            const colorMap = {
+                info: 'text-slate-500',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `text-xs self-center ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function renderBackendDiagnostics(diagnostics = [], providers = null) {
+            const el = document.getElementById('backendDiagnostics');
+            if (!el) {
+                return;
+            }
+
+            const providerObj = providers && typeof providers === 'object' ? providers : null;
+            const providerText = providerObj
+                ? Object.entries(providerObj)
+                    .map(([name, enabled]) => `${name}:${enabled ? 'ON' : 'OFF'}`)
+                    .join(' · ')
+                : 'provider 정보 없음';
+
+            const rows = Array.isArray(diagnostics) ? diagnostics : [];
+            if (!rows.length) {
+                el.textContent = `Providers: ${providerText}`;
+                return;
+            }
+
+            const latestByProvider = new Map();
+            rows.forEach(row => {
+                if (row && row.provider) {
+                    latestByProvider.set(row.provider, row);
+                }
+            });
+
+            const detail = [...latestByProvider.values()].map(row => {
+                const reason = row.reason ? ` (${String(row.reason).slice(0, 90)})` : '';
+                return `${row.provider}:${row.status}${reason}`;
+            }).join(' · ');
+
+            el.textContent = `Providers: ${providerText} | LLM: ${detail}`;
+        }
+
+        function summarizeLlmDiagnostics(diagnostics) {
+            const rows = Array.isArray(diagnostics) ? diagnostics : [];
+            if (!rows.length) {
+                return '';
+            }
+
+            const failed = rows.filter(row => row && row.status === 'failed');
+            if (failed.length) {
+                const first = failed[0];
+                return `${first.provider || 'llm'} 실패: ${String(first.reason || 'provider_call_failed').slice(0, 120)}`;
+            }
+
+            const skipped = rows.filter(row => row && row.status === 'skipped');
+            if (skipped.length) {
+                return `키 미설정 provider: ${skipped.map(row => row.provider).join(', ')}`;
+            }
+
+            return 'LLM 진단 정보가 수집되었습니다.';
+        }
+
+        async function checkBackendConnection() {
+            const baseUrl = getBackendBaseUrl();
+            try {
+                setBackendStatus('백엔드 연결 확인 중...', 'info');
+                const response = await fetch(`${baseUrl}/health`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const payload = await response.json();
+                const providers = payload && typeof payload.providers === 'object' ? payload.providers : null;
+                const providerOnCount = providers
+                    ? Object.values(providers).filter(Boolean).length
+                    : 0;
+                setBackendStatus(`연결됨: ${payload.service || 'backend'}${providers ? ` (활성 provider ${providerOnCount}개)` : ''}`, 'success');
+                renderBackendDiagnostics([], providers);
+                return true;
+            } catch {
+                setBackendStatus('연결 실패 (로컬 규칙 모드 사용)', 'error');
+                renderBackendDiagnostics([], null);
+                return false;
+            }
+        }
+
+        async function extractPdfText() {
+            const fileInput = document.getElementById('pdfFileInput');
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) {
+                setPdfStatus('PDF 파일을 먼저 선택하세요.', 'error');
+                return false;
+            }
+            if (!window.pdfjsLib) {
+                setPdfStatus('pdf.js 라이브러리를 불러오지 못했습니다.', 'error');
+                return false;
+            }
+
+            try {
+                setPdfStatus('PDF 텍스트 추출 중...', 'info');
+                const buffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+
+                const parts = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+                    const page = await pdf.getPage(pageNum);
+                    const content = await page.getTextContent();
+                    const pageText = content.items.map(item => item.str).join(' ');
+                    parts.push(pageText);
+                }
+
+                const text = parts.join('\n').replace(/\s{2,}/g, ' ').trim();
+                document.getElementById('pdfExtractedText').value = text;
+                setPdfStatus(`PDF 텍스트 추출 완료 (${pdf.numPages}페이지).`, 'success');
+                return true;
+            } catch (error) {
+                setPdfStatus(`PDF 추출 실패: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        function parseQuestionsFromText(text) {
+            const cleaned = String(text || '').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+            if (!cleaned) return [];
+
+            const blocks = cleaned
+                .split(/\n(?=\s*(?:Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번))/g)
+                .map(block => block.trim())
+                .filter(block => block.length >= 25);
+
+            const resultBlocks = blocks.length ? blocks : cleaned
+                .split(/\n\n+/)
+                .map(block => block.trim())
+                .filter(block => block.length >= 40)
+                .slice(0, 20);
+
+            return resultBlocks.map((block, index) => {
+                const compact = block.replace(/\s+/g, ' ').trim();
+                const title = compact.length > 70 ? `${compact.slice(0, 70)}...` : compact;
+                const idMatch = compact.match(/^(Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번)/i);
+                const normalizedId = idMatch ? idMatch[0].replace(/\s+/g, '') : `Q${index + 1}`;
+                return {
+                    id: normalizedId.startsWith('Q') ? normalizedId : `Q${index + 1}`,
+                    title,
+                    rawQuestion: compact
+                };
+            });
+        }
+
+        async function extractQuestionsFromPdfText() {
+            const extracted = document.getElementById('pdfExtractedText').value.trim();
+            if (!extracted) {
+                setPdfStatus('추출 텍스트가 없습니다. 먼저 PDF 텍스트를 추출하세요.', 'error');
+                return { ok: false, addedCount: 0, examRound: '미지정' };
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setPdfStatus(`현재 JSON 파싱 오류: ${error.message}`, 'error');
+                return { ok: false, addedCount: 0, examRound: '미지정' };
+            }
+
+            let parsedQuestions = [];
+            const baseUrl = getBackendBaseUrl();
+            try {
+                const response = await fetch(`${baseUrl}/api/analyze-questions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: extracted })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const payload = await response.json();
+                parsedQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+                setBackendStatus('문제 추출: 백엔드 분석 사용', 'success');
+            } catch {
+                parsedQuestions = parseQuestionsFromText(extracted);
+                setBackendStatus('문제 추출: 로컬 분석 사용', 'info');
+            }
+
+            if (!parsedQuestions.length) {
+                setPdfStatus('문제 추출에 실패했습니다. 텍스트를 확인하세요.', 'error');
+                return { ok: false, addedCount: 0, examRound: '미지정' };
+            }
+
+            const examRound = inferExamRoundFromText(extracted);
+            const existingKeys = new Set(data.questions.map(item => `${item.examRound}|${item.id}|${item.title}`));
+            let addedCount = 0;
+
+            parsedQuestions.forEach((item, index) => {
+                const payload = {
+                    id: item.id || `Q${data.questions.length + index + 1}`,
+                    title: item.title || `문제 ${index + 1}`,
+                    examRound,
+                    tags: ['PDF추출'],
+                    modelAnswer: '',
+                    source: 'PDF Upload',
+                    reviewed: false,
+                    rawQuestion: item.rawQuestion || ''
+                };
+                const key = `${payload.examRound}|${payload.id}|${payload.title}`;
+                if (!existingKeys.has(key)) {
+                    data.questions.push(payload);
+                    existingKeys.add(key);
+                    addedCount += 1;
+                }
+            });
+
+            syncJsonAndRender(data, `PDF에서 ${addedCount}개 문제를 추가했습니다. (회차: ${examRound})`);
+            setPdfStatus(`문제 자동 추출 완료: ${addedCount}개 추가`, 'success');
+            return { ok: true, addedCount, examRound };
+        }
+
+        function generateLocalAnswerTemplate(question) {
+            const prompt = `${question.title || ''} ${question.rawQuestion || ''}`;
+            const lower = prompt.toLowerCase();
+
+            if (/d-region|stm|응력교란|스트럿|타이/.test(lower)) {
+                return [
+                    '1. 정의 및 적용 배경',
+                    '- 응력교란구역(D-Region, Discontinuity Region)은 평면유지 가정이 성립하지 않는 구간임.',
+                    '- 하중 작용점/지점부/단면 급변부에서 집중응력으로 인해 Bernoulli 가정이 붕괴됨.',
+                    '2. 해석 및 설계 원칙',
+                    '- 스트럿-타이 모델(Strut-and-Tie Model)로 힘의 흐름을 압축대/인장대/절점으로 이상화함.',
+                    '- KDS 14 20 24 기준에 따라 Strut, Tie, Node 강도와 정착길이를 검토함.',
+                    '3. 도해/표 작성 포인트',
+                    '- 도해: 하중-스트럿-타이-절점의 하중경로를 화살표로 제시.',
+                    '- 비교표: B-Region vs D-Region 적용 이론과 검토항목 대비.',
+                    '4. 기술사 제언',
+                    '- 시공성/유지관리/품질관리(정착, 배근 간섭, 균열제어)까지 결론에서 제시.'
+                ].join('\n');
+            }
+
+            if (/psc|긴장재|지연파괴|부식|그라우팅/.test(lower)) {
+                return [
+                    '1. 손상 메커니즘 개요',
+                    '- 염소이온(Chloride) 및 수분 환경에서 PS 강재의 응력부식균열(SCC) 위험이 증가함.',
+                    '- 고응력 상태에서 수소취성(Hydrogen Embrittlement)으로 지연파괴 가능.',
+                    '2. 설계/시공/유지관리 대책',
+                    '- 설계: 노출환경 등급에 따른 피복 및 방청 상세를 명시.',
+                    '- 시공: 그라우팅 충전성 확보, 블리딩 제어, 공극 최소화.',
+                    '- 유지관리: 비파괴검사(NDT) 및 모니터링 주기 수립.',
+                    '3. 기준 연계',
+                    '- KDS 관련 조항을 답안에 직접 표기하고 수치 근거를 제시.',
+                    '4. 결론',
+                    '- 사고사례와 연계하여 예방 중심의 유지관리 체계를 제언.'
+                ].join('\n');
+            }
+
+            if (/좌굴|강구조|lsd|한계상태/.test(lower)) {
+                return [
+                    '1. 핵심 개념 정의',
+                    '- 한계상태설계법(LSD, Limit State Design)은 확률론적 신뢰성 기반의 설계체계임.',
+                    '2. 검토 흐름',
+                    '- 하중조합 설정 → 단면강도 산정 → 좌굴/국부좌굴/접합부 파괴 모드 검토.',
+                    '- KDS 기준 코드와 부분안전계수 적용 근거를 명시.',
+                    '3. 시각화 전략',
+                    '- 그래프: 세장비(KL/r)-임계응력(Fcr) 곡선 제시.',
+                    '- 표: ASD vs LSD 비교표로 차별화.',
+                    '4. 기술사 제언',
+                    '- 시공성과 경제성을 포함한 선택 기준을 결론에 제시.'
+                ].join('\n');
+            }
+
+            return [
+                '1. 문제 정의 및 배경',
+                '- 핵심 개념을 영어 병기와 함께 정의하고 적용 범위를 제시.',
+                '2. 메커니즘/설계 검토',
+                '- 하중-저항-파괴모드 관점으로 단계별 검토항목을 번호화.',
+                '- KDS 코드와 수치 근거를 명시.',
+                '3. 도해/비교표',
+                '- 도해 1개(메커니즘) + 비교표 1개(대안 비교) 구성.',
+                '4. 결론 및 제언',
+                '- 시공/유지관리 관점의 실무 제언으로 마무리.'
+            ].join('\n');
+        }
+
+        function generateDraftAnswersLocal() {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setPdfStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return { ok: false, updated: 0 };
+            }
+
+            const overwrite = document.getElementById('overwriteGenerated').checked;
+            let updated = 0;
+
+            data.questions = data.questions.map(question => {
+                const hasAnswer = String(question.modelAnswer || '').trim().length > 0;
+                if (!overwrite && hasAnswer) {
+                    return question;
+                }
+                updated += 1;
+                return {
+                    ...question,
+                    modelAnswer: generateLocalAnswerTemplate(question),
+                    source: hasAnswer ? `${question.source || '-'} + LocalDraft` : 'LocalDraft'
+                };
+            });
+
+            syncJsonAndRender(data, `로컬 규칙으로 ${updated}개 문항 초안을 생성했습니다.`);
+            setPdfStatus(`초안 자동 작성 완료: ${updated}개`, 'success');
+            return { ok: true, updated };
+        }
+
+        async function generateDraftAnswersByApi() {
+            const endpoint = document.getElementById('aiEndpointUrl').value.trim();
+            const apiKey = document.getElementById('aiApiKey').value.trim();
+            if (!endpoint) {
+                setPdfStatus('외부 API URL을 입력하세요. URL이 없으면 로컬 규칙 생성을 사용하세요.', 'error');
+                return { ok: false, updated: 0, fallbackCount: 0 };
+            }
+
+            localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, endpoint);
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setPdfStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return { ok: false, updated: 0, fallbackCount: 0 };
+            }
+
+            const overwrite = document.getElementById('overwriteGenerated').checked;
+            let updated = 0;
+            let fallbackCount = 0;
+            const diagnosticLogs = [];
+            let providerStatus = null;
+
+            setPdfStatus('외부 API로 초안 생성 중...', 'info');
+
+            for (let index = 0; index < data.questions.length; index += 1) {
+                const question = data.questions[index];
+                const hasAnswer = String(question.modelAnswer || '').trim().length > 0;
+                if (!overwrite && hasAnswer) {
+                    continue;
+                }
+
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+                        },
+                        body: JSON.stringify({
+                            question,
+                            instruction: '토목구조기술사 고득점 답안 스타일로 개조식 답안을 작성하고, KDS 코드/도해 포인트/결론 제언을 포함하세요.'
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const answer = payload.answer || payload.content || payload.result || payload?.choices?.[0]?.message?.content;
+                    if (!answer || !String(answer).trim()) {
+                        throw new Error('응답에 answer 텍스트가 없습니다.');
+                    }
+
+                    if (Array.isArray(payload.llmDiagnostics)) {
+                        diagnosticLogs.push(...payload.llmDiagnostics);
+                    }
+                    if (payload && typeof payload.providers === 'object') {
+                        providerStatus = payload.providers;
+                    }
+
+                    const payloadSource = String(payload.source || '').toLowerCase();
+                    const isFallbackByApi = payloadSource.includes('local-fallback');
+                    if (isFallbackByApi) {
+                        fallbackCount += 1;
+                    }
+
+                    const sourceLabel = isFallbackByApi
+                        ? 'Api(LocalFallback)'
+                        : `Api(${payload.source || 'remote'})`;
+
+                    data.questions[index] = {
+                        ...question,
+                        modelAnswer: String(answer).trim(),
+                        source: question.source ? `${question.source} + ${sourceLabel}` : sourceLabel
+                    };
+                    updated += 1;
+                } catch (error) {
+                    data.questions[index] = {
+                        ...question,
+                        modelAnswer: generateLocalAnswerTemplate(question),
+                        source: question.source ? `${question.source} + LocalFallback` : 'LocalFallback'
+                    };
+                    updated += 1;
+                    fallbackCount += 1;
+                }
+            }
+
+            syncJsonAndRender(data, `외부 API 기반 초안 생성(실패 시 로컬 대체) 완료: ${updated}개`);
+            const diagnosticSummary = summarizeLlmDiagnostics(diagnosticLogs);
+            if (diagnosticSummary) {
+                setBackendStatus(diagnosticSummary, fallbackCount > 0 ? 'error' : 'info');
+            }
+            renderBackendDiagnostics(diagnosticLogs, providerStatus);
+            setPdfStatus(`외부 API 초안 작성 완료: ${updated}개 (로컬 대체 ${fallbackCount}개)`, fallbackCount > 0 ? 'info' : 'success');
+            return { ok: true, updated, fallbackCount };
+        }
+
+        async function runAutoPipeline() {
+            if (pipelineRunning) {
+                setPdfStatus('자동 배치가 이미 실행 중입니다.', 'info');
+                return;
+            }
+
+            pipelineRunning = true;
+            const runBtn = document.getElementById('runPipelineBtn');
+            runBtn.disabled = true;
+            runBtn.classList.add('opacity-60', 'cursor-not-allowed');
+
+            try {
+                setPdfStatus('자동 배치 시작: PDF 추출 → 문제 추출 → 답안 생성 → 평가', 'info');
+                setPipelineReport('자동 배치 실행 중입니다...', 'info');
+
+                let beforeCount = 0;
+                let beforeAvg = 0;
+                try {
+                    const beforeData = getCurrentAnswerData();
+                    beforeCount = beforeData.questions.length;
+                    beforeAvg = calculateAverageScore(beforeData.questions);
+                } catch {
+                }
+
+                const extractedText = document.getElementById('pdfExtractedText').value.trim();
+                if (!extractedText) {
+                    const extractOk = await extractPdfText();
+                    if (!extractOk) {
+                        setPipelineReport('배치 중단: PDF 텍스트 추출 실패', 'error');
+                        return;
+                    }
+                }
+
+                const parseResult = await extractQuestionsFromPdfText();
+                if (!parseResult.ok) {
+                    setPipelineReport('배치 중단: 문제 자동 추출 실패', 'error');
+                    return;
+                }
+
+                let generationUpdated = 0;
+                let fallbackCount = 0;
+                const apiResult = await generateDraftAnswersByApi();
+                if (!apiResult.ok) {
+                    const localResult = generateDraftAnswersLocal();
+                    generationUpdated = localResult.updated || 0;
+                    fallbackCount = generationUpdated;
+                } else {
+                    generationUpdated = apiResult.updated || 0;
+                    fallbackCount = apiResult.fallbackCount || 0;
+                }
+
+                evaluateRenderedAnswers();
+                let afterCount = 0;
+                let afterAvg = 0;
+                try {
+                    const afterData = getCurrentAnswerData();
+                    afterCount = afterData.questions.length;
+                    afterAvg = calculateAverageScore(afterData.questions);
+                } catch {
+                }
+
+                const scoreDelta = afterAvg - beforeAvg;
+                const deltaText = scoreDelta > 0 ? `+${scoreDelta}` : `${scoreDelta}`;
+                setPipelineReport(
+                    `배치 완료 | 문제 추가: ${parseResult.addedCount}개 (${parseResult.examRound}) | 생성/갱신: ${generationUpdated}개 | 로컬 폴백: ${fallbackCount}개 | 문항 수: ${beforeCount}→${afterCount} | 평균점: ${beforeAvg}→${afterAvg} (${deltaText})`,
+                    'success'
+                );
+                setPdfStatus('자동 배치 완료: 생성/평가까지 반영되었습니다.', 'success');
+            } finally {
+                pipelineRunning = false;
+                runBtn.disabled = false;
+                runBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+            }
+        }
+
+        function normalizeData(data) {
+            const normalized = data && typeof data === 'object' ? data : {};
+            if (!Array.isArray(normalized.questions)) {
+                normalized.questions = [];
+            }
+
+            normalized.questions = normalized.questions.map((item, index) => {
+                const question = item && typeof item === 'object' ? { ...item } : {};
+                question.id = question.id || `Q${index + 1}`;
+                question.title = question.title || '제목 없음';
+                question.modelAnswer = question.modelAnswer || '';
+                question.tags = Array.isArray(question.tags) ? question.tags : [];
+                question.source = question.source || '-';
+                question.reviewed = !!question.reviewed;
+                const fallbackRound = normalized.meta && normalized.meta.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
+                question.examRound = question.examRound || fallbackRound;
+                return question;
+            });
+
+            if (!Array.isArray(normalized.theories)) {
+                normalized.theories = [];
+            }
+
+            normalized.theories = normalized.theories.map((item, index) => {
+                const theory = item && typeof item === 'object' ? { ...item } : {};
+                theory.id = theory.id || `TH-${String(index + 1).padStart(3, '0')}`;
+                theory.title = theory.title || '이론 제목 없음';
+                theory.category = theory.category || '일반';
+                theory.content = theory.content || '';
+                theory.tags = Array.isArray(theory.tags) ? theory.tags : [];
+                theory.source = theory.source || '-';
+                const fallbackRound = normalized.meta && normalized.meta.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
+                theory.examRound = theory.examRound || fallbackRound;
+                return theory;
+            });
+
+            return normalized;
+        }
+
+        function updateFilterOptions(questions) {
+            const roundSelect = document.getElementById('filterRound');
+            const tagSelect = document.getElementById('filterTag');
+            const globalRoundSelect = document.getElementById('globalRoundSelect');
+
+            const rounds = [...new Set(questions.map(q => q.examRound).filter(Boolean))];
+            const tags = [...new Set(questions.flatMap(q => Array.isArray(q.tags) ? q.tags : []).filter(Boolean))];
+
+            const prevRound = roundSelect.value;
+            const prevTag = tagSelect.value;
+            const prevGlobalRound = globalRoundSelect ? globalRoundSelect.value : '';
+
+            roundSelect.innerHTML = '<option value="">전체 회차</option>' + rounds.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+            tagSelect.innerHTML = '<option value="">전체 태그</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+            if (globalRoundSelect) {
+                globalRoundSelect.innerHTML = '<option value="">전체 회차</option>' + rounds.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+            }
+
+            if (rounds.includes(prevRound)) roundSelect.value = prevRound;
+            if (tags.includes(prevTag)) tagSelect.value = prevTag;
+            if (globalRoundSelect) {
+                if (rounds.includes(prevGlobalRound)) globalRoundSelect.value = prevGlobalRound;
+                if (roundSelect.value && !globalRoundSelect.value) {
+                    globalRoundSelect.value = roundSelect.value;
+                }
+            }
+
+            const activeRound = roundSelect.value || (globalRoundSelect ? globalRoundSelect.value : '');
+            updateGlobalRoundLabels(activeRound);
+
+            const roundCount = rounds.map(r => `${r}:${questions.filter(q => q.examRound === r).length}`).join(' · ');
+            document.getElementById('roundSummary').textContent = roundCount ? `회차별 누적 현황: ${roundCount}` : '회차 데이터가 없습니다.';
+        }
+
+        function updateGlobalRoundLabels(round) {
+            const label = round ? `${round}` : '전체 회차';
+            document.querySelectorAll('.global-round-label').forEach(el => {
+                el.textContent = label;
+            });
+        }
+
+        function getFilteredEntries(questions) {
+            const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
+            const selectedRound = document.getElementById('filterRound').value;
+            const selectedTag = document.getElementById('filterTag').value;
+            const lowScoreOnly = document.getElementById('filterLowScore').checked;
+
+            const scoreMap = new Map(lastEvaluationResults.map(result => [result.index, result.score]));
+
+            return questions
+                .map((item, index) => ({ item, index }))
+                .filter(({ item, index }) => {
+                    const fullText = `${item.id} ${item.title} ${item.modelAnswer} ${item.source} ${item.examRound}`.toLowerCase();
+                    if (keyword && !fullText.includes(keyword)) return false;
+                    if (selectedRound && item.examRound !== selectedRound) return false;
+                    if (selectedTag && !(Array.isArray(item.tags) && item.tags.includes(selectedTag))) return false;
+                    if (lowScoreOnly && (scoreMap.get(index) ?? 100) >= 70) return false;
+                    return true;
+                });
+        }
+
+        function applyAnswerFilters() {
+            const raw = document.getElementById('answerJsonInput').value.trim();
+            if (!raw) {
+                document.getElementById('answerList').innerHTML = '<div class="text-sm text-slate-500">표시할 문제가 없습니다.</div>';
+                return;
+            }
+            try {
+                const data = normalizeData(JSON.parse(raw));
+                renderAnswerData(data);
+            } catch {
+                document.getElementById('answerList').innerHTML = '<div class="text-sm text-rose-700">JSON 형식 오류로 필터를 적용할 수 없습니다.</div>';
+            }
+        }
+
+        function updateRoundDashboard(questions) {
+            const totalQuestions = questions.length;
+            if (!totalQuestions) {
+                document.getElementById('statTotalRounds').textContent = '0';
+                document.getElementById('statTotalQuestions').textContent = '0';
+                document.getElementById('statAvgScore').textContent = '0';
+                document.getElementById('statLowScoreRate').textContent = '0%';
+                document.getElementById('roundStatsBody').innerHTML = '<tr><td colspan="5" class="px-3 py-3 text-slate-500">통계 데이터가 없습니다.</td></tr>';
+                if (roundStatsChart) {
+                    roundStatsChart.destroy();
+                    roundStatsChart = null;
+                }
+                return;
+            }
+
+            const scoreMap = new Map(lastEvaluationResults.map(result => [result.index, result.score]));
+            const rows = questions.map((question, index) => {
+                const score = scoreMap.has(index) ? scoreMap.get(index) : evaluateOneAnswer(question, index).score;
+                return {
+                    round: question.examRound || '미지정',
+                    score
+                };
+            });
+
+            const grouped = new Map();
+            rows.forEach(row => {
+                if (!grouped.has(row.round)) {
+                    grouped.set(row.round, { count: 0, sum: 0, low: 0 });
+                }
+                const g = grouped.get(row.round);
+                g.count += 1;
+                g.sum += row.score;
+                if (row.score < 70) g.low += 1;
+            });
+
+            const roundStats = [...grouped.entries()].map(([round, stat]) => {
+                const avg = Math.round(stat.sum / stat.count);
+                const priority = stat.low >= 3 ? '높음' : stat.low >= 1 ? '중간' : '낮음';
+                return {
+                    round,
+                    count: stat.count,
+                    avg,
+                    low: stat.low,
+                    priority
+                };
+            }).sort((a, b) => b.round.localeCompare(a.round, 'ko'));
+
+            const totalRounds = roundStats.length;
+            const totalLow = roundStats.reduce((acc, row) => acc + row.low, 0);
+            const totalScore = roundStats.reduce((acc, row) => acc + (row.avg * row.count), 0);
+            const avgScore = Math.round(totalScore / totalQuestions);
+            const lowRate = Math.round((totalLow / totalQuestions) * 100);
+
+            document.getElementById('statTotalRounds').textContent = String(totalRounds);
+            document.getElementById('statTotalQuestions').textContent = String(totalQuestions);
+            document.getElementById('statAvgScore').textContent = String(avgScore);
+            document.getElementById('statLowScoreRate').textContent = `${lowRate}%`;
+
+            document.getElementById('roundStatsBody').innerHTML = roundStats.map(row => `
+                <tr>
+                    <td class="px-3 py-2 font-medium text-slate-800">${escapeHtml(row.round)}</td>
+                    <td class="px-3 py-2 text-slate-700">${row.count}</td>
+                    <td class="px-3 py-2 text-slate-700">${row.avg}</td>
+                    <td class="px-3 py-2 text-slate-700">${row.low}</td>
+                    <td class="px-3 py-2">
+                        <span class="text-xs px-2 py-1 rounded ${row.priority === '높음' ? 'bg-rose-100 text-rose-700' : row.priority === '중간' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${row.priority}</span>
+                    </td>
+                </tr>
+            `).join('');
+
+            const chartCanvas = document.getElementById('roundStatsChart');
+            if (chartCanvas) {
+                const chartLabels = roundStats.map(row => row.round);
+                const avgScores = roundStats.map(row => row.avg);
+                const lowCounts = roundStats.map(row => row.low);
+
+                if (roundStatsChart) {
+                    roundStatsChart.destroy();
+                }
+
+                roundStatsChart = new Chart(chartCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [
+                            {
+                                label: '평균 점수',
+                                type: 'line',
+                                data: avgScores,
+                                borderColor: 'rgb(79, 70, 229)',
+                                backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                                yAxisID: 'y',
+                                tension: 0.3,
+                                pointRadius: 3
+                            },
+                            {
+                                label: '저득점 문항 수',
+                                data: lowCounts,
+                                backgroundColor: 'rgba(244, 63, 94, 0.6)',
+                                borderColor: 'rgb(244, 63, 94)',
+                                borderWidth: 1,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                min: 0,
+                                max: 100,
+                                title: { display: true, text: '평균 점수' }
+                            },
+                            y1: {
+                                beginAtZero: true,
+                                position: 'right',
+                                grid: { drawOnChartArea: false },
+                                title: { display: true, text: '저득점 문항 수' }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'top' }
+                        }
+                    }
+                });
+            }
+        }
+
+        function renderAnswerData(data) {
+            const container = document.getElementById('answerList');
+            const normalized = normalizeData(data);
+            const questions = normalized.questions;
+            renderTheoryData(normalized.theories);
+            refreshAttachmentTargetOptions(questions);
+
+            updateFilterOptions(questions);
+            updateRoundDashboard(questions);
+            const filteredEntries = getFilteredEntries(questions);
+
+            if (!filteredEntries.length) {
+                container.innerHTML = '<div class="text-sm text-slate-500">표시할 문제가 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = filteredEntries.map(({ item, index }) => {
+                const tags = Array.isArray(item.tags) ? item.tags : [];
+                const safeAnswer = escapeHtml(item.modelAnswer).replaceAll('\n', '<br>');
+                return `
+                    <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                        <div class="flex items-center justify-between gap-3">
+                            <h4 class="font-bold text-slate-800">${escapeHtml(item.id || `Q${index + 1}`)}. ${escapeHtml(item.title || '제목 없음')}</h4>
+                            <span class="text-xs px-2 py-1 rounded ${item.reviewed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${item.reviewed ? '검토완료' : '검토필요'}</span>
+                        </div>
+                        <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(item.examRound || '미지정')}</div>
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            ${tags.map(tag => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                        <p class="mt-3 text-sm text-slate-700 leading-relaxed">${safeAnswer}</p>
+                        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                            <div class="text-xs text-slate-500">source: ${escapeHtml(item.source || '-')}</div>
+                            <div class="flex gap-2">
+                                <button onclick="editModelAnswerEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                <button onclick="openDeleteConfirmModal(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+
+            evaluateRenderedAnswers(normalized, false);
+        }
+
+        function renderTheoryData(theories) {
+            const container = document.getElementById('theoryList');
+            if (!container) {
+                return;
+            }
+
+            if (!Array.isArray(theories) || theories.length === 0) {
+                container.innerHTML = '<div class="text-sm text-slate-500">등록된 이론이 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = theories.map((theory, index) => {
+                const tags = Array.isArray(theory.tags) ? theory.tags : [];
+                return `
+                    <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                        <div class="flex items-center justify-between gap-2">
+                            <h4 class="font-bold text-slate-800">${escapeHtml(theory.id)}. ${escapeHtml(theory.title)}</h4>
+                            <div class="flex gap-2">
+                                <button onclick="editTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                <button onclick="deleteTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                            </div>
+                        </div>
+                        <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(theory.examRound || '미지정')} · 분류: ${escapeHtml(theory.category || '일반')}</div>
+                        <div class="mt-2 flex flex-wrap gap-1">${tags.map(tag => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join('')}</div>
+                        <p class="mt-2 text-sm text-slate-700 leading-relaxed">${escapeHtml(theory.content || '').replaceAll('\n', '<br>')}</p>
+                        <div class="mt-2 text-xs text-slate-500">source: ${escapeHtml(theory.source || '-')}</div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function tokenizeTheory(text) {
+            const stopwords = new Set(['그리고', '또한', '대한', '에서', '으로', '하는', '있는', '있다', '한다', '통해', '대한', '검토', '적용']);
+            const tokens = String(text || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9가-힣\s]/g, ' ')
+                .split(/\s+/)
+                .filter(token => token.length >= 2 && !stopwords.has(token));
+            return new Set(tokens);
+        }
+
+        function jaccardSimilarity(setA, setB) {
+            const union = new Set([...setA, ...setB]);
+            if (!union.size) {
+                return 0;
+            }
+            let intersectionCount = 0;
+            setA.forEach(token => {
+                if (setB.has(token)) {
+                    intersectionCount += 1;
+                }
+            });
+            return intersectionCount / union.size;
+        }
+
+        function splitTheoryLines(content) {
+            return String(content || '')
+                .split(/\n+/)
+                .map(line => line.trim())
+                .filter(line => line.length >= 6);
+        }
+
+        function mergeTheoryContent(baseContent, supplementContent) {
+            const merged = [];
+            const seen = new Set();
+
+            [...splitTheoryLines(baseContent), ...splitTheoryLines(supplementContent)].forEach(line => {
+                const key = line.toLowerCase().replace(/\s+/g, ' ');
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    merged.push(line);
+                }
+            });
+
+            return merged.join('\n');
+        }
+
+        function evaluateMergedTheoryDraftQuality(draft) {
+            const content = String(draft.content || '');
+            const length = content.replace(/\s+/g, '').length;
+            const hasKds = /KDS\s*\d{2}\s*\d{2}\s*\d{2}|KDS\s*\d{2}\s*\d{2}\s*\d{2}\s*\d{2}/.test(content);
+            const hasVisual = /(도해|그래프|표|선도|모식도|상관도)/.test(content);
+            const hasStructure = /(^|\n)\s*\d+\.|정의|결론|제언|검토/.test(content);
+            const hasBilingual = /[가-힣][^\n]{0,12}\([A-Za-z][^)]+\)/.test(content);
+
+            const lengthScore = Math.min(40, Math.round(length / 18));
+            const kdsScore = hasKds ? 20 : 0;
+            const visualScore = hasVisual ? 15 : 0;
+            const structureScore = hasStructure ? 15 : 0;
+            const bilingualScore = hasBilingual ? 10 : 0;
+
+            const score = lengthScore + kdsScore + visualScore + structureScore + bilingualScore;
+
+            let grade = '보강 필요';
+            if (score >= 85) grade = '우수';
+            else if (score >= 70) grade = '양호';
+
+            return {
+                score,
+                grade,
+                detail: {
+                    lengthScore,
+                    kdsScore,
+                    visualScore,
+                    structureScore,
+                    bilingualScore
+                }
+            };
+        }
+
+        function getMergeQualityThreshold() {
+            const select = document.getElementById('mergeQualityThreshold');
+            if (!select) {
+                return 0;
+            }
+            const value = Number(select.value);
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        function renderTheoryMergeDrafts(drafts) {
+            const summaryEl = document.getElementById('theoryMergeSummary');
+            const listEl = document.getElementById('theoryMergeList');
+
+            if (!drafts || !drafts.length) {
+                summaryEl.innerHTML = '<span class="text-slate-500">생성된 병합 초안이 없습니다.</span>';
+                listEl.innerHTML = '';
+                return;
+            }
+
+            const threshold = getMergeQualityThreshold();
+
+            const scoredDrafts = drafts
+                .map(draft => ({ ...draft, quality: evaluateMergedTheoryDraftQuality(draft) }))
+                .sort((a, b) => b.quality.score - a.quality.score);
+
+            const filteredDrafts = scoredDrafts.filter(draft => draft.quality.score >= threshold);
+            theoryAnalysisCache.mergedDrafts = scoredDrafts;
+
+            if (!filteredDrafts.length) {
+                summaryEl.innerHTML = `<div class="p-3 rounded border border-amber-200 bg-amber-50"><strong>병합 초안:</strong> 임계값 ${threshold}점 이상 항목이 없습니다.</div>`;
+                listEl.innerHTML = '';
+                return;
+            }
+
+            const avgScore = Math.round(filteredDrafts.reduce((acc, cur) => acc + cur.quality.score, 0) / filteredDrafts.length);
+            summaryEl.innerHTML = `<div class="p-3 rounded border border-blue-200 bg-blue-50"><strong>병합 초안:</strong> ${filteredDrafts.length}개 (임계값 ${threshold}점) · 평균 품질점수 ${avgScore}점</div>`;
+            listEl.innerHTML = filteredDrafts.map((draft) => {
+                const cacheIndex = theoryAnalysisCache.mergedDrafts.findIndex(item => item.id === draft.id && item.baseTheoryId === draft.baseTheoryId && item.suppTheoryId === draft.suppTheoryId);
+                return `
+                <article class="border border-slate-200 rounded-lg p-3 bg-white">
+                    <div class="flex items-center justify-between gap-2">
+                        <h4 class="font-bold text-slate-800">${escapeHtml(draft.id)}. ${escapeHtml(draft.title)}</h4>
+                        <button onclick="adoptMergedTheoryDraft(${cacheIndex})" class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">초안 추가</button>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">기반: ${escapeHtml(draft.baseTheoryId)} + ${escapeHtml(draft.suppTheoryId)} · 회차: ${escapeHtml(draft.examRound)}</div>
+                    <div class="mt-1 text-xs">
+                        <span class="px-2 py-1 rounded ${draft.quality.score >= 85 ? 'bg-emerald-100 text-emerald-700' : draft.quality.score >= 70 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">품질 ${draft.quality.score}점 (${draft.quality.grade})</span>
+                    </div>
+                    <div class="mt-1 text-[11px] text-slate-500">길이 ${draft.quality.detail.lengthScore}/40 · KDS ${draft.quality.detail.kdsScore}/20 · 시각화 ${draft.quality.detail.visualScore}/15 · 구조화 ${draft.quality.detail.structureScore}/15 · 영어병기 ${draft.quality.detail.bilingualScore}/10</div>
+                    <p class="text-sm text-slate-700 mt-2 leading-relaxed">${escapeHtml(draft.content).replaceAll('\n', '<br>')}</p>
+                </article>
+            `;
+            }).join('');
+        }
+
+        function buildTheoryMergeDrafts(theories, reinforcements) {
+            const drafts = [];
+            const maxDrafts = 12;
+
+            reinforcements.slice(0, maxDrafts).forEach((pair, idx) => {
+                const left = theories[pair.aIndex];
+                const right = theories[pair.bIndex];
+                if (!left || !right) {
+                    return;
+                }
+
+                const base = (left.content || '').length >= (right.content || '').length ? left : right;
+                const supplement = base === left ? right : left;
+                const mergedContent = mergeTheoryContent(base.content, supplement.content);
+
+                drafts.push({
+                    id: `TH-M-${String(idx + 1).padStart(3, '0')}`,
+                    title: `${base.title} (보강통합)`,
+                    category: base.category || supplement.category || '일반',
+                    examRound: base.examRound || supplement.examRound || '미지정',
+                    tags: [...new Set([...(base.tags || []), ...(supplement.tags || []), '보강통합'])],
+                    source: `${base.source || '-'} + ${supplement.source || '-'}`,
+                    content: mergedContent,
+                    baseTheoryId: base.id,
+                    suppTheoryId: supplement.id
+                });
+            });
+
+            return drafts;
+        }
+
+        function analyzeTheoryKnowledge() {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const theories = Array.isArray(data.theories) ? data.theories : [];
+            const summaryEl = document.getElementById('theoryAnalysisSummary');
+            const listEl = document.getElementById('theoryAnalysisList');
+
+            if (!theories.length) {
+                summaryEl.innerHTML = '<span class="text-slate-500">분석할 이론 데이터가 없습니다.</span>';
+                listEl.innerHTML = '';
+                setTheoryStatus('분석 대상이 없습니다.', 'info');
+                theoryAnalysisCache = { duplicates: [], reinforcements: [], mergedDrafts: [] };
+                renderTheoryMergeDrafts([]);
+                return;
+            }
+
+            const duplicates = [];
+            const reinforcements = [];
+
+            for (let i = 0; i < theories.length; i += 1) {
+                for (let j = i + 1; j < theories.length; j += 1) {
+                    const left = theories[i];
+                    const right = theories[j];
+                    const leftTokens = tokenizeTheory(`${left.title} ${left.content}`);
+                    const rightTokens = tokenizeTheory(`${right.title} ${right.content}`);
+                    const sim = jaccardSimilarity(leftTokens, rightTokens);
+
+                    if (sim >= 0.62) {
+                        duplicates.push({
+                            aIndex: i,
+                            bIndex: j,
+                            aTitle: left.title,
+                            bTitle: right.title,
+                            similarity: sim,
+                            recommendation: `${left.id} 또는 ${right.id} 중 품질이 낮은 항목을 통합 정리 권장`
+                        });
+                    } else if (sim >= 0.35) {
+                        const longer = (left.content || '').length >= (right.content || '').length ? left : right;
+                        const shorter = longer === left ? right : left;
+                        reinforcements.push({
+                            aIndex: i,
+                            bIndex: j,
+                            aTitle: left.title,
+                            bTitle: right.title,
+                            similarity: sim,
+                            recommendation: `${shorter.id}의 보완 내용을 ${longer.id} 본문에 통합하여 강화 권장`
+                        });
+                    }
+                }
+            }
+
+            const mergedDrafts = buildTheoryMergeDrafts(theories, reinforcements);
+            theoryAnalysisCache = { duplicates, reinforcements, mergedDrafts };
+
+            summaryEl.innerHTML = `
+                <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                    <strong>분석 결과:</strong> 중복 후보 ${duplicates.length}쌍 · 보강 후보 ${reinforcements.length}쌍
+                </div>
+            `;
+
+            const items = [
+                ...duplicates.map(item => ({ ...item, kind: '중복 후보', tone: 'rose' })),
+                ...reinforcements.map(item => ({ ...item, kind: '보강 후보', tone: 'emerald' }))
+            ];
+
+            if (!items.length) {
+                listEl.innerHTML = '<div class="text-sm text-slate-500">현재 중복/보강 후보가 없습니다.</div>';
+                setTheoryStatus('중복/보강 후보 없음', 'success');
+                return;
+            }
+
+            listEl.innerHTML = items.map(item => `
+                <article class="border border-slate-200 rounded-lg p-3 bg-white">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="font-medium ${item.tone === 'rose' ? 'text-rose-700' : 'text-emerald-700'}">${item.kind}</div>
+                        <span class="text-xs text-slate-500">유사도 ${(item.similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="text-sm text-slate-700 mt-1">${escapeHtml(item.aTitle)} ↔ ${escapeHtml(item.bTitle)}</div>
+                    <div class="text-xs text-slate-600 mt-1">${escapeHtml(item.recommendation)}</div>
+                </article>
+            `).join('');
+
+            renderTheoryMergeDrafts(mergedDrafts);
+
+            setTheoryStatus('이론 분석을 완료했습니다.', 'success');
+        }
+
+        function generateTheoryMergeDrafts() {
+            if (!(theoryAnalysisCache.reinforcements || []).length) {
+                analyzeTheoryKnowledge();
+            }
+            const drafts = theoryAnalysisCache.mergedDrafts || [];
+            renderTheoryMergeDrafts(drafts);
+            if (!drafts.length) {
+                setTheoryStatus('보강 병합 초안이 없습니다. 분석 대상을 늘려보세요.', 'info');
+                return;
+            }
+            setTheoryStatus(`보강 병합 초안 ${drafts.length}개를 생성했습니다.`, 'success');
+        }
+
+        function adoptMergedTheoryDraft(index) {
+            const draft = (theoryAnalysisCache.mergedDrafts || [])[index];
+            if (!draft) {
+                setTheoryStatus('선택한 병합 초안을 찾지 못했습니다.', 'error');
+                return;
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const nextIndex = data.theories.length + 1;
+            const adopted = {
+                id: `TH-${String(nextIndex).padStart(3, '0')}`,
+                title: draft.title,
+                category: draft.category,
+                examRound: draft.examRound,
+                tags: draft.tags,
+                source: `${draft.source} + MergeDraft`,
+                content: draft.content
+            };
+
+            data.theories.push(adopted);
+            syncJsonAndRender(data, `${adopted.id} 병합 이론 초안을 추가했습니다.`);
+            analyzeTheoryKnowledge();
+            setTheoryStatus('병합 초안을 이론 목록에 추가했습니다.', 'success');
+        }
+
+        function applyTheoryCleanup() {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            if (!theoryAnalysisCache.duplicates.length) {
+                analyzeTheoryKnowledge();
+            }
+
+            const duplicates = theoryAnalysisCache.duplicates || [];
+            if (!duplicates.length) {
+                setTheoryStatus('정리할 중복 후보가 없습니다.', 'info');
+                return;
+            }
+
+            const removeIndexes = new Set();
+            duplicates.forEach(pair => {
+                const left = data.theories[pair.aIndex];
+                const right = data.theories[pair.bIndex];
+                if (!left || !right) {
+                    return;
+                }
+                const removeIndex = (left.content || '').length >= (right.content || '').length ? pair.bIndex : pair.aIndex;
+                removeIndexes.add(removeIndex);
+            });
+
+            const before = data.theories.length;
+            data.theories = data.theories.filter((_, index) => !removeIndexes.has(index));
+            const removed = before - data.theories.length;
+
+            syncJsonAndRender(data, `이론 중복 정리를 적용했습니다. ${removed}개 항목 삭제`);
+            analyzeTheoryKnowledge();
+            setTheoryStatus(`중복 정리 완료: ${removed}개 항목 정리`, 'success');
+        }
+
+        function upsertTheoryEntry() {
+            const id = document.getElementById('theoryId').value.trim();
+            const title = document.getElementById('theoryTitle').value.trim();
+            const category = document.getElementById('theoryCategory').value.trim();
+            const examRound = document.getElementById('theoryRound').value.trim();
+            const tagsRaw = document.getElementById('theoryTags').value.trim();
+            const source = document.getElementById('theorySource').value.trim();
+            const content = document.getElementById('theoryContent').value.trim();
+
+            if (!title || !content) {
+                setTheoryStatus('이론 제목과 내용은 필수입니다.', 'error');
+                return;
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`현재 JSON이 올바르지 않습니다: ${error.message}`, 'error');
+                return;
+            }
+
+            const entry = {
+                id: id || `TH-${String(data.theories.length + 1).padStart(3, '0')}`,
+                title,
+                category: category || '일반',
+                examRound: examRound || '미지정',
+                tags: tagsRaw ? tagsRaw.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+                source: source || '-',
+                content
+            };
+
+            const editingRaw = document.getElementById('editingTheoryIndex').value;
+            const editingIndex = editingRaw === '' ? -1 : Number(editingRaw);
+
+            if (Number.isInteger(editingIndex) && editingIndex >= 0 && data.theories[editingIndex]) {
+                data.theories[editingIndex] = entry;
+                syncJsonAndRender(data, `이론 항목을 수정했습니다. 현재 ${data.theories.length}개`);
+                setTheoryStatus('이론 수정 완료', 'success');
+            } else {
+                data.theories.push(entry);
+                syncJsonAndRender(data, `이론 항목을 추가했습니다. 현재 ${data.theories.length}개`);
+                setTheoryStatus('이론 추가 완료', 'success');
+            }
+
+            resetTheoryForm();
+            analyzeTheoryKnowledge();
+        }
+
+        function editTheoryEntry(index) {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const item = data.theories[index];
+            if (!item) {
+                setTheoryStatus('수정할 이론 항목을 찾지 못했습니다.', 'error');
+                return;
+            }
+
+            document.getElementById('theoryId').value = item.id || '';
+            document.getElementById('theoryTitle').value = item.title || '';
+            document.getElementById('theoryCategory').value = item.category || '';
+            document.getElementById('theoryRound').value = item.examRound || '';
+            document.getElementById('theoryTags').value = Array.isArray(item.tags) ? item.tags.join(', ') : '';
+            document.getElementById('theorySource').value = item.source || '';
+            document.getElementById('theoryContent').value = item.content || '';
+            document.getElementById('editingTheoryIndex').value = String(index);
+            document.getElementById('theorySubmitBtn').textContent = '이론 수정 저장';
+            setTheoryStatus(`${item.id} 수정 모드`, 'info');
+        }
+
+        function deleteTheoryEntry(index) {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setTheoryStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            if (!data.theories[index]) {
+                setTheoryStatus('삭제할 이론 항목이 없습니다.', 'error');
+                return;
+            }
+
+            const removed = data.theories.splice(index, 1)[0];
+            syncJsonAndRender(data, `${removed.id || '이론'} 항목을 삭제했습니다.`);
+            resetTheoryForm();
+            analyzeTheoryKnowledge();
+            setTheoryStatus('이론 삭제 완료', 'success');
+        }
+
+        function resetTheoryForm() {
+            document.getElementById('theoryId').value = '';
+            document.getElementById('theoryTitle').value = '';
+            document.getElementById('theoryCategory').value = '';
+            document.getElementById('theoryRound').value = '';
+            document.getElementById('theoryTags').value = '';
+            document.getElementById('theorySource').value = '';
+            document.getElementById('theoryContent').value = '';
+            document.getElementById('editingTheoryIndex').value = '';
+            document.getElementById('theorySubmitBtn').textContent = '이론 추가';
+        }
+
+        function cancelTheoryEditMode() {
+            resetTheoryForm();
+            setTheoryStatus('이론 수정 모드를 취소했습니다.', 'info');
+        }
+
+        function inferQuestionType(question) {
+            const fullText = `${question.id || ''} ${question.title || ''} ${question.modelAnswer || ''}`;
+            if (/1\s*교시|용어|단답/.test(fullText)) {
+                return 'short';
+            }
+            if (/2\s*교시|3\s*교시|4\s*교시|서술/.test(fullText)) {
+                return 'long';
+            }
+            return 'unknown';
+        }
+
+        function evaluateOneAnswer(question, index) {
+            const answer = String(question.modelAnswer || '');
+            const type = inferQuestionType(question);
+            const length = answer.replace(/\s+/g, '').length;
+            const minLength = type === 'short' ? 550 : type === 'long' ? 1400 : 900;
+
+            const hasVisual = /(도해|모식도|그림|선도|그래프|표|상관도|메커니즘)/.test(answer);
+            const hasBilingual = /[가-힣][^\n]{0,12}\([A-Za-z][^)]+\)/.test(answer);
+            const hasKds = /KDS\s*\d{2}\s*\d{2}\s*\d{2}|KDS\s*\d{2}\s*\d{2}\s*\d{2}\s*\d{2}/.test(answer);
+            const hasNumbered = /(^|\n)\s*\d+\./.test(answer);
+
+            let score = 0;
+            const feedback = [];
+
+            const lengthRatio = Math.min(1, length / minLength);
+            score += Math.round(lengthRatio * 35);
+            if (length < minLength) {
+                feedback.push(`분량 보강 필요: 현재 ${length}자, 권장 ${minLength}자 이상`);
+            } else {
+                feedback.push(`분량 적정: 현재 ${length}자`);
+            }
+
+            score += hasVisual ? 20 : 0;
+            if (!hasVisual) {
+                feedback.push('도해/표/그래프 항목을 본문에 명시해 시각화 근거를 강화하세요.');
+            }
+
+            score += hasBilingual ? 15 : 0;
+            if (!hasBilingual) {
+                feedback.push('핵심 용어에 영어 병기(예: 연성(Ductility))를 추가하세요.');
+            }
+
+            score += hasKds ? 20 : 0;
+            if (!hasKds) {
+                feedback.push('KDS 코드와 기준 번호를 본문에 직접 명시하세요.');
+            }
+
+            score += hasNumbered ? 10 : 0;
+            if (!hasNumbered) {
+                feedback.push('개조식 넘버링(1., 2., 3.) 구조로 논리 흐름을 강화하세요.');
+            }
+
+            return {
+                index,
+                id: question.id || '-',
+                title: question.title || '제목 없음',
+                type,
+                score,
+                feedback
+            };
+        }
+
+        function evaluateRenderedAnswers(dataArg, notify = true) {
+            let data = dataArg;
+            if (!data) {
+                const raw = document.getElementById('answerJsonInput').value.trim();
+                if (!raw) {
+                    document.getElementById('evaluationSummary').innerHTML = '<span class="text-slate-500">평가할 데이터가 없습니다.</span>';
+                    document.getElementById('evaluationList').innerHTML = '';
+                    if (notify) {
+                        setDataStatus('평가할 JSON 데이터가 없습니다.', 'error');
+                    }
+                    return;
+                }
+                try {
+                    data = JSON.parse(raw);
+                } catch (error) {
+                    document.getElementById('evaluationSummary').innerHTML = `<span class="text-rose-700">JSON 파싱 오류: ${escapeHtml(error.message)}</span>`;
+                    document.getElementById('evaluationList').innerHTML = '';
+                    if (notify) {
+                        setDataStatus('평가를 중단했습니다. JSON 형식을 확인하세요.', 'error');
+                    }
+                    return;
+                }
+            }
+
+            const normalized = normalizeData(data);
+            const questions = normalized.questions;
+            if (!questions.length) {
+                document.getElementById('evaluationSummary').innerHTML = '<span class="text-slate-500">평가할 문제가 없습니다.</span>';
+                document.getElementById('evaluationList').innerHTML = '';
+                return;
+            }
+
+            const results = questions.map((question, index) => evaluateOneAnswer(question, index));
+            lastEvaluationResults = results;
+            const total = results.reduce((acc, item) => acc + item.score, 0);
+            const avg = Math.round(total / results.length);
+
+            let grade = '보강 필요';
+            if (avg >= 85) grade = '고득점권';
+            else if (avg >= 70) grade = '합격권';
+
+            document.getElementById('evaluationSummary').innerHTML = `
+                <div class="p-3 rounded border ${avg >= 85 ? 'border-emerald-200 bg-emerald-50' : avg >= 70 ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'}">
+                    <strong>종합평가:</strong> 평균 ${avg}점 / 100 (${grade}) · 총 ${results.length}문항
+                </div>
+            `;
+
+            document.getElementById('evaluationList').innerHTML = results.map(item => `
+                <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                    <div class="flex items-center justify-between gap-2">
+                        <h4 class="font-bold text-slate-800">${escapeHtml(item.id)}. ${escapeHtml(item.title)}</h4>
+                        <span class="text-xs px-2 py-1 rounded ${item.score >= 85 ? 'bg-emerald-100 text-emerald-700' : item.score >= 70 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${item.score}점</span>
+                    </div>
+                    <div class="mt-2 text-xs text-slate-500">판정 기준: ${item.type === 'short' ? '1교시/단답형' : item.type === 'long' ? '2~4교시/서술형' : '일반형(자동 추정)'}</div>
+                    <ul class="mt-3 list-disc list-inside text-sm text-slate-700 space-y-1">
+                        ${item.feedback.map(row => `<li>${escapeHtml(row)}</li>`).join('')}
+                    </ul>
+                </article>
+            `).join('');
+
+            if (notify) {
+                setDataStatus(`자동 평가 완료: 평균 ${avg}점 (${grade})`, avg >= 70 ? 'success' : 'info');
+            }
+        }
+
+        function getCurrentAnswerData() {
+            const raw = document.getElementById('answerJsonInput').value.trim();
+            if (!raw) {
+                return { questions: [] };
+            }
+            const parsed = JSON.parse(raw);
+            return normalizeData(parsed);
+        }
+
+        function syncJsonAndRender(data, statusMessage) {
+            const updatedJson = JSON.stringify(data, null, 2);
+            document.getElementById('answerJsonInput').value = updatedJson;
+            renderAnswerData(data);
+            if (statusMessage) {
+                setDataStatus(statusMessage, 'success');
+            }
+        }
+
+        function resetEntryForm() {
+            document.getElementById('newQRound').value = '';
+            document.getElementById('newQId').value = '';
+            document.getElementById('newQTitle').value = '';
+            document.getElementById('newQTags').value = '';
+            document.getElementById('newQSource').value = '';
+            document.getElementById('newQAnswer').value = '';
+            document.getElementById('newQReviewed').checked = false;
+            document.getElementById('editingIndex').value = '';
+            document.getElementById('entrySubmitBtn').textContent = '모범답안 추가';
+        }
+
+        function openDeleteConfirmModal(index) {
+            pendingDeleteIndex = index;
+            const modal = document.getElementById('deleteConfirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeDeleteConfirmModal() {
+            pendingDeleteIndex = -1;
+            const modal = document.getElementById('deleteConfirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmDeleteModelAnswerEntry() {
+            if (pendingDeleteIndex < 0) {
+                closeDeleteConfirmModal();
+                return;
+            }
+            deleteModelAnswerEntry(pendingDeleteIndex);
+            closeDeleteConfirmModal();
+        }
+
+        function cancelEditMode() {
+            resetEntryForm();
+            setDataStatus('수정 모드를 취소했습니다.', 'info');
+        }
+
+        function editModelAnswerEntry(index) {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setDataStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const target = data.questions[index];
+            if (!target) {
+                setDataStatus('수정할 항목을 찾지 못했습니다.', 'error');
+                return;
+            }
+
+            document.getElementById('newQId').value = target.id || '';
+            document.getElementById('newQRound').value = target.examRound || '';
+            document.getElementById('newQTitle').value = target.title || '';
+            document.getElementById('newQTags').value = Array.isArray(target.tags) ? target.tags.join(', ') : '';
+            document.getElementById('newQSource').value = target.source || '';
+            document.getElementById('newQAnswer').value = target.modelAnswer || '';
+            document.getElementById('newQReviewed').checked = !!target.reviewed;
+            document.getElementById('editingIndex').value = String(index);
+            document.getElementById('entrySubmitBtn').textContent = '모범답안 수정 저장';
+            setDataStatus(`수정 모드: ${target.id || `Q${index + 1}`} 항목을 편집 중입니다.`, 'info');
+        }
+
+        function deleteModelAnswerEntry(index) {
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setDataStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            if (!Array.isArray(data.questions) || !data.questions[index]) {
+                setDataStatus('삭제할 항목을 찾지 못했습니다.', 'error');
+                return;
+            }
+
+            const removed = data.questions.splice(index, 1)[0];
+            syncJsonAndRender(data, `${removed.id || `Q${index + 1}`} 항목을 삭제했습니다.`);
+            resetEntryForm();
+        }
+
+        function loadSampleData() {
+            document.getElementById('answerJsonInput').value = JSON.stringify(sampleAnswerData, null, 2);
+            renderAnswerData(sampleAnswerData);
+            setDataStatus('샘플 데이터를 로드했습니다.', 'success');
+        }
+
+        function applyAnswerData() {
+            const raw = document.getElementById('answerJsonInput').value.trim();
+            if (!raw) {
+                setDataStatus('JSON 입력값이 비어 있습니다.', 'error');
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed.questions)) {
+                    setDataStatus('유효하지 않은 형식입니다. questions 배열이 필요합니다.', 'error');
+                    return;
+                }
+                renderAnswerData(parsed);
+                setDataStatus(`JSON 적용 완료: ${parsed.questions.length}개 문제를 렌더링했습니다.`, 'success');
+            } catch (error) {
+                setDataStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+            }
+        }
+
+        function saveAnswerData() {
+            const raw = document.getElementById('answerJsonInput').value.trim();
+            if (!raw) {
+                setDataStatus('저장할 JSON이 없습니다.', 'error');
+                return;
+            }
+            localStorage.setItem(ANSWER_STORAGE_KEY, raw);
+            setDataStatus('브라우저 로컬 저장소에 저장했습니다.', 'success');
+        }
+
+        function loadAnswerData() {
+            const saved = localStorage.getItem(ANSWER_STORAGE_KEY);
+            if (!saved) {
+                setDataStatus('저장된 데이터가 없어 샘플 데이터를 불러옵니다.', 'info');
+                loadSampleData();
+                return;
+            }
+            document.getElementById('answerJsonInput').value = saved;
+            applyAnswerData();
+        }
+
+        function exportAnswerDataToFile() {
+            const raw = document.getElementById('answerJsonInput').value.trim();
+            if (!raw) {
+                setDataStatus('내보낼 JSON이 없습니다.', 'error');
+                return;
+            }
+
+            let normalizedData;
+            try {
+                normalizedData = normalizeData(JSON.parse(raw));
+            } catch (error) {
+                setDataStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const content = JSON.stringify(normalizedData, null, 2);
+            const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mi = String(now.getMinutes()).padStart(2, '0');
+            const filename = `civil-answers-${yyyy}${mm}${dd}-${hh}${mi}.json`;
+
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = filename;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+
+            setDataStatus(`JSON 파일로 내보냈습니다: ${filename}`, 'success');
+        }
+
+        function openImportFileDialog() {
+            const input = document.getElementById('importJsonFileInput');
+            input.value = '';
+            input.click();
+        }
+
+        function importAnswerDataFromFile(event) {
+            const input = event.target;
+            const file = input.files && input.files[0];
+            if (!file) {
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function () {
+                try {
+                    const parsed = JSON.parse(String(reader.result || ''));
+                    const normalized = normalizeData(parsed);
+                    if (!Array.isArray(normalized.questions)) {
+                        setDataStatus('questions 배열이 없어 가져오기를 중단했습니다.', 'error');
+                        return;
+                    }
+
+                    const content = JSON.stringify(normalized, null, 2);
+                    document.getElementById('answerJsonInput').value = content;
+                    renderAnswerData(normalized);
+                    setDataStatus(`JSON 파일을 가져왔습니다: ${file.name}`, 'success');
+                } catch (error) {
+                    setDataStatus(`가져오기 실패: ${error.message}`, 'error');
+                }
+            };
+
+            reader.onerror = function () {
+                setDataStatus('파일 읽기 중 오류가 발생했습니다.', 'error');
+            };
+
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function addModelAnswerEntry() {
+            const examRound = document.getElementById('newQRound').value.trim();
+            const id = document.getElementById('newQId').value.trim();
+            const title = document.getElementById('newQTitle').value.trim();
+            const tagsRaw = document.getElementById('newQTags').value.trim();
+            const source = document.getElementById('newQSource').value.trim();
+            const modelAnswer = document.getElementById('newQAnswer').value.trim();
+            const reviewed = document.getElementById('newQReviewed').checked;
+
+            if (!title || !modelAnswer) {
+                setDataStatus('문제 제목과 모범답안은 필수입니다.', 'error');
+                return;
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setDataStatus(`현재 JSON이 올바르지 않습니다: ${error.message}`, 'error');
+                return;
+            }
+
+            const item = {
+                id: id || `Q${data.questions.length + 1}`,
+                title,
+                examRound: examRound || '미지정',
+                tags: tagsRaw ? tagsRaw.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+                modelAnswer,
+                source: source || '-',
+                reviewed
+            };
+
+            const editingIndexRaw = document.getElementById('editingIndex').value;
+            const editingIndex = editingIndexRaw === '' ? -1 : Number(editingIndexRaw);
+
+            if (Number.isInteger(editingIndex) && editingIndex >= 0 && data.questions[editingIndex]) {
+                data.questions[editingIndex] = item;
+                syncJsonAndRender(data, `모범답안을 수정했습니다. 현재 ${data.questions.length}개 문제입니다.`);
+            } else {
+                data.questions.push(item);
+                syncJsonAndRender(data, `모범답안을 추가했습니다. 현재 ${data.questions.length}개 문제입니다.`);
+            }
+
+            resetEntryForm();
+        }
+
+        document.getElementById('filterKeyword').addEventListener('input', applyAnswerFilters);
+        document.getElementById('filterRound').addEventListener('change', applyAnswerFilters);
+        document.getElementById('filterTag').addEventListener('change', applyAnswerFilters);
+        document.getElementById('filterLowScore').addEventListener('change', applyAnswerFilters);
+        document.getElementById('mergeQualityThreshold').addEventListener('change', () => {
+            renderTheoryMergeDrafts(theoryAnalysisCache.mergedDrafts || []);
+        });
+        document.getElementById('globalRoundSelect').addEventListener('change', (event) => {
+            const selected = event.target.value;
+            const filterRound = document.getElementById('filterRound');
+            filterRound.value = selected;
+            updateGlobalRoundLabels(selected);
+            applyAnswerFilters();
+        });
+
+        (function initAiEndpoint() {
+            const input = document.getElementById('aiEndpointUrl');
+            const stored = localStorage.getItem(AI_ENDPOINT_STORAGE_KEY);
+            input.value = stored || 'http://localhost:8787/api/generate-answer';
+            input.addEventListener('change', () => {
+                localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, input.value.trim());
+            });
+        })();
+
+        checkBackendConnection();
+
+        loadAnswerData();
+
+    </script>
+</body>
+</html>
