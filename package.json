@@ -1,0 +1,12 @@
+{
+  "name": "solve-civil-answer-studio",
+  "version": "1.0.0",
+  "description": "Headless capture for solve_120.html",
+  "private": true,
+  "scripts": {
+    "capture": "node ./.tools/headless_capture.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.37.5"
+  }
+}

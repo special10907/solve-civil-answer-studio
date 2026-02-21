@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>토목구조기술사 회차 누적 분석 및 고득점 전략 노트</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="vendor/js/suppress-tailwind-warning.js"></script>
+    <script src="vendor/tailwind.js"></script>
+    <script src="vendor/js/chart.min.js"></script>
+    <script src="vendor/js/pdf.min.js"></script>
+    <script src="vendor/js/tesseract.min.js"></script>
+    <link href="vendor/css/all.min.css" rel="stylesheet">
     
     <!-- Chosen Palette: Warm Neutrals (Stone/Gray) with Professional Blue/Indigo Accents -->
     <!-- Application Structure Plan: A Dashboard-style SPA with a left sidebar for navigation. 
@@ -94,26 +96,27 @@
                 <select id="globalRoundSelect" class="w-full text-xs p-2 rounded bg-slate-700 text-white border border-slate-600">
                     <option value="">전체 회차</option>
                 </select>
+                <button type="button" onclick="deleteSelectedGlobalRound()" class="mt-2 w-full text-xs p-2 rounded bg-rose-700 text-white hover:bg-rose-800">선택 회차 삭제</button>
             </div>
         </div>
         
         <div class="flex-1 overflow-y-auto px-4 space-y-2 mb-4">
-            <button onclick="showSection('dashboard')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center bg-slate-700 font-medium" data-target="dashboard">
+            <button type="button" onclick="showSection('dashboard')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center bg-slate-700 font-medium" data-target="dashboard">
                 <i class="fas fa-tachometer-alt w-6"></i> 합격 전략 (Strategy)
             </button>
-            <button onclick="showSection('analysis')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="analysis">
+            <button type="button" onclick="showSection('analysis')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="analysis">
                 <i class="fas fa-chart-pie w-6"></i> 회차별 기출 분석
             </button>
-            <button onclick="showSection('mechanics')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="mechanics">
+            <button type="button" onclick="showSection('mechanics')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="mechanics">
                 <i class="fas fa-wave-square w-6"></i> 구조역학 & 동역학
             </button>
-            <button onclick="showSection('design')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="design">
+            <button type="button" onclick="showSection('design')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="design">
                 <i class="fas fa-industry w-6"></i> 강구조 & LSD
             </button>
-            <button onclick="showSection('concrete')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="concrete">
+            <button type="button" onclick="showSection('concrete')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="concrete">
                 <i class="fas fa-cube w-6"></i> RC & PSC (D-Region)
             </button>
-            <button onclick="showSection('datahub')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="datahub">
+            <button type="button" onclick="showSection('datahub')" class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center" data-target="datahub">
                 <i class="fas fa-database w-6"></i> 문제/답안 데이터
             </button>
         </div>
@@ -229,8 +232,8 @@
                 <div class="glass-panel p-6 rounded-xl shadow-sm lg:col-span-2">
                     <h3 class="text-lg font-bold mb-4">교시별 핵심 문제 (Key Problems)</h3>
                     <div class="flex space-x-2 mb-4 border-b border-slate-200">
-                        <button onclick="switchTab('p1')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600 active-tab" data-tab="p1">1교시 (용어)</button>
-                        <button onclick="switchTab('p2')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600" data-tab="p2">2~4교시 (서술)</button>
+                        <button type="button" onclick="switchTab('p1')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600 active-tab" data-tab="p1">1교시 (용어)</button>
+                        <button type="button" onclick="switchTab('p2')" class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600" data-tab="p2">2~4교시 (서술)</button>
                     </div>
 
                     <div id="p1" class="tab-content block animate-fade-in">
@@ -272,6 +275,126 @@
                         </ul>
                     </div>
                 </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-xl shadow-sm mt-6">
+                <h3 class="text-lg font-bold mb-4">기출 PDF OCR 점검</h3>
+                <p class="text-sm text-slate-600 mb-3">스캔 PDF는 OCR, 텍스트 PDF는 직접 추출로 분석해 인식 품질을 확인합니다.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input id="analysisPdfOcrInput" type="file" accept="application/pdf,.pdf" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
+                    <div class="w-full p-2 text-sm border border-slate-300 rounded bg-slate-50 text-slate-700 flex items-center justify-between">
+                        <span>총 페이지</span>
+                        <strong id="analysisPdfOcrTotalPages" class="text-slate-900">자동 인식</strong>
+                    </div>
+                    <label class="flex items-center gap-2 p-2 text-xs border border-slate-300 rounded bg-white text-slate-700">
+                        <input id="analysisPdfIncludeImageOcr" type="checkbox" class="accent-sky-600" checked>
+                        사진/도면 포함 OCR 강제
+                    </label>
+                    <label class="flex items-center gap-2 p-2 text-xs border border-slate-300 rounded bg-white text-slate-700">
+                        <input id="analysisPdfFormulaOcr" type="checkbox" class="accent-violet-600">
+                        수식/기호 강화
+                    </label>
+                    <label class="flex items-center gap-2 p-2 text-xs border border-slate-300 rounded bg-white text-slate-700">
+                        <input id="analysisPdfLatexExport" type="checkbox" class="accent-emerald-600">
+                        LaTeX 변환 내보내기
+                    </label>
+                    <div class="p-2">
+                        <label class="text-xs text-slate-600">분수 해석 정책</label>
+                        <select id="latexFractionPolicy" class="w-full text-xs p-1 border border-slate-300 rounded mt-1">
+                            <option value="smart" selected>스마트 (연산 복잡도 기반)</option>
+                            <option value="nested">중첩 (a/b/c -> a/{b/c})</option>
+                            <option value="left">좌결합 ((a/b)/c)</option>
+                            <option value="flat">평면 (해석하지 않음)</option>
+                        </select>
+                    </div>
+                    <div class="p-2">
+                        <label class="text-xs text-slate-600">행렬 스타일</label>
+                        <select id="latexMatrixStyle" class="w-full text-xs p-1 border border-slate-300 rounded mt-1">
+                            <option value="bmatrix">bmatrix [ ]</option>
+                            <option value="pmatrix">pmatrix ( )</option>
+                            <option value="vmatrix">vmatrix | |</option>
+                            <option value="array">array (custom)</option>
+                        </select>
+                    </div>
+                    <div class="p-2">
+                        <label class="text-xs text-slate-600">행렬 열 정렬</label>
+                        <select id="latexMatrixAlign" class="w-full text-xs p-1 border border-slate-300 rounded mt-1">
+                            <option value="auto">자동 (중앙)</option>
+                            <option value="l">왼쪽</option>
+                            <option value="c">가운데</option>
+                            <option value="r">오른쪽</option>
+                        </select>
+                    </div>
+                    <button type="button" onclick="runExamPdfOcrCheck()" class="px-3 py-2 text-sm rounded bg-sky-600 text-white hover:bg-sky-700">OCR 점검 실행</button>
+                    <button type="button" onclick="exportAnalysisOcrResults()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">OCR 결과 저장</button>
+                    <div id="analysisOcrProgressContainer" class="w-full col-span-3 mt-3" style="display:none">
+                        <div class="w-full bg-slate-100 rounded h-3 overflow-hidden">
+                            <div id="analysisOcrProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#06b6d4,#3b82f6);"></div>
+                        </div>
+                        <div class="flex items-center justify-between mt-1 text-xs text-slate-500">
+                            <div id="analysisOcrProgressText">진행: 0 / 0</div>
+                            <div id="analysisOcrEtaText">ETA: --</div>
+                        </div>
+                    </div>
+                </div>
+                <p id="analysisPdfOcrStatus" class="mt-2 text-xs text-slate-500"></p>
+                <div class="mt-2 p-2 bg-slate-50 border border-slate-100 rounded">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="text-xs font-bold text-slate-600">LaTeX 변환 테스트</div>
+                        <button type="button" onclick="runLatexSamples()" class="px-2 py-1 text-xs rounded bg-indigo-600 text-white">샘플 변환 실행</button>
+                    </div>
+                    <textarea id="latexSampleInput" class="w-full text-xs p-2 border border-slate-200 rounded h-24 font-mono" placeholder="샘플 수식을 줄단위로 입력하세요 (예: a/b, (1+2)/(3+4), [1 2; 3 4])">a/b
+(1+2)/(3+4)
+[1 2; 3 4]
+\n+\sqrt(3+5)
+\n+1/2/3
+</textarea>
+                    <div id="latexTestOutput" class="mt-2 text-xs font-mono bg-white border border-slate-100 rounded p-2 overflow-auto max-h-48"></div>
+                </div>
+                <div id="analysisPdfOcrSummary" class="mt-3 text-sm text-slate-700"></div>
+                <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div class="border border-slate-200 rounded p-2 bg-white">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-xs font-bold text-slate-600">페이지 이미지 미리보기</div>
+                            <select id="analysisPdfOcrPageSelect" class="text-xs p-1 border border-slate-300 rounded" onchange="this.value === '' ? selectAnalysisOcrPage(-1) : selectAnalysisOcrPage(Number(this.value))">
+                                <option value="">페이지 선택</option>
+                            </select>
+                        </div>
+                        <div id="analysisPdfOcrImageContainer" class="relative w-full h-[70vh] overflow-auto border border-slate-100 rounded bg-slate-50">
+                            <img id="analysisPdfOcrImagePreview" alt="OCR 페이지 미리보기" class="block w-full" style="display:block;" />
+                            <canvas id="analysisPdfOcrOverlay" class="absolute top-0 left-0 pointer-events-none" style="width:100%;height:100%;"></canvas>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 rounded p-2 bg-white">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-xs font-bold text-slate-600">페이지 텍스트 레이아웃 비교</div>
+                            <div>
+                                <button type="button" id="toggleRawTextBtn" onclick="toggleRawTextArea()" class="text-xs px-2 py-1 rounded bg-slate-100">원문 텍스트 보기</button>
+                            </div>
+                        </div>
+                        <div id="analysisPdfOcrTextLayout" class="w-full h-[70vh] p-2 text-xs border border-slate-100 rounded bg-white font-mono overflow-auto relative"></div>
+                        <textarea id="analysisPdfOcrPageEdit" class="w-full h-40 p-2 text-xs border border-slate-300 rounded bg-slate-50 font-mono mt-2 hidden" placeholder="선택한 페이지 텍스트"></textarea>
+                        <div class="mt-2 flex gap-2">
+                            <button type="button" onclick="applyAnalysisOcrPageEdit()" class="px-2 py-1 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700">수정 반영</button>
+                            <button type="button" onclick="resetAnalysisOcrPageEdit()" class="px-2 py-1 text-xs rounded bg-slate-200 text-slate-700 hover:bg-slate-300">원본 복원</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 overflow-x-auto">
+                    <table class="min-w-full text-xs border border-slate-200 rounded">
+                        <thead class="bg-slate-100 text-slate-700">
+                            <tr>
+                                <th class="px-2 py-2 text-left">페이지</th>
+                                <th class="px-2 py-2 text-left">추출 방식</th>
+                                <th class="px-2 py-2 text-left">문자 수</th>
+                                <th class="px-2 py-2 text-left">샘플</th>
+                                <th class="px-2 py-2 text-left">미리보기</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analysisPdfOcrPageRows" class="bg-white"></tbody>
+                    </table>
+                </div>
+                <textarea id="analysisPdfOcrPreview" class="w-full h-40 mt-3 p-2 text-xs border border-slate-300 rounded bg-slate-50 font-mono" placeholder="인식 텍스트 미리보기"></textarea>
             </div>
         </section>
 
@@ -499,12 +622,12 @@
                     <p class="text-sm text-slate-600 mb-3">필수 구조: <strong>questions</strong> 배열 (각 항목: id, title, modelAnswer)</p>
                     <textarea id="answerJsonInput" class="w-full h-80 p-3 text-sm border border-slate-300 rounded-lg bg-slate-50 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400" placeholder='{"questions":[{"id":"Q1","title":"문제 제목","modelAnswer":"모범답안"}]}'></textarea>
                     <div class="mt-3 flex flex-wrap gap-2">
-                        <button onclick="loadSampleData()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">샘플 로드</button>
-                        <button onclick="applyAnswerData()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">JSON 적용</button>
-                        <button onclick="saveAnswerData()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">브라우저 저장</button>
-                        <button onclick="loadAnswerData()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">저장본 불러오기</button>
-                        <button onclick="exportAnswerDataToFile()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">JSON 파일 내보내기</button>
-                        <button onclick="openImportFileDialog()" class="px-3 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700">JSON 파일 가져오기</button>
+                        <button type="button" onclick="loadSampleData()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">샘플 로드</button>
+                        <button type="button" onclick="applyAnswerData()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">JSON 적용</button>
+                        <button type="button" onclick="saveAnswerData()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">브라우저 저장</button>
+                        <button type="button" onclick="loadAnswerData()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">저장본 불러오기</button>
+                        <button type="button" onclick="exportAnswerDataToFile()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">JSON 파일 내보내기</button>
+                        <button type="button" onclick="openImportFileDialog()" class="px-3 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700">JSON 파일 가져오기</button>
                     </div>
                     <input id="importJsonFileInput" type="file" accept="application/json,.json" class="hidden" onchange="importAnswerDataFromFile(event)">
                     <p id="dataStatus" class="mt-3 text-sm text-slate-600"></p>
@@ -531,9 +654,9 @@
                         <label class="block text-xs font-bold text-slate-600 mb-1">기출 PDF 업로드</label>
                         <input id="pdfFileInput" type="file" accept="application/pdf,.pdf" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
                         <div class="mt-2 flex flex-wrap gap-2">
-                            <button onclick="extractPdfText()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">PDF 텍스트 추출</button>
-                            <button onclick="extractQuestionsFromPdfText()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">문제 자동 추출</button>
-                            <button id="runPipelineBtn" onclick="runAutoPipeline()" class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800">자동 배치 실행</button>
+                            <button type="button" onclick="extractPdfText()" class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800">PDF 텍스트 추출</button>
+                            <button type="button" onclick="extractQuestionsFromPdfText()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">문제 자동 추출</button>
+                            <button type="button" id="runPipelineBtn" onclick="runAutoPipeline()" class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800">자동 배치 실행</button>
                         </div>
                         <div id="pipelineReport" class="mt-3 hidden text-xs rounded border border-emerald-200 bg-emerald-50 p-3 text-emerald-800"></div>
                         <p id="pdfStatus" class="mt-2 text-xs text-slate-500"></p>
@@ -550,19 +673,23 @@
                         기존 모범답안이 있어도 덮어쓰기
                     </label>
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <button onclick="generateDraftAnswersLocal()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">초안 자동 작성 (로컬 규칙)</button>
-                        <button onclick="generateDraftAnswersByApi()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">초안 자동 작성 (외부 API)</button>
+                        <button type="button" onclick="generateDraftAnswersLocal()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">초안 자동 작성 (로컬 규칙)</button>
+                        <button type="button" id="generateByApiBtn" onclick="generateDraftAnswersByApi()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">초안 자동 작성 (외부 API)</button>
+                        <button type="button" onclick="generateDraftAnswersByFoundryLocal()" class="px-3 py-2 text-sm rounded bg-violet-600 text-white hover:bg-violet-700">초안 자동 작성 (Foundry Local)</button>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <input id="aiEndpointUrl" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="외부 API URL (예: https://.../generate)">
                         <input id="aiApiKey" type="password" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="API Key (선택)">
+                        <input id="aiFoundryModelId" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="Foundry 모델 ID (예: qwen2.5-coder-0.5b-instruct-trtrtx-gpu:2)">
                     </div>
                     <div class="mt-2 flex flex-wrap gap-2">
-                        <button onclick="checkBackendConnection()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">백엔드 연결 확인</button>
+                        <button type="button" onclick="setFoundryLocalPreset()" class="px-3 py-2 text-sm rounded bg-violet-100 text-violet-800 hover:bg-violet-200">Foundry Local 프리셋</button>
+                        <button type="button" onclick="detectFoundryModelId()" class="px-3 py-2 text-sm rounded bg-violet-200 text-violet-900 hover:bg-violet-300">모델 ID 자동 감지</button>
+                        <button type="button" onclick="checkBackendConnection()" class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300">백엔드 연결 확인</button>
                         <span id="backendStatus" class="text-xs text-slate-500 self-center">백엔드 상태 미확인</span>
                     </div>
                     <div id="backendDiagnostics" class="mt-2 text-xs rounded border border-slate-200 bg-slate-50 p-2 text-slate-600">Provider 진단 정보 없음</div>
-                    <p class="mt-2 text-xs text-slate-500">외부 API는 서버를 직접 운영할 때 사용하세요. 브라우저 단독 환경에서는 로컬 규칙 생성이 기본입니다.</p>
+                    <p id="aiModeHint" class="mt-2 text-xs text-slate-500">외부 API는 서버를 직접 운영할 때 사용하세요. 브라우저 단독 환경에서는 로컬 규칙 생성이 기본입니다.</p>
                 </div>
             </div>
 
@@ -574,8 +701,8 @@
                         <input id="attachmentFiles" type="file" multiple accept="video/*,image/*,application/pdf,.pdf,.txt,.md,.csv" class="w-full p-2 text-sm border border-slate-300 rounded bg-white">
                         <textarea id="attachmentFocus" class="w-full h-24 mt-2 p-2 text-xs border border-slate-300 rounded bg-slate-50" placeholder="분석 초점(예: PSC 긴장재 부식 대책 중심으로 요약)"></textarea>
                         <div class="mt-2 flex flex-wrap gap-2">
-                            <button onclick="analyzeAttachedFiles()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">파일 분석 실행</button>
-                            <button onclick="analyzeAttachedWebsite()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">웹사이트 분석 실행</button>
+                            <button type="button" onclick="analyzeAttachedFiles()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">파일 분석 실행</button>
+                            <button type="button" onclick="analyzeAttachedWebsite()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">웹사이트 분석 실행</button>
                         </div>
                         <input id="attachmentWebsiteUrl" type="text" class="w-full p-2 text-sm border border-slate-300 rounded bg-white mt-2" placeholder="웹사이트 URL 첨부 (예: https://...)">
                         <p id="attachmentStatus" class="mt-2 text-xs text-slate-500"></p>
@@ -585,7 +712,7 @@
                         <select id="attachmentTargetQuestion" class="w-full p-2 text-sm border border-slate-300 rounded bg-white mb-2">
                             <option value="">보강 적용할 문제 선택</option>
                         </select>
-                        <button onclick="applyAttachmentInsightToQuestion()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">선택 문제에 보강 반영</button>
+                        <button type="button" onclick="applyAttachmentInsightToQuestion()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">선택 문제에 보강 반영</button>
                         <div class="mt-3 p-3 rounded border border-slate-200 bg-slate-50">
                             <div id="attachmentInsightSummary" class="text-sm text-slate-700"></div>
                             <ul id="attachmentInsightPoints" class="mt-2 text-xs text-slate-700 list-disc list-inside space-y-1"></ul>
@@ -629,8 +756,8 @@
                         <input id="newQReviewed" type="checkbox" class="mr-2 accent-emerald-600">
                         검토완료
                     </label>
-                    <button id="entrySubmitBtn" onclick="addModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">모범답안 추가</button>
-                    <button onclick="cancelEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
+                    <button type="button" id="entrySubmitBtn" onclick="addModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">모범답안 추가</button>
+                    <button type="button" onclick="cancelEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
                 </div>
                 <p class="mt-2 text-xs text-slate-500">추가 시 JSON 입력창과 렌더링 결과에 즉시 반영됩니다.</p>
             </div>
@@ -650,11 +777,11 @@
                 </div>
                 <textarea id="theoryContent" class="w-full h-32 mt-3 p-3 text-sm border border-slate-300 rounded bg-white" placeholder="이론 내용을 입력하세요. (정의/메커니즘/설계기준/KDS/도해 포인트)"></textarea>
                 <div class="mt-3 flex flex-wrap gap-2">
-                    <button id="theorySubmitBtn" onclick="upsertTheoryEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">이론 추가</button>
-                    <button onclick="cancelTheoryEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
-                    <button onclick="analyzeTheoryKnowledge()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">중복/보강 자동 분석</button>
-                    <button onclick="generateTheoryMergeDrafts()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">보강 병합 초안 생성</button>
-                    <button onclick="applyTheoryCleanup()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">중복 정리 적용</button>
+                    <button type="button" id="theorySubmitBtn" onclick="upsertTheoryEntry()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">이론 추가</button>
+                    <button type="button" onclick="cancelTheoryEditMode()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">수정 취소</button>
+                    <button type="button" onclick="analyzeTheoryKnowledge()" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">중복/보강 자동 분석</button>
+                    <button type="button" onclick="generateTheoryMergeDrafts()" class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">보강 병합 초안 생성</button>
+                    <button type="button" onclick="applyTheoryCleanup()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">중복 정리 적용</button>
                 </div>
                 <p class="mt-2 text-xs text-slate-500">분석 기준: 유사도 기반 중복 판단 + 보완 키워드 기반 보강 판단</p>
                 <div id="theoryStatus" class="mt-2 text-xs text-slate-500"></div>
@@ -757,7 +884,7 @@
             <div class="glass-panel p-6 rounded-xl shadow-sm mt-6">
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h3 class="text-lg font-bold">자동 검토 및 보강 제안</h3>
-                    <button onclick="evaluateRenderedAnswers()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">자동 평가 실행</button>
+                    <button type="button" onclick="evaluateRenderedAnswers()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">자동 평가 실행</button>
                 </div>
                 <p class="text-sm text-slate-600 mb-4">
                     평가 기준: 분량 적정성, 도해/표/그래프 활용, 핵심 키워드(영어 병기), KDS 코드 명시, 개조식/넘버링 구조.
@@ -774,8 +901,8 @@
             <h4 class="text-lg font-bold text-slate-800 mb-2">항목 삭제 확인</h4>
             <p class="text-sm text-slate-600 mb-4">선택한 모범답안을 삭제하면 JSON과 평가 결과에서도 즉시 제거됩니다.</p>
             <div class="flex justify-end gap-2">
-                <button onclick="closeDeleteConfirmModal()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">취소</button>
-                <button onclick="confirmDeleteModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">삭제</button>
+                <button type="button" onclick="closeDeleteConfirmModal()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">취소</button>
+                <button type="button" onclick="confirmDeleteModelAnswerEntry()" class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">삭제</button>
             </div>
         </div>
     </div>
@@ -802,7 +929,9 @@
 
         function switchTab(tabId) {
             // Hide all tab content
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.add('hidden');
+            });
             // Show target tab content
             document.getElementById(tabId).classList.remove('hidden');
             
@@ -812,8 +941,10 @@
                 t.classList.add('border-transparent');
             });
             const activeBtn = document.querySelector(`button[data-tab="${tabId}"]`);
-            activeBtn.classList.add('active-tab', 'border-indigo-600', 'text-indigo-600');
-            activeBtn.classList.remove('border-transparent');
+            if (activeBtn) {
+                activeBtn.classList.add('active-tab', 'border-indigo-600', 'text-indigo-600');
+                activeBtn.classList.remove('border-transparent');
+            }
         }
 
         // --- Chart Initialization ---
@@ -1021,14 +1152,17 @@
 
         const ANSWER_STORAGE_KEY = 'solve120_answer_data_v1';
         const AI_ENDPOINT_STORAGE_KEY = 'solve120_ai_endpoint_v1';
+        const AI_FOUNDRY_MODEL_STORAGE_KEY = 'solve120_ai_foundry_model_v1';
         let lastEvaluationResults = [];
         let pendingDeleteIndex = -1;
         let roundStatsChart = null;
         let pipelineRunning = false;
         let theoryAnalysisCache = { duplicates: [], reinforcements: [], mergedDrafts: [] };
         let latestAttachmentInsight = null;
+        let analysisOcrPageCache = [];
+        let analysisOcrCurrentPageIndex = -1;
 
-        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+        if (window.pdfjsLib?.GlobalWorkerOptions) {
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
 
@@ -1109,6 +1243,1142 @@
             };
             statusEl.className = `mt-2 text-xs ${colorMap[type] || colorMap.info}`;
             statusEl.textContent = message;
+        }
+
+        function setAnalysisOcrStatus(message, type = 'info') {
+            const statusEl = document.getElementById('analysisPdfOcrStatus');
+            if (!statusEl) {
+                return;
+            }
+            const colorMap = {
+                info: 'text-slate-500',
+                success: 'text-emerald-700',
+                error: 'text-rose-700'
+            };
+            statusEl.className = `mt-2 text-xs ${colorMap[type] || colorMap.info}`;
+            statusEl.textContent = message;
+        }
+
+        function updateOcrProgress(current, total, startTimestamp) {
+            const container = document.getElementById('analysisOcrProgressContainer');
+            const bar = document.getElementById('analysisOcrProgressBar');
+            const text = document.getElementById('analysisOcrProgressText');
+            const eta = document.getElementById('analysisOcrEtaText');
+            if (!container || !bar || !text || !eta) return;
+            // show container if we have a startTimestamp or a positive total
+            container.style.display = (startTimestamp && startTimestamp > 0) || total > 0 ? 'block' : 'none';
+            const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            bar.style.width = pct + '%';
+            text.textContent = `진행: ${current} / ${total} (${pct}%)`;
+
+            if (!startTimestamp || current <= 0) {
+                eta.textContent = 'ETA: --';
+                return;
+            }
+            const elapsed = (Date.now() - startTimestamp) / 1000; // seconds
+            const per = elapsed / current;
+            const remain = Math.max(0, Math.round(per * (total - current)));
+            // format HH:MM:SS
+            const hh = Math.floor(remain / 3600);
+            const mm = Math.floor((remain % 3600) / 60);
+            const ss = remain % 60;
+            const parts = [];
+            if (hh) parts.push(hh + 'h');
+            if (mm) parts.push(mm + 'm');
+            parts.push(ss + 's');
+            eta.textContent = `ETA: ${parts.join(' ')}`;
+        }
+
+        function computeOcrQuality(text) {
+            const normalized = String(text || '');
+            const compact = normalized.replace(/\s+/g, '');
+            const total = compact.length;
+            if (!total) {
+                return { score: 0, hangulRatio: 0, digitRatio: 0, alphaRatio: 0 };
+            }
+
+            const hangul = (compact.match(/[가-힣]/g) || []).length;
+            const digits = (compact.match(/[0-9]/g) || []).length;
+            const alpha = (compact.match(/[A-Za-z]/g) || []).length;
+
+            const hangulRatio = hangul / total;
+            const digitRatio = digits / total;
+            const alphaRatio = alpha / total;
+
+            let score = 0;
+            score += Math.min(50, Math.round(total / 25));
+            score += Math.round(Math.min(1, hangulRatio * 2) * 20);
+            score += Math.round(Math.min(1, (digitRatio + alphaRatio) * 1.5) * 20);
+            score += /문제|해설|구조|설계|교시|KDS/.test(normalized) ? 10 : 0;
+
+            return {
+                score: Math.min(100, score),
+                hangulRatio,
+                digitRatio,
+                alphaRatio
+            };
+        }
+
+        function detectQuestionPatternStats(text) {
+            const source = String(text || '');
+            const patterns = [
+                /(?:^|\n|\s)Q\s*\d{1,3}(?=\b|\s|[.)])/gi,
+                /(?:^|\n|\s)문제\s*\d{1,3}(?=\b|\s|[.)])/gi,
+                /(?:^|\n|\s)\d{1,3}\s*[.)](?=\s)/g,
+                /(?:^|\n|\s)[1-4]\s*교시(?=\b|\s)/g
+            ];
+
+            const tokens = [];
+            patterns.forEach((pattern) => {
+                const matches = source.match(pattern) || [];
+                matches.forEach((entry) => {
+                    tokens.push(String(entry).trim());
+                });
+            });
+
+            const unique = [...new Set(tokens)];
+            return {
+                count: unique.length,
+                samples: unique.slice(0, 8)
+            };
+        }
+
+        function renderAnalysisOcrRows() {
+            const rowsEl = document.getElementById('analysisPdfOcrPageRows');
+            if (!rowsEl) {
+                return;
+            }
+
+            rowsEl.innerHTML = analysisOcrPageCache.map((item, index) => `
+                <tr class="border-t border-slate-200">
+                    <td class="px-2 py-2">${item.pageNum}</td>
+                    <td class="px-2 py-2">${item.method}<div class="text-[10px] text-slate-500 mt-1">패턴 ${item.patternCount || 0}건</div></td>
+                    <td class="px-2 py-2">${item.length}</td>
+                    <td class="px-2 py-2 text-slate-600">${escapeHtml((item.editedText || item.text || '').slice(0, 80) || '(빈 인식 결과)')}<div class="text-[10px] text-slate-500 mt-1">${escapeHtml(item.patternSample || '패턴 없음')}</div></td>
+                    <td class="px-2 py-2"><button type="button" onclick="selectAnalysisOcrPage(${index})" class="px-2 py-1 text-[11px] rounded bg-sky-100 text-sky-700 hover:bg-sky-200">열기</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function syncAnalysisOcrCombinedPreview() {
+            const previewEl = document.getElementById('analysisPdfOcrPreview');
+            if (!previewEl) {
+                return;
+            }
+            previewEl.value = analysisOcrPageCache.map(item => item.editedText || item.text || '').join('\n').trim();
+        }
+
+        function renderAnalysisOcrSummary(includeImageOcr = false) {
+            const summaryEl = document.getElementById('analysisPdfOcrSummary');
+            if (!summaryEl) {
+                return;
+            }
+            if (!analysisOcrPageCache.length) {
+                summaryEl.innerHTML = '';
+                return;
+            }
+
+            const combinedText = analysisOcrPageCache.map(item => item.editedText || item.text || '').join('\n').trim();
+            const quality = computeOcrQuality(combinedText);
+            const ocrPageCount = analysisOcrPageCache.filter(item => String(item.method).includes('OCR')).length;
+            const totalPatternCount = analysisOcrPageCache.reduce((acc, cur) => acc + (cur.patternCount || 0), 0);
+            const pagesWithPattern = analysisOcrPageCache.filter(item => (item.patternCount || 0) > 0).length;
+            const patternHitRate = analysisOcrPageCache.length ? Math.round((pagesWithPattern / analysisOcrPageCache.length) * 100) : 0;
+
+            summaryEl.innerHTML = `
+                <div class="p-3 rounded border ${quality.score >= 75 ? 'border-emerald-200 bg-emerald-50' : quality.score >= 50 ? 'border-amber-200 bg-amber-50' : 'border-rose-200 bg-rose-50'}">
+                    <strong>OCR 점검 결과:</strong> 품질 점수 ${quality.score}점 / 100 · 분석 페이지 ${analysisOcrPageCache.length} · OCR 적용 ${ocrPageCount}페이지 · 이미지 포함 모드 ${includeImageOcr ? 'ON' : 'OFF'}
+                    <div class="mt-1 text-xs text-slate-600">한글 비율 ${(quality.hangulRatio * 100).toFixed(1)}% · 숫자 비율 ${(quality.digitRatio * 100).toFixed(1)}% · 영문 비율 ${(quality.alphaRatio * 100).toFixed(1)}%</div>
+                    <div class="mt-1 text-xs text-slate-600">문제 패턴 탐지: 총 ${totalPatternCount}건 · 탐지율 ${patternHitRate}% (${pagesWithPattern}/${analysisOcrPageCache.length} 페이지)</div>
+                </div>
+            `;
+        }
+
+        function renderAnalysisOcrPageSelector() {
+            const selectEl = document.getElementById('analysisPdfOcrPageSelect');
+            if (!selectEl) {
+                return;
+            }
+
+            selectEl.innerHTML = '<option value="">페이지 선택</option>' + analysisOcrPageCache
+                .map((item, index) => `<option value="${index}">${item.pageNum}페이지 · ${escapeHtml(item.method)}</option>`)
+                .join('');
+
+            if (analysisOcrCurrentPageIndex >= 0 && analysisOcrPageCache[analysisOcrCurrentPageIndex]) {
+                selectEl.value = String(analysisOcrCurrentPageIndex);
+            }
+        }
+
+        function selectAnalysisOcrPage(index) {
+            const imageEl = document.getElementById('analysisPdfOcrImagePreview');
+            const editEl = document.getElementById('analysisPdfOcrPageEdit');
+            const selectEl = document.getElementById('analysisPdfOcrPageSelect');
+
+            if (!Number.isInteger(index) || index < 0 || !analysisOcrPageCache[index]) {
+                analysisOcrCurrentPageIndex = -1;
+                if (imageEl) imageEl.removeAttribute('src');
+                if (editEl) editEl.value = '';
+                if (selectEl) selectEl.value = '';
+                return;
+            }
+
+            analysisOcrCurrentPageIndex = index;
+            const page = analysisOcrPageCache[index];
+            if (imageEl) {
+                imageEl.src = page.imageDataUrl || '';
+            }
+            if (editEl) {
+                editEl.value = page.editedText || page.text || '';
+            }
+            if (selectEl) {
+                selectEl.value = String(index);
+            }
+            // render layout-aligned OCR preview for selected page
+            try {
+                if (typeof renderAnalysisOcrPageLayout === 'function') {
+                    renderAnalysisOcrPageLayout(analysisOcrCurrentPageIndex).catch(e => { /* ignore */ });
+                }
+            } catch (e) {}
+        }
+
+        function normalizeOcrEditableText(input) {
+            return String(input || '')
+                .replace(/\r\n/g, '\n')
+                .split('\n')
+                .map(line => line.replace(/[ \t]{2,}/g, ' ').trimEnd())
+                .join('\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
+        function createEnhancedOcrCanvas(sourceCanvas, options = {}) {
+                    // defensive: ensure a valid canvas-like source
+                    if (!sourceCanvas || typeof sourceCanvas.width !== 'number' || typeof sourceCanvas.height !== 'number') {
+                        const safe = document.createElement('canvas');
+                        safe.width = 1; safe.height = 1;
+                        return safe;
+                    }
+                    const scale = Number.isFinite(options.scale) ? options.scale : 2;
+            const aggressive = !!options.aggressive;
+            const width = Math.max(1, Math.floor(sourceCanvas.width * scale));
+            const height = Math.max(1, Math.floor(sourceCanvas.height * scale));
+
+            const outCanvas = document.createElement('canvas');
+            outCanvas.width = width;
+            outCanvas.height = height;
+            const outCtx = outCanvas.getContext('2d', { willReadFrequently: true });
+            outCtx.imageSmoothingEnabled = true;
+            outCtx.drawImage(sourceCanvas, 0, 0, width, height);
+
+            const imageData = outCtx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            let graySum = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
+                graySum += gray;
+            }
+
+            const pixelCount = Math.max(1, data.length / 4);
+            const mean = graySum / pixelCount;
+            const threshold = aggressive
+                ? Math.max(90, Math.min(190, mean - 10))
+                : Math.max(100, Math.min(200, mean));
+            const contrast = aggressive ? 1.75 : 1.45;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
+                const contrasted = ((gray - 128) * contrast) + 128;
+                const bw = contrasted >= threshold ? 255 : 0;
+                data[i] = bw;
+                data[i + 1] = bw;
+                data[i + 2] = bw;
+                data[i + 3] = 255;
+            }
+
+            // optional unsharp mask / sharpening for aggressive mode
+            if (aggressive) {
+                // simple unsharp: draw a blurred version and composite
+                const blurCanvas = document.createElement('canvas');
+                blurCanvas.width = width;
+                blurCanvas.height = height;
+                const bctx = blurCanvas.getContext('2d');
+                bctx.filter = 'blur(1.5px)';
+                bctx.drawImage(outCanvas, 0, 0);
+                bctx.filter = 'none';
+
+                // combine: out = out * (1 + amount) - blur * amount
+                const blurData = bctx.getImageData(0, 0, width, height).data;
+                const dst = outCtx.getImageData(0, 0, width, height);
+                const dstData = dst.data;
+                const amount = 0.6;
+                for (let i = 0; i < dstData.length; i += 4) {
+                    dstData[i] = Math.min(255, Math.max(0, dstData[i] * (1 + amount) - blurData[i] * amount));
+                    dstData[i+1] = Math.min(255, Math.max(0, dstData[i+1] * (1 + amount) - blurData[i+1] * amount));
+                    dstData[i+2] = Math.min(255, Math.max(0, dstData[i+2] * (1 + amount) - blurData[i+2] * amount));
+                    dstData[i+3] = 255;
+                }
+                outCtx.putImageData(dst, 0, 0);
+            } else {
+                outCtx.putImageData(imageData, 0, 0);
+            }
+
+            // return optionally inverted canvas for symbol-heavy diagrams
+            if (options.invert) {
+                const inv = document.createElement('canvas');
+                inv.width = width; inv.height = height;
+                const ictx = inv.getContext('2d');
+                ictx.drawImage(outCanvas, 0, 0);
+                const idata = ictx.getImageData(0,0,width,height);
+                const d = idata.data;
+                for (let i=0;i<d.length;i+=4){ d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; }
+                ictx.putImageData(idata,0,0);
+                return inv;
+            }
+
+            return outCanvas;
+        }
+
+        async function runTesseractPass(imageLike, lang = 'kor+eng', options = {}) {
+            if (!window.Tesseract) return '';
+            try {
+                // initialize worker pool lazily
+                if (!window.__tesseractWorkerPoolInitialized) {
+                    const cpu = (navigator.hardwareConcurrency || 2);
+                    const poolSize = Math.max(1, Math.min(4, cpu - 1));
+                    try { initTesseractWorkerPool(poolSize); } catch { /* ignore */ }
+                    window.__tesseractWorkerPoolInitialized = true;
+                }
+
+                // prefer worker pool if available
+                if (Array.isArray(window.__tesseractWorkerPool) && window.__tesseractWorkerPool.length) {
+                    const worker = await acquireTesseractWorker();
+                    try {
+                        // set optional parameters
+                        if (options.psm) {
+                            try { await worker.setParameters({ tessedit_pageseg_mode: options.psm }); } catch {}
+                        }
+                        if (options.whitelist) {
+                            try { await worker.setParameters({ tessedit_char_whitelist: options.whitelist }); } catch {}
+                        }
+                        const res = await worker.recognize(imageLike);
+                        return String(res?.data?.text || '').replace(/\s{2,}/g, ' ').trim();
+                    } catch (e) {
+                        return '';
+                    } finally {
+                        releaseTesseractWorker(worker);
+                    }
+                }
+
+                // fallback single-threaded recognize
+                const cfg = {};
+                if (options.psm) cfg.tessedit_pageseg_mode = options.psm;
+                if (options.whitelist) cfg.tessedit_char_whitelist = options.whitelist;
+                let result;
+                try {
+                    result = await window.Tesseract.recognize(imageLike, lang, { tessjs_create_worker: false, tessedit_char_whitelist: cfg.tessedit_char_whitelist, tessedit_pageseg_mode: cfg.tessedit_pageseg_mode });
+                } catch {
+                    result = await window.Tesseract.recognize(imageLike, lang);
+                }
+                return String(result?.data?.text || '').replace(/\s{2,}/g, ' ').trim();
+            } catch {
+                return '';
+            }
+        }
+
+        // --- Tesseract worker pool helpers ---
+        async function initTesseractWorkerPool(size = 2) {
+            if (!window.Tesseract) return;
+            if (!Array.isArray(window.__tesseractWorkerPool)) window.__tesseractWorkerPool = [];
+            if (!window.__tesseractWorkerBusy) window.__tesseractWorkerBusy = new WeakSet();
+            const existing = window.__tesseractWorkerPool.length;
+            const toCreate = Math.max(0, size - existing);
+            for (let i = 0; i < toCreate; i++) {
+                try {
+                    // Do not pass non-cloneable functions (like inline logger) to worker options
+                    const worker = window.Tesseract.createWorker();
+                    await worker.load();
+                    // load common language pack to support kor+eng
+                    await worker.loadLanguage('kor+eng');
+                    await worker.initialize('kor+eng');
+                    window.__tesseractWorkerPool.push(worker);
+                } catch (e) {
+                    // ignore worker creation failure
+                }
+            }
+        }
+
+        async function acquireTesseractWorker() {
+            // simple polling
+            const pool = window.__tesseractWorkerPool || [];
+            while (true) {
+                for (const w of pool) {
+                    if (!window.__tesseractWorkerBusy.has(w)) {
+                        try { window.__tesseractWorkerBusy.add(w); } catch { /* ignore */ }
+                        return w;
+                    }
+                }
+                await new Promise(r => setTimeout(r, 30));
+            }
+        }
+
+        function releaseTesseractWorker(worker) {
+            try { window.__tesseractWorkerBusy.delete(worker); } catch { /* ignore */ }
+        }
+
+        // rotate a canvas by degrees and return a new canvas
+        function rotateCanvas(srcCanvas, degrees) {
+                    // defensive: if srcCanvas is missing, return a tiny empty canvas
+                    if (!srcCanvas || typeof srcCanvas.width !== 'number' || typeof srcCanvas.height !== 'number') {
+                        const out = document.createElement('canvas'); out.width = 1; out.height = 1; return out;
+                    }
+                    const rad = degrees * Math.PI / 180;
+                    const w = srcCanvas.width;
+                    const h = srcCanvas.height;
+            const cos = Math.abs(Math.cos(rad));
+            const sin = Math.abs(Math.sin(rad));
+            const nw = Math.floor(w * cos + h * sin);
+            const nh = Math.floor(h * cos + w * sin);
+            const out = document.createElement('canvas');
+            out.width = nw; out.height = nh;
+            const ctx = out.getContext('2d');
+            ctx.translate(nw/2, nh/2);
+            ctx.rotate(rad);
+            ctx.drawImage(srcCanvas, -w/2, -h/2);
+            return out;
+        }
+
+        // robust OCR: try small rotations and varied preprocessing, return best-scoring text
+        async function runRobustOcr(sourceCanvas, lang = 'eng', options = {}) {
+                    // defensive: ensure caller provided a valid canvas
+                    if (!sourceCanvas || typeof sourceCanvas.width !== 'number' || typeof sourceCanvas.height !== 'number') {
+                        return '';
+                    }
+                    const angles = options.angles || [-2, -1, 0, 1, 2];
+            const preprocessVariants = [];
+            // base enhanced
+            preprocessVariants.push({ scale: options.scale || 2.5, aggressive: !!options.aggressive, invert: false });
+            // inverted
+            preprocessVariants.push({ scale: options.scale || 2.5, aggressive: !!options.aggressive, invert: true });
+            // sharper
+            preprocessVariants.push({ scale: options.scale || 3.0, aggressive: true, invert: false });
+
+            let best = { text: '', score: 0 };
+            for (const angle of angles) {
+                const rotated = angle === 0 ? sourceCanvas : rotateCanvas(sourceCanvas, angle);
+                // prepare all preprocessed canvases for this angle
+                const preps = preprocessVariants.map(pv => createEnhancedOcrCanvas(rotated, pv));
+                // run all passes in parallel (worker pool will throttle)
+                const promises = preps.map(prep => runTesseractPass(prep, lang, options));
+                const results = await Promise.all(promises.map(p => p.catch(e => '')));
+                for (const candidate of results) {
+                    const sc = scoreOcrCandidate(candidate);
+                    if (sc > best.score) {
+                        best = { text: candidate, score: sc };
+                    }
+                }
+            }
+            return best.text || '';
+        }
+
+        function scoreOcrCandidate(text) {
+            const source = String(text || '');
+            const compact = source.replace(/\s+/g, '');
+            if (!compact) {
+                return 0;
+            }
+
+            const symbolCount = (compact.match(/[=+\-*/()\[\]{}<>≤≥≠≈∑∫√∆±×÷→←^_|]/g) || []).length;
+            const digitCount = (compact.match(/[0-9]/g) || []).length;
+            const hangulCount = (compact.match(/[가-힣]/g) || []).length;
+            const alphaCount = (compact.match(/[A-Za-z]/g) || []).length;
+
+            return compact.length + (symbolCount * 3) + (digitCount * 2) + hangulCount + alphaCount;
+        }
+
+        function mergeOcrCandidates(candidates = []) {
+            const cleaned = candidates.map(item => String(item || '').trim()).filter(Boolean);
+            if (!cleaned.length) {
+                return '';
+            }
+
+            const bestBase = [...cleaned].sort((a, b) => scoreOcrCandidate(b) - scoreOcrCandidate(a))[0] || '';
+            const lines = new Set(bestBase.split(/\n+/).map(line => line.trim()).filter(Boolean));
+
+            cleaned.forEach(candidate => {
+                candidate
+                    .split(/\n+/)
+                    .map(line => line.trim())
+                    .filter(line => line.length >= 2)
+                    .forEach(line => {
+                        const hasFormulaSignal = /[=+\-*/()\[\]{}<>≤≥≠≈∑∫√∆±×÷→←^_|]|\d/.test(line);
+                        let candidateLine = line;
+                        if (hasFormulaSignal) {
+                            candidateLine = postProcessMathLine(candidateLine);
+                        }
+                        if (!lines.has(candidateLine)) {
+                            lines.add(candidateLine);
+                        }
+                    });
+            });
+
+            const merged = [...lines].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+            return postProcessCombinedText(merged);
+        }
+
+        function postProcessMathLine(line) {
+            let s = String(line || '');
+            // normalize common unicode variants
+            s = s.replace(/[‑–—−]/g, '-');
+            s = s.replace(/[×✕✖]/g, 'x');
+            s = s.replace(/[÷∕]/g, '/');
+            s = s.replace(/[＝]/g, '=');
+            s = s.replace(/[··]/g, '.');
+
+            // full-width to ascii
+            s = s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 65248));
+
+            // fix common OCR confusions in numeric contexts: O->0, l->1
+            s = s.replace(/(?<=\d)O(?=\d)/g, '0');
+            s = s.replace(/(?<=\d)l(?=\d)/g, '1');
+            s = s.replace(/\bO(?=\d)/g, '0');
+            s = s.replace(/(?<=\d)O\b/g, '0');
+
+            // replace multiple spaces and unify spacing around operators
+            s = s.replace(/\s+/g, ' ');
+            s = s.replace(/\s*([=+\-*/^<>±×÷≤≥≠])\s*/g, ' $1 ');
+
+            // collapse accidental duplicated operators like = = to =
+            s = s.replace(/([=+\-*/^<>])\s+\1+/g, '$1');
+
+            return s.trim();
+        }
+
+        function postProcessCombinedText(text) {
+            let t = String(text || '');
+            // unify weird spacing around parentheses and commas
+            t = t.replace(/\s*\(\s*/g, ' (');
+            t = t.replace(/\s*\)\s*/g, ') ');
+            t = t.replace(/,\s*/g, ', ');
+            t = t.replace(/\s{2,}/g, ' ');
+            // remove stray non-printables
+            t = t.split('').filter(ch => {
+                const code = ch.charCodeAt(0);
+                return !(code >= 0 && code <= 31) && code !== 127;
+            }).join('');
+            return t.trim();
+        }
+
+        function postProcessMathToLatex(line) {
+            // Very small heuristic mapping to LaTeX for common operators
+            let s = String(line || '');
+            s = s.replace(/\s*×\s*|\s*x\s*/g, ' \\times ');
+            s = s.replace(/\s*÷\s*|\s*\/\s*/g, ' \\div ');
+            s = s.replace(/≤/g, '\\le');
+            s = s.replace(/≥/g, '\\ge');
+            s = s.replace(/≈/g, '\\approx');
+            s = s.replace(/→/g, '\\to');
+            s = s.replace(/←/g, '\\leftarrow');
+            s = s.replace(/(?<=\d)\s*%/g, ' %');
+            s = s.replace(/\s*\^\s*/g, '^');
+            s = s.replace(/([A-Za-z0-9\)\]])\s*\^\s*\{?([A-Za-z0-9\(])/g, '$1^{$2');
+            // wrap simple fractions a/b -> \frac{a}{b} when clearly numeric
+            s = s.replace(/(\b\d+\b)\s*\/\s*(\b\d+\b)/g, '\\frac{$1}{$2}');
+            return s.trim();
+        }
+
+        function isLikelyEquation(line) {
+            if (!line) return false;
+            // Heuristic: contains = or long sequences of operators or Greek/math symbols
+            return /=|\\sum|\\int|\\frac|√|\^|\btheta\b|≤|≥|∑|∫|\\times|\\div|\\sqrt/.test(line) || /[=+\-*/^<>±×÷≤≥≠≈∑∫√∆±×÷→←]/.test(line) && line.length > 8;
+        }
+
+        function convertMathToLatex(line) {
+            let s = String(line || '');
+            // basic replacements
+            s = s.replace(/×/g, '\\times');
+            s = s.replace(/÷/g, '\\div');
+            s = s.replace(/≤/g, '\\le');
+            s = s.replace(/≥/g, '\\ge');
+            s = s.replace(/≈/g, '\\approx');
+            s = s.replace(/→/g, '\\to');
+
+            // Greek letters common mapping
+            const greek = { 'alpha':'\\alpha','beta':'\\beta','gamma':'\\gamma','delta':'\\delta','theta':'\\theta','lambda':'\\lambda','pi':'\\pi','sigma':'\\sigma','phi':'\\phi','psi':'\\psi','omega':'\\omega' };
+            Object.keys(greek).forEach(k => {
+                s = s.replace(new RegExp('\\b' + k + '\\b','gi'), greek[k]);
+            });
+
+            // sqrt forms
+            s = s.replace(/√\s*\(?([^\)\s]+)\)?/g, '\\sqrt{$1}');
+            s = s.replace(/sqrt\s*\(?([^\)\s]+)\)?/gi, '\\sqrt{$1}');
+
+            // nth-root forms e.g. root(3,x) or ∛x -> \sqrt[3]{x}
+            s = s.replace(/root\s*\(?\s*(\d+)\s*,\s*([^\)]+)\)?/gi, '\\sqrt[$1]{$2}');
+            s = s.replace(/∛\s*\(?([^\)\s]+)\)?/g, '\\sqrt[3]{$1}');
+            s = s.replace(/∜\s*\(?([^\)\s]+)\)?/g, '\\sqrt[4]{$1}');
+
+            // exponents: a^b -> a^{b}
+            s = s.replace(/([A-Za-z0-9\)\}])\s*\^\s*\(?([A-Za-z0-9\(\{\}]+)\)?/g, (_, a, b) => {
+                b = b.replace(/^\{?/, '').replace(/\}?$/, '');
+                return a + '^{' + b + '}';
+            });
+
+            // subscripts: a_1 -> a_{1}
+            s = s.replace(/([A-Za-z0-9])_\s*\(?([A-Za-z0-9]+)\)?/g, '$1_{ $2 }');
+
+            // fractions numeric or simple a/b -> \\frac{a}{b}
+            s = s.replace(/(\b[0-9A-Za-z\)\}]+)\s*\/\s*([0-9A-Za-z\(\{]+)/g, '\\frac{$1}{$2}');
+
+            // Fraction policy: decide how to interpret chains like a/b/c
+            // Read optional DOM controls if present: 'latexFractionPolicy' -> 'nested'|'left'|'flat'|'smart'
+            const _fracPolicy = (typeof document !== 'undefined' && document.getElementById('latexFractionPolicy')?.value) || 'smart';
+            const _opCount = s => (String(s||'').match(/[+\-*/^=]/g) || []).length;
+            try {
+                if (_fracPolicy === 'nested') {
+                    // a/(b/c) -> \frac{a}{\frac{b}{c}} ; also chain a/b/c -> a/{b/c}
+                    s = s.replace(/([A-Za-z0-9\}\)\]]+)\s*\/\s*\(\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)\s*\)/g, (_, a, b, c) => `\\frac{${a}}{\\frac{${b}}{${c}}}`);
+                    s = s.replace(/([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)/g, (_, a, b, c) => `\\frac{${a}}{\\frac{${b}}{${c}}}`);
+                } else if (_fracPolicy === 'left') {
+                    // interpret as (a/b)/c -> \frac{\frac{a}{b}}{c}
+                    s = s.replace(/\(\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)\s*\)\s*\/\s*([A-Za-z0-9\{\(\[]+)/g, (_, a, b, c) => `\\frac{\\frac{${a}}{${b}}}{${c}}`);
+                    s = s.replace(/([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)/g, (_, a, b, c) => `\\frac{\\frac{${a}}{${b}}}{${c}}`);
+                } else if (_fracPolicy === 'smart') {
+                    // Smart heuristic: iteratively rewrite triple-chains by operator complexity
+                    let iter = 0;
+                    while (iter < 6) {
+                        const prev = s;
+                        s = s.replace(/([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)/g, (_, a, b, c) => {
+                            const aOps = _opCount(a);
+                            const bOps = _opCount(b);
+                            if (bOps > aOps) return `\\frac{${a}}{\\frac{${b}}{${c}}}`;
+                            if (aOps > bOps) return `\\frac{\\frac{${a}}{${b}}}{${c}}`;
+                            return `\\frac{${a}}{\\frac{${b}}{${c}}}`;
+                        });
+                        // handle explicit parenthesis form (a/b)/c
+                        s = s.replace(/\(\s*([A-Za-z0-9\}\)\]]+)\s*\/\s*([A-Za-z0-9\{\(\[]+)\s*\)\s*\/\s*([A-Za-z0-9\{\(\[]+)/g, (_, a, b, c) => `\\frac{\\frac{${a}}{${b}}}{${c}}`);
+                        if (s === prev) break;
+                        iter++;
+                    }
+                } else {
+                    // 'flat' or unknown: do not rewrite chained fractions, leave simple a/b -> \frac{a}{b}
+                }
+            } catch {
+                // defensive: if regex replacement fails, leave string unchanged
+            }
+
+            // Matrix detection & rendering: supports bmatrix/pmatrix/vmatrix/array with optional alignment
+            // Optional DOM controls:
+            //  - 'latexMatrixStyle' -> 'bmatrix'|'pmatrix'|'vmatrix'|'array'
+            //  - 'latexMatrixAlign' -> 'auto'|'l'|'c'|'r'
+            const _matrixStyle = (typeof document !== 'undefined' && document.getElementById('latexMatrixStyle')?.value) || 'bmatrix';
+            const _matrixAlign = (typeof document !== 'undefined' && document.getElementById('latexMatrixAlign')?.value) || 'auto';
+
+            const renderMatrix = (inner) => {
+                // strip outer wrapping if it exactly envelops content
+                let body = String(inner || '').trim();
+                if (/^\[.*\]$/.test(body) || /^\(.*\)$/.test(body)) {
+                    body = body.slice(1, -1).trim();
+                }
+                // allow ; or newline or \\\\ to separate rows
+                const rowsRaw = body.split(/;|\\\\|\n/).map(r => r.trim()).filter(Boolean);
+                if (rowsRaw.length < 2) return null;
+                // preserve thousand-comma numbers by replacing them temporarily
+                const NUMBER_COMMA_TOKEN = '___COMMA___';
+                const protectNumbers = txt => txt.replace(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g, m => m.replace(/,/g, NUMBER_COMMA_TOKEN));
+                const restoreNumbers = txt => txt.replace(new RegExp(NUMBER_COMMA_TOKEN, 'g'), ',');
+                // columns can be separated by commas or whitespace; use protection to avoid splitting numbers
+                const rows = rowsRaw.map(r => {
+                    const prot = protectNumbers(r);
+                    const parts = prot.split(/\s*,\s*|\s+/).filter(Boolean).map(p => restoreNumbers(p));
+                    return parts;
+                });
+                const maxCols = Math.max(...rows.map(r => r.length));
+                const colSpec = (_matrixAlign === 'auto') ? 'c'.repeat(maxCols) : (_matrixAlign.repeat(maxCols));
+                const tidyCell = (cell) => {
+                    let c = String(cell || '').trim();
+                    // remove wrapping parentheses if they exactly envelop the cell
+                    if (/^\([^()]*\)$/.test(c)) {
+                        c = c.slice(1, -1).trim();
+                    }
+                    // if cell looks like a simple token (number or single var), return as-is
+                    if (/^[A-Za-z0-9]+$/.test(c)) return c;
+                    // if already contains LaTeX fraction or left/right, keep
+                    if (/\\frac|\\left|\\right|\\sqrt/.test(c)) return c;
+                    // if contains operators, wrap with \left( ... \right)
+                    if (/[+\-*/=^]/.test(c) && !/^\\left/.test(c)) {
+                        return `\\left(${c}\\right)`;
+                    }
+                    return c;
+                };
+
+                const texRows = rows.map(r => {
+                    const padded = r.concat(Array(Math.max(0, maxCols - r.length)).fill(''));
+                    return padded.map(tidyCell).join(' & ');
+                }).join(' \\\\ ');
+
+                if (_matrixStyle === 'array') {
+                    return `\\begin{array}{${colSpec}}${texRows}\\end{array}`;
+                }
+                if (_matrixStyle === 'pmatrix') {
+                    return `\\begin{pmatrix}${texRows}\\end{pmatrix}`;
+                }
+                if (_matrixStyle === 'vmatrix') {
+                    return `\\begin{vmatrix}${texRows}\\end{vmatrix}`;
+                }
+                // default bmatrix
+                return `\\begin{bmatrix}${texRows}\\end{bmatrix}`;
+            };
+
+            s = s.replace(/\[\s*([^\]]+?)\s*\]/g, (_, inner) => {
+                if (!/[;\n\\\\]/.test(inner) && !/\s{2,}/.test(inner)) return '[' + inner + ']';
+                const rendered = renderMatrix(inner);
+                return rendered || ('[' + inner + ']');
+            });
+
+            // parenthesis-wrapped matrices
+            s = s.replace(/\(\s*([^\)]+?;[^\)]+?)\s*\)/g, (_, inner) => {
+                const rendered = renderMatrix(inner);
+                return rendered || ('(' + inner + ')');
+            });
+
+            // handle summation/integral symbols
+            s = s.replace(/\bSUM\b/gi, '\\sum');
+            s = s.replace(/\bINT\b/gi, '\\int');
+
+            // tidy spacing
+            s = s.replace(/\s{2,}/g, ' ');
+            s = s.replace(/\s*([=+\-*/^<>±])\s*/g, ' $1 ');
+
+            return s.trim();
+        }
+
+        function runLatexSamples() {
+            const raw = document.getElementById('latexSampleInput')?.value || '';
+            const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            const outEl = document.getElementById('latexTestOutput');
+            if (!outEl) return;
+            const rows = lines.map(l => {
+                const pre = postProcessMathToLatex(l);
+                const latex = convertMathToLatex(pre);
+                return `<div style="margin-bottom:6px"><div style="color:#0f172a;font-weight:600">원문:</div><div>${escapeHtml(l)}</div><div style="color:#065f46;font-weight:600;margin-top:4px">LaTeX:</div><div>${escapeHtml(latex)}</div></div>`;
+            });
+            outEl.innerHTML = rows.join('\n');
+        }
+
+        function exportAnalysisOcrResults() {
+            const exportLatex = document.getElementById('analysisPdfLatexExport')?.checked;
+            const combined = analysisOcrPageCache.map(item => item.editedText || item.text || '').join('\n\n');
+            let payload = combined;
+            if (exportLatex) {
+                const lines = combined.split(/\n+/).map(l => l.trim()).filter(Boolean);
+                const bodyLines = lines.map(l => {
+                    if (isLikelyEquation(l)) {
+                        const latex = convertMathToLatex(postProcessMathToLatex(l));
+                        return '$$' + latex + '$$';
+                    }
+                    return l;
+                }).join('\n\\\\\n');
+
+                payload = ['\\documentclass{article}', '\\usepackage{amsmath,amssymb}', '\\begin{document}', bodyLines, '\\end{document}'].join('\n\n');
+            }
+
+            const mime = exportLatex ? 'application/x-tex' : 'text/plain;charset=utf-8';
+            const ext = exportLatex ? 'tex' : 'txt';
+            const blob = new Blob([payload], { type: mime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ocr_result_${Date.now()}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            setAnalysisOcrStatus('OCR 결과를 로컬 파일로 저장했습니다.', 'success');
+        }
+
+        function applyAnalysisOcrPageEdit() {
+            if (analysisOcrCurrentPageIndex < 0 || !analysisOcrPageCache[analysisOcrCurrentPageIndex]) {
+                setAnalysisOcrStatus('수정할 페이지를 먼저 선택하세요.', 'error');
+                return;
+            }
+            const editEl = document.getElementById('analysisPdfOcrPageEdit');
+            const editedText = normalizeOcrEditableText(editEl.value || '');
+            const item = analysisOcrPageCache[analysisOcrCurrentPageIndex];
+            item.editedText = editedText;
+            item.length = editedText.replace(/\s+/g, '').length;
+            const patternStats = detectQuestionPatternStats(editedText);
+            item.patternCount = patternStats.count;
+            item.patternSample = patternStats.samples.join(', ');
+
+            renderAnalysisOcrRows();
+            syncAnalysisOcrCombinedPreview();
+            renderAnalysisOcrSummary(document.getElementById('analysisPdfIncludeImageOcr')?.checked);
+            setAnalysisOcrStatus(`${item.pageNum}페이지 수정 내용을 반영했습니다.`, 'success');
+        }
+
+        function resetAnalysisOcrPageEdit() {
+            if (analysisOcrCurrentPageIndex < 0 || !analysisOcrPageCache[analysisOcrCurrentPageIndex]) {
+                setAnalysisOcrStatus('복원할 페이지를 먼저 선택하세요.', 'error');
+                return;
+            }
+            const item = analysisOcrPageCache[analysisOcrCurrentPageIndex];
+            item.editedText = normalizeOcrEditableText(item.text || '');
+            item.length = item.editedText.replace(/\s+/g, '').length;
+            const patternStats = detectQuestionPatternStats(item.editedText);
+            item.patternCount = patternStats.count;
+            item.patternSample = patternStats.samples.join(', ');
+            selectAnalysisOcrPage(analysisOcrCurrentPageIndex);
+            renderAnalysisOcrRows();
+            syncAnalysisOcrCombinedPreview();
+            renderAnalysisOcrSummary(document.getElementById('analysisPdfIncludeImageOcr')?.checked);
+            setAnalysisOcrStatus(`${item.pageNum}페이지 원본 텍스트로 복원했습니다.`, 'info');
+        }
+
+        // Toggle raw textarea visibility
+        function toggleRawTextArea() {
+            const ta = document.getElementById('analysisPdfOcrPageEdit');
+            const btn = document.getElementById('toggleRawTextBtn');
+            if (!ta) return;
+            if (ta.classList.contains('hidden')) {
+                ta.classList.remove('hidden');
+                btn.textContent = '원문 텍스트 숨기기';
+            } else {
+                ta.classList.add('hidden');
+                btn.textContent = '원문 텍스트 보기';
+            }
+        }
+
+        // Render OCR layout-aligned view for a given page index.
+        async function renderAnalysisOcrPageLayout(index) {
+            const container = document.getElementById('analysisPdfOcrImageContainer');
+            const img = document.getElementById('analysisPdfOcrImagePreview');
+            const overlay = document.getElementById('analysisPdfOcrOverlay');
+            const layout = document.getElementById('analysisPdfOcrTextLayout');
+            if (!layout || !img || !overlay || index < 0 || !analysisOcrPageCache[index]) {
+                if (layout) layout.innerHTML = '';
+                if (overlay) {
+                    const ctx = overlay.getContext && overlay.getContext('2d');
+                    if (ctx) ctx.clearRect(0,0,overlay.width||0,overlay.height||0);
+                }
+                return;
+            }
+
+            const page = analysisOcrPageCache[index];
+            // ensure image is set
+            if (img.src !== page.imageDataUrl) img.src = page.imageDataUrl || '';
+
+            // wait image load to get natural sizes
+            await new Promise((resolve) => {
+                if (!img.complete || !img.naturalWidth) {
+                    img.onload = () => resolve();
+                    img.onerror = () => resolve();
+                } else resolve();
+            });
+
+            // prepare overlay canvas pixel size to match displayed image
+            const dispW = img.clientWidth || img.offsetWidth || img.width || 1;
+            const dispH = img.clientHeight || img.offsetHeight || img.height || 1;
+            overlay.width = Math.max(1, Math.floor(dispW));
+            overlay.height = Math.max(1, Math.floor(dispH));
+            overlay.style.width = dispW + 'px';
+            overlay.style.height = dispH + 'px';
+
+            // run a detailed tesseract pass to get word/line boxes
+            let ocrData = null;
+            try {
+                if (window.Tesseract) {
+                    const res = await window.Tesseract.recognize(page.imageDataUrl, 'kor+eng', { tessjs_create_worker: false });
+                    ocrData = res?.data || null;
+                }
+            } catch (e) {
+                ocrData = null;
+            }
+
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0,0,overlay.width,overlay.height);
+
+            layout.innerHTML = '';
+
+            // if no detailed boxes, fallback to showing merged text in layout box
+            if (!ocrData || (!ocrData.words && !ocrData.lines)) {
+                const fallback = document.createElement('div');
+                fallback.style.whiteSpace = 'pre-wrap';
+                fallback.textContent = page.editedText || page.text || '';
+                layout.appendChild(fallback);
+                setAnalysisOcrStatus('상세 OCR 바운딩을 불러오지 못했습니다. 기본 텍스트로 표시합니다.', 'info');
+                return;
+            }
+
+            // helper to extract bounding coords robustly
+            const getBox = (item) => {
+                // Tesseract.js may expose bbox or boundingBox or x0/y0
+                const b = item.bbox || item.boundingBox || item.box || {};
+                const x0 = b.x0 ?? b.x ?? item.x0 ?? item.x1 ?? 0;
+                const y0 = b.y0 ?? b.y ?? item.y0 ?? item.y1 ?? 0;
+                const x1 = b.x1 ?? (b.x0 != null && item.w != null ? b.x0 + (item.w||0) : item.x1) ?? item.x ?? x0;
+                const y1 = b.y1 ?? (b.y0 != null && item.h != null ? b.y0 + (item.h||0) : item.y1) ?? item.y ?? y0;
+                return { x0: Number(x0), y0: Number(y0), x1: Number(x1), y1: Number(y1) };
+            };
+
+            // natural image size approx from OCR data or image
+            const natW = img.naturalWidth || (ocrData?.source && ocrData.source?.width) || dispW;
+            const natH = img.naturalHeight || (ocrData?.source && ocrData.source?.height) || dispH;
+            const scaleX = dispW / Math.max(1, natW);
+            const scaleY = dispH / Math.max(1, natH);
+
+            // draw and populate layout
+            const words = ocrData.words || [];
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(2,6,23,0.55)';
+            ctx.fillStyle = 'rgba(59,130,246,0.06)';
+
+            words.forEach((w, i) => {
+                const box = getBox(w);
+                const left = Math.round(box.x0 * scaleX);
+                const top = Math.round(box.y0 * scaleY);
+                const width = Math.max(2, Math.round((box.x1 - box.x0) * scaleX));
+                const height = Math.max(2, Math.round((box.y1 - box.y0) * scaleY));
+
+                // draw rectangle on overlay
+                ctx.fillRect(left, top, width, height);
+                ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+
+                // create mirrored text block on right layout
+                const block = document.createElement('div');
+                block.className = 'ocr-word-block';
+                block.style.position = 'absolute';
+                block.style.left = left + 'px';
+                block.style.top = top + 'px';
+                block.style.width = Math.max(8, width) + 'px';
+                block.style.height = Math.max(8, height) + 'px';
+                block.style.overflow = 'hidden';
+                block.style.whiteSpace = 'nowrap';
+                block.style.textOverflow = 'ellipsis';
+                block.style.fontSize = Math.max(10, Math.round(height * 0.6)) + 'px';
+                block.style.lineHeight = '1';
+                block.style.color = '#0f172a';
+                block.style.padding = '0 2px';
+                block.style.boxSizing = 'border-box';
+                block.style.border = '1px dashed rgba(15,23,42,0.06)';
+                block.style.background = 'transparent';
+                block.textContent = (w.text || '').trim();
+                layout.appendChild(block);
+            });
+
+            // provide some spacing container size to match image
+            layout.style.minWidth = dispW + 'px';
+            layout.style.minHeight = dispH + 'px';
+
+            // sync scroll between image container and layout
+            if (container) {
+                let syncLock = false;
+                const onScrollImg = () => {
+                    if (syncLock) return;
+                    syncLock = true;
+                    layout.scrollTop = container.scrollTop;
+                    layout.scrollLeft = container.scrollLeft;
+                    setTimeout(() => { syncLock = false; }, 10);
+                };
+                const onScrollLayout = () => {
+                    if (syncLock) return;
+                    syncLock = true;
+                    container.scrollTop = layout.scrollTop;
+                    container.scrollLeft = layout.scrollLeft;
+                    setTimeout(() => { syncLock = false; }, 10);
+                };
+                container.removeEventListener('scroll', onScrollImg);
+                layout.removeEventListener('scroll', onScrollLayout);
+                container.addEventListener('scroll', onScrollImg);
+                layout.addEventListener('scroll', onScrollLayout);
+            }
+        }
+
+        async function runExamPdfOcrCheck() {
+            try {
+                // immediate UI feedback: show progress container and status
+                try { updateOcrProgress(0, 0, Date.now()); } catch (e) {}
+                setAnalysisOcrStatus('OCR 작업을 시작합니다...', 'info');
+            } catch (e) {}
+            const input = document.getElementById('analysisPdfOcrInput');
+            const file = input?.files ? input.files[0] : null;
+            const includeImageOcr = document.getElementById('analysisPdfIncludeImageOcr').checked;
+            const formulaOcr = document.getElementById('analysisPdfFormulaOcr')?.checked;
+            const totalPagesEl = document.getElementById('analysisPdfOcrTotalPages');
+            const summaryEl = document.getElementById('analysisPdfOcrSummary');
+            const rowsEl = document.getElementById('analysisPdfOcrPageRows');
+            const previewEl = document.getElementById('analysisPdfOcrPreview');
+
+            if (!file) {
+                setAnalysisOcrStatus('점검할 PDF를 먼저 선택하세요.', 'error');
+                return;
+            }
+
+            if (!window.pdfjsLib) {
+                setAnalysisOcrStatus('pdf.js 로드 실패로 OCR 점검을 진행할 수 없습니다.', 'error');
+                return;
+            }
+
+            setAnalysisOcrStatus('PDF OCR 점검 준비 중...', 'info');
+            rowsEl.innerHTML = '';
+            summaryEl.innerHTML = '';
+            previewEl.value = '';
+            analysisOcrPageCache = [];
+            analysisOcrCurrentPageIndex = -1;
+
+            try {
+                const buffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+                const pageCount = pdf.numPages;
+                if (totalPagesEl) {
+                    totalPagesEl.textContent = `${pageCount} 페이지`;
+                }
+                setAnalysisOcrStatus(`총 ${pageCount}페이지 자동 인식. OCR 점검을 시작합니다.`, 'info');
+                const pageResults = [];
+
+                const ocrStartTs = Date.now();
+                updateOcrProgress(0, pageCount, ocrStartTs);
+                for (let pageNum = 1; pageNum <= pageCount; pageNum += 1) {
+                    setAnalysisOcrStatus(`페이지 ${pageNum}/${pageCount} 분석 중...`, 'info');
+                    const page = await pdf.getPage(pageNum);
+                    // push a placeholder so UI table shows progress immediately
+                    pageResults.push({
+                        pageNum,
+                        method: '분석중...',
+                        text: '',
+                        editedText: '',
+                        length: 0,
+                        patternCount: 0,
+                        patternSample: '',
+                        imageDataUrl: ''
+                    });
+                    renderAnalysisOcrRows();
+                    // allow UI to update
+                    await new Promise(r => setTimeout(r, 60));
+                    const textContent = await page.getTextContent();
+                    const directText = textContent.items.map(item => item.str).join(' ').replace(/\s{2,}/g, ' ').trim();
+
+                    const viewport = page.getViewport({ scale: 1.6 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = Math.floor(viewport.width);
+                    canvas.height = Math.floor(viewport.height);
+                    await page.render({ canvasContext: context, viewport }).promise;
+                    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+                    const methodParts = [];
+                    if (directText.length) {
+                        methodParts.push('텍스트');
+                    }
+
+                    let ocrText = '';
+                    const needOcr = includeImageOcr || directText.length < 40;
+                    if (needOcr && window.Tesseract) {
+                        // 기본 전처리
+                        const enhancedCanvas = createEnhancedOcrCanvas(canvas, { scale: 2, aggressive: false });
+                        const aggressiveCanvas = createEnhancedOcrCanvas(canvas, { scale: 2, aggressive: true });
+
+                        // 수식/기호 강화 모드
+                        let ocrCandidates = [];
+                        if (formulaOcr) {
+                            // 더 다양한 언어/기호 조합, 더 강한 전처리
+                            const sharpCanvas = createEnhancedOcrCanvas(canvas, { scale: 2.5, aggressive: true });
+                            ocrCandidates = [
+                                await runRobustOcr(canvas, 'eng', { scale: 2, aggressive: false }),
+                                await runRobustOcr(enhancedCanvas, 'eng', { scale: 2.5, aggressive: false }),
+                                await runRobustOcr(aggressiveCanvas, 'eng', { scale: 2.5, aggressive: true }),
+                                await runRobustOcr(sharpCanvas, 'eng', { scale: 3.0, aggressive: true }),
+                                // specialized passes: math-symbol focused with whitelist/psm
+                                await runRobustOcr(sharpCanvas, 'eng', { psm: 6, whitelist: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-=()[]{}\\/.,:;^_%', scale:3 }),
+                                await runRobustOcr(sharpCanvas, 'eng', { psm: 11, whitelist: '0123456789+-=()[]{}\\/.,:;^_%', scale:3 }),
+                                // try inverted image for diagrams
+                                await runRobustOcr(createEnhancedOcrCanvas(canvas, { scale:2.5, aggressive:true, invert:true }), 'eng', { psm:6 }),
+                                await runRobustOcr(canvas, 'kor+eng', { scale:2 }),
+                                await runRobustOcr(enhancedCanvas, 'kor+eng', { scale:2 }),
+                                await runRobustOcr(aggressiveCanvas, 'kor+eng', { scale:2.5 }),
+                                await runRobustOcr(sharpCanvas, 'kor+eng', { scale:3 }),
+                                await runRobustOcr(canvas, 'osd'),
+                                await runRobustOcr(enhancedCanvas, 'osd')
+                            ];
+                            methodParts.push('OCR(수식/기호 강화)');
+                        } else {
+                            ocrCandidates = [
+                                await runTesseractPass(canvas, 'kor+eng'),
+                                await runTesseractPass(enhancedCanvas, 'kor+eng'),
+                                await runTesseractPass(aggressiveCanvas, 'eng'),
+                                // additional diagram-focused pass
+                                await runTesseractPass(createEnhancedOcrCanvas(canvas, { scale:2, aggressive:true, invert:true }), 'eng', { psm:11 })
+                            ];
+                            methodParts.push(includeImageOcr ? 'OCR(이미지포함·강화)' : 'OCR(강화)');
+                        }
+                        ocrText = mergeOcrCandidates(ocrCandidates);
+                    } else if (needOcr && !window.Tesseract) {
+                        methodParts.push('OCR 미사용(라이브러리 없음)');
+                    }
+
+                    const mergedChunks = [directText, ocrText].filter(Boolean);
+                    const recognizedText = mergedChunks.join('\n').trim();
+                    const method = methodParts.length ? methodParts.join(' + ') : '인식 실패';
+                    const patternStats = detectQuestionPatternStats(recognizedText);
+
+                    pageResults[pageResults.length - 1] = ({
+                        pageNum,
+                        method,
+                        text: recognizedText,
+                        editedText: recognizedText,
+                        length: recognizedText.replace(/\s+/g, '').length,
+                        patternCount: patternStats.count,
+                        patternSample: patternStats.samples.join(', '),
+                        imageDataUrl
+                    });
+                    // re-render to reflect updated result
+                    renderAnalysisOcrRows();
+                    // update progress display
+                    try { updateOcrProgress(pageNum, pageCount, ocrStartTs); } catch (e) {}
+                }
+
+                analysisOcrPageCache = pageResults;
+                renderAnalysisOcrRows();
+                renderAnalysisOcrPageSelector();
+                selectAnalysisOcrPage(0);
+                syncAnalysisOcrCombinedPreview();
+                renderAnalysisOcrSummary(includeImageOcr);
+                // ensure progress shows 100%
+                try { updateOcrProgress(pageCount, pageCount, ocrStartTs); } catch (e) {}
+                setAnalysisOcrStatus(`OCR 점검 완료: ${pageResults.length}페이지 분석`, 'success');
+            } catch (error) {
+                try { updateOcrProgress(0,0,null); } catch (e) {}
+                setAnalysisOcrStatus(`OCR 점검 실패: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateAnalysisPdfTotalPages() {
+            const input = document.getElementById('analysisPdfOcrInput');
+            const totalPagesEl = document.getElementById('analysisPdfOcrTotalPages');
+            const file = input?.files ? input.files[0] : null;
+
+            if (!totalPagesEl) {
+                return;
+            }
+
+            if (!file) {
+                totalPagesEl.textContent = '자동 인식';
+                return;
+            }
+
+            if (!window.pdfjsLib) {
+                totalPagesEl.textContent = '인식 실패';
+                return;
+            }
+
+            try {
+                totalPagesEl.textContent = '인식 중...';
+                const buffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+                totalPagesEl.textContent = `${pdf.numPages} 페이지`;
+            } catch {
+                totalPagesEl.textContent = '인식 실패';
+            }
         }
 
         function setAttachmentStatus(message, type = 'info') {
@@ -1217,7 +2487,9 @@
                 .slice(0, 120);
 
             const freq = new Map();
-            words.forEach(word => freq.set(word, (freq.get(word) || 0) + 1));
+            words.forEach((word) => {
+                freq.set(word, (freq.get(word) || 0) + 1);
+            });
             const keyPoints = [...freq.entries()]
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
@@ -1417,6 +2689,73 @@
             return endpoint.replace(/\/api\/generate-answer\/?$/i, '').replace(/\/$/, '');
         }
 
+        function getFoundryBaseUrl() {
+            const endpoint = document.getElementById('aiEndpointUrl').value.trim();
+            if (!endpoint) {
+                return 'http://127.0.0.1:5619';
+            }
+            return endpoint
+                .replace(/\/v1\/chat\/completions\/?$/i, '')
+                .replace(/\/openai\/v1\/chat\/completions\/?$/i, '')
+                .replace(/\/$/, '');
+        }
+
+        function isLikelyFoundryEndpoint() {
+            const endpoint = String(document.getElementById('aiEndpointUrl').value || '').toLowerCase();
+            return endpoint.includes('127.0.0.1:5619') || endpoint.includes('/v1/chat/completions');
+        }
+
+        function updateAiModeUx() {
+            const isFoundry = isLikelyFoundryEndpoint();
+            const apiBtn = document.getElementById('generateByApiBtn');
+            const modeHint = document.getElementById('aiModeHint');
+
+            if (apiBtn) {
+                apiBtn.textContent = isFoundry
+                    ? '초안 자동 작성 (Foundry 자동분기)'
+                    : '초안 자동 작성 (외부 API)';
+            }
+
+            if (modeHint) {
+                modeHint.textContent = isFoundry
+                    ? '현재 Foundry Local 모드입니다. 외부 API 버튼도 Foundry 경로로 자동 분기됩니다.'
+                    : '외부 API는 서버를 직접 운영할 때 사용하세요. 브라우저 단독 환경에서는 로컬 규칙 생성이 기본입니다.';
+            }
+        }
+
+        function setFoundryLocalPreset() {
+            const endpointInput = document.getElementById('aiEndpointUrl');
+            endpointInput.value = 'http://127.0.0.1:5619/v1/chat/completions';
+            localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, endpointInput.value);
+            setBackendStatus('Foundry Local 프리셋 적용됨', 'info');
+            updateAiModeUx();
+            detectFoundryModelId();
+        }
+
+        async function detectFoundryModelId() {
+            const input = document.getElementById('aiFoundryModelId');
+            const baseUrl = getFoundryBaseUrl();
+
+            try {
+                const response = await fetch(`${baseUrl}/v1/models`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const payload = await response.json();
+                const modelId = payload?.data?.[0]?.id || '';
+                if (!modelId) {
+                    throw new Error('로드된 모델이 없습니다. foundry model load <model> 후 다시 시도하세요.');
+                }
+                input.value = modelId;
+                localStorage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelId);
+                setBackendStatus(`Foundry 모델 감지: ${modelId}`, 'success');
+                return modelId;
+            } catch (error) {
+                setBackendStatus(`Foundry 모델 감지 실패: ${error.message}`, 'error');
+                return '';
+            }
+        }
+
         function setBackendStatus(message, type = 'info') {
             const statusEl = document.getElementById('backendStatus');
             const colorMap = {
@@ -1449,7 +2788,7 @@
 
             const latestByProvider = new Map();
             rows.forEach(row => {
-                if (row && row.provider) {
+                if (row?.provider) {
                     latestByProvider.set(row.provider, row);
                 }
             });
@@ -1483,9 +2822,26 @@
         }
 
         async function checkBackendConnection() {
-            const baseUrl = getBackendBaseUrl();
+            const baseUrl = isLikelyFoundryEndpoint() ? getFoundryBaseUrl() : getBackendBaseUrl();
             try {
                 setBackendStatus('백엔드 연결 확인 중...', 'info');
+
+                if (isLikelyFoundryEndpoint()) {
+                    const statusResponse = await fetch(`${baseUrl}/openai/status`);
+                    if (!statusResponse.ok) {
+                        throw new Error(`HTTP ${statusResponse.status}`);
+                    }
+                    const modelResponse = await fetch(`${baseUrl}/v1/models`);
+                    if (!modelResponse.ok) {
+                        throw new Error(`HTTP ${modelResponse.status}`);
+                    }
+                    const modelPayload = await modelResponse.json();
+                    const modelCount = Array.isArray(modelPayload?.data) ? modelPayload.data.length : 0;
+                    setBackendStatus(`연결됨: Foundry Local (로드 모델 ${modelCount}개)`, 'success');
+                    renderBackendDiagnostics([], null);
+                    return true;
+                }
+
                 const response = await fetch(`${baseUrl}/health`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
@@ -1505,9 +2861,108 @@
             }
         }
 
+        async function generateDraftAnswersByFoundryLocal() {
+            const endpointRaw = document.getElementById('aiEndpointUrl').value.trim();
+            const apiKey = document.getElementById('aiApiKey').value.trim();
+            const modelInput = document.getElementById('aiFoundryModelId');
+            const baseUrl = endpointRaw ? getFoundryBaseUrl() : 'http://127.0.0.1:5619';
+            const endpoint = `${baseUrl}/v1/chat/completions`;
+
+            if (!endpointRaw) {
+                document.getElementById('aiEndpointUrl').value = endpoint;
+            }
+            localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, document.getElementById('aiEndpointUrl').value.trim());
+
+            let modelId = modelInput.value.trim();
+            if (!modelId) {
+                modelId = await detectFoundryModelId();
+                if (!modelId) {
+                    setPdfStatus('Foundry 모델 ID를 확인하세요. 모델 로드 후 다시 시도하세요.', 'error');
+                    return { ok: false, updated: 0, fallbackCount: 0 };
+                }
+            }
+
+            localStorage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelId);
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setPdfStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return { ok: false, updated: 0, fallbackCount: 0 };
+            }
+
+            const overwrite = document.getElementById('overwriteGenerated').checked;
+            let updated = 0;
+            let fallbackCount = 0;
+
+            setPdfStatus('Foundry Local로 초안 생성 중...', 'info');
+
+            for (let index = 0; index < data.questions.length; index += 1) {
+                const question = data.questions[index];
+                const hasAnswer = String(question.modelAnswer || '').trim().length > 0;
+                if (!overwrite && hasAnswer) {
+                    continue;
+                }
+
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+                        },
+                        body: JSON.stringify({
+                            model: modelId,
+                            temperature: 0.2,
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: '토목구조기술사 고득점 답안 스타일로 개조식 답안을 작성하고, KDS 코드/도해 포인트/결론 제언을 포함하세요.'
+                                },
+                                {
+                                    role: 'user',
+                                    content: `문제 ID: ${question.id || '-'}\n문제 제목: ${question.title || ''}`
+                                }
+                            ]
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const answer = payload?.choices?.[0]?.message?.content || payload?.choices?.[0]?.delta?.content || '';
+                    if (!String(answer).trim()) {
+                        throw new Error('응답 answer 텍스트가 없습니다.');
+                    }
+
+                    data.questions[index] = {
+                        ...question,
+                        modelAnswer: String(answer).trim(),
+                        source: question.source ? `${question.source} + FoundryLocal` : 'FoundryLocal'
+                    };
+                    updated += 1;
+                } catch {
+                    data.questions[index] = {
+                        ...question,
+                        modelAnswer: generateLocalAnswerTemplate(question),
+                        source: question.source ? `${question.source} + FoundryLocalFallback` : 'FoundryLocalFallback'
+                    };
+                    updated += 1;
+                    fallbackCount += 1;
+                }
+            }
+
+            syncJsonAndRender(data, `Foundry Local 초안 생성(실패 시 로컬 대체) 완료: ${updated}개`);
+            setPdfStatus(`Foundry Local 초안 작성 완료: ${updated}개 (로컬 대체 ${fallbackCount}개)`, fallbackCount > 0 ? 'info' : 'success');
+            return { ok: true, updated, fallbackCount };
+        }
+
         async function extractPdfText() {
             const fileInput = document.getElementById('pdfFileInput');
-            const file = fileInput.files && fileInput.files[0];
+            const file = fileInput?.files?.[0];
             if (!file) {
                 setPdfStatus('PDF 파일을 먼저 선택하세요.', 'error');
                 return false;
@@ -1732,6 +3187,10 @@
         }
 
         async function generateDraftAnswersByApi() {
+            if (isLikelyFoundryEndpoint()) {
+                return generateDraftAnswersByFoundryLocal();
+            }
+
             const endpoint = document.getElementById('aiEndpointUrl').value.trim();
             const apiKey = document.getElementById('aiApiKey').value.trim();
             if (!endpoint) {
@@ -1872,7 +3331,9 @@
 
                 let generationUpdated = 0;
                 let fallbackCount = 0;
-                const apiResult = await generateDraftAnswersByApi();
+                const apiResult = isLikelyFoundryEndpoint()
+                    ? await generateDraftAnswersByFoundryLocal()
+                    : await generateDraftAnswersByApi();
                 if (!apiResult.ok) {
                     const localResult = generateDraftAnswersLocal();
                     generationUpdated = localResult.updated || 0;
@@ -1920,7 +3381,7 @@
                 question.tags = Array.isArray(question.tags) ? question.tags : [];
                 question.source = question.source || '-';
                 question.reviewed = !!question.reviewed;
-                const fallbackRound = normalized.meta && normalized.meta.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
+                const fallbackRound = normalized.meta?.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
                 question.examRound = question.examRound || fallbackRound;
                 return question;
             });
@@ -1937,7 +3398,7 @@
                 theory.content = theory.content || '';
                 theory.tags = Array.isArray(theory.tags) ? theory.tags : [];
                 theory.source = theory.source || '-';
-                const fallbackRound = normalized.meta && normalized.meta.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
+                const fallbackRound = normalized.meta?.exam ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, '') || '미지정' : '미지정';
                 theory.examRound = theory.examRound || fallbackRound;
                 return theory;
             });
@@ -2183,8 +3644,8 @@
                         <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
                             <div class="text-xs text-slate-500">source: ${escapeHtml(item.source || '-')}</div>
                             <div class="flex gap-2">
-                                <button onclick="editModelAnswerEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
-                                <button onclick="openDeleteConfirmModal(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                                <button type="button" onclick="editModelAnswerEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                <button type="button" onclick="openDeleteConfirmModal(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
                             </div>
                         </div>
                     </article>
@@ -2212,8 +3673,8 @@
                         <div class="flex items-center justify-between gap-2">
                             <h4 class="font-bold text-slate-800">${escapeHtml(theory.id)}. ${escapeHtml(theory.title)}</h4>
                             <div class="flex gap-2">
-                                <button onclick="editTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
-                                <button onclick="deleteTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                                <button type="button" onclick="editTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                <button type="button" onclick="deleteTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
                             </div>
                         </div>
                         <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(theory.examRound || '미지정')} · 분류: ${escapeHtml(theory.category || '일반')}</div>
@@ -2346,7 +3807,7 @@
                 <article class="border border-slate-200 rounded-lg p-3 bg-white">
                     <div class="flex items-center justify-between gap-2">
                         <h4 class="font-bold text-slate-800">${escapeHtml(draft.id)}. ${escapeHtml(draft.title)}</h4>
-                        <button onclick="adoptMergedTheoryDraft(${cacheIndex})" class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">초안 추가</button>
+                        <button type="button" onclick="adoptMergedTheoryDraft(${cacheIndex})" class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">초안 추가</button>
                     </div>
                     <div class="text-xs text-slate-500 mt-1">기반: ${escapeHtml(draft.baseTheoryId)} + ${escapeHtml(draft.suppTheoryId)} · 회차: ${escapeHtml(draft.examRound)}</div>
                     <div class="mt-1 text-xs">
@@ -3006,13 +4467,13 @@
 
         function importAnswerDataFromFile(event) {
             const input = event.target;
-            const file = input.files && input.files[0];
+            const file = input.files?.[0];
             if (!file) {
                 return;
             }
 
             const reader = new FileReader();
-            reader.onload = function () {
+            reader.onload = () => {
                 try {
                     const parsed = JSON.parse(String(reader.result || ''));
                     const normalized = normalizeData(parsed);
@@ -3030,7 +4491,7 @@
                 }
             };
 
-            reader.onerror = function () {
+            reader.onerror = () => {
                 setDataStatus('파일 읽기 중 오류가 발생했습니다.', 'error');
             };
 
@@ -3083,6 +4544,75 @@
             resetEntryForm();
         }
 
+        function deleteSelectedGlobalRound() {
+            const globalRoundSelect = document.getElementById('globalRoundSelect');
+            const selectedRound = globalRoundSelect ? globalRoundSelect.value : '';
+
+            if (!selectedRound) {
+                setDataStatus('삭제할 회차를 먼저 선택하세요.', 'error');
+                return;
+            }
+
+            let data;
+            try {
+                data = getCurrentAnswerData();
+            } catch (error) {
+                setDataStatus(`JSON 파싱 오류: ${error.message}`, 'error');
+                return;
+            }
+
+            const questionCount = data.questions.filter(item => (item.examRound || '미지정') === selectedRound).length;
+            const theoryCount = data.theories.filter(item => (item.examRound || '미지정') === selectedRound).length;
+
+            if (!questionCount && !theoryCount) {
+                setDataStatus(`${selectedRound} 데이터가 없어 삭제할 항목이 없습니다.`, 'info');
+                return;
+            }
+
+            const confirmed = window.confirm(`${selectedRound} 회차 데이터를 삭제할까요?\n문제 ${questionCount}개, 이론 ${theoryCount}개가 제거됩니다.`);
+            if (!confirmed) {
+                return;
+            }
+
+            data.questions = data.questions.filter(item => (item.examRound || '미지정') !== selectedRound);
+            data.theories = data.theories.filter(item => (item.examRound || '미지정') !== selectedRound);
+
+            syncJsonAndRender(data, `${selectedRound} 회차 삭제 완료: 문제 ${questionCount}개, 이론 ${theoryCount}개`);
+            setTheoryStatus(`${selectedRound} 회차 이론 ${theoryCount}개를 삭제했습니다.`, 'success');
+        }
+
+        Object.assign(window, {
+            showSection,
+            switchTab,
+            applyAnalysisOcrPageEdit,
+            resetAnalysisOcrPageEdit,
+            runExamPdfOcrCheck,
+            runLatexSamples,
+            analyzeAttachedFiles,
+            analyzeAttachedWebsite,
+            applyAttachmentInsightToQuestion,
+            setFoundryLocalPreset,
+            runAutoPipeline,
+            generateTheoryMergeDrafts,
+            adoptMergedTheoryDraft,
+            applyTheoryCleanup,
+            upsertTheoryEntry,
+            editTheoryEntry,
+            deleteTheoryEntry,
+            cancelTheoryEditMode,
+            openDeleteConfirmModal,
+            confirmDeleteModelAnswerEntry,
+            cancelEditMode,
+            editModelAnswerEntry,
+            saveAnswerData,
+            exportAnswerDataToFile,
+            exportAnalysisOcrResults,
+            openImportFileDialog,
+            importAnswerDataFromFile,
+            addModelAnswerEntry,
+            deleteSelectedGlobalRound
+        });
+
         document.getElementById('filterKeyword').addEventListener('input', applyAnswerFilters);
         document.getElementById('filterRound').addEventListener('change', applyAnswerFilters);
         document.getElementById('filterTag').addEventListener('change', applyAnswerFilters);
@@ -3098,18 +4628,39 @@
             applyAnswerFilters();
         });
 
-        (function initAiEndpoint() {
+        (async function initAiEndpoint() {
             const input = document.getElementById('aiEndpointUrl');
+            const modelInput = document.getElementById('aiFoundryModelId');
             const stored = localStorage.getItem(AI_ENDPOINT_STORAGE_KEY);
-            input.value = stored || 'http://localhost:8787/api/generate-answer';
+            input.value = stored || 'http://127.0.0.1:5619/v1/chat/completions';
+            modelInput.value = localStorage.getItem(AI_FOUNDRY_MODEL_STORAGE_KEY) || '';
+            updateAiModeUx();
             input.addEventListener('change', () => {
                 localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, input.value.trim());
+                updateAiModeUx();
+                if (isLikelyFoundryEndpoint() && !modelInput.value.trim()) {
+                    detectFoundryModelId();
+                }
             });
+            modelInput.addEventListener('change', () => {
+                localStorage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelInput.value.trim());
+            });
+
+            if (isLikelyFoundryEndpoint() && !modelInput.value.trim()) {
+                await detectFoundryModelId();
+            }
         })();
+
+        document.getElementById('analysisPdfOcrInput')?.addEventListener('change', () => {
+            updateAnalysisPdfTotalPages();
+        });
 
         checkBackendConnection();
 
         loadAnswerData();
+
+        // auto-run sample LaTeX conversions so users see results immediately on page load
+        try { runLatexSamples(); setAnalysisOcrStatus('LaTeX 샘플 변환 완료', 'success'); } catch { /* ignore in non-browser env */ }
 
     </script>
 </body>

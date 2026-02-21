@@ -287,7 +287,7 @@ function extractPrimaryWebText(html = '') {
   const mainMatch = source.match(/<main[\s\S]*?<\/main>/i);
   const articleMatch = source.match(/<article[\s\S]*?<\/article>/i);
   const bodyMatch = source.match(/<body[\s\S]*?<\/body>/i);
-  const chosen = (mainMatch && mainMatch[0]) || (articleMatch && articleMatch[0]) || (bodyMatch && bodyMatch[0]) || source;
+  const chosen = mainMatch?.[0] || articleMatch?.[0] || bodyMatch?.[0] || source;
 
   const text = stripHtml(chosen)
     .replace(/\b(skip to main content|download microsoft edge|this browser is no longer supported)\b/gi, ' ')
