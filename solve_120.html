@@ -3065,18 +3065,9 @@
             beforeAvg = calculateAverageScore(beforeData.questions);
           } catch {}
 
-          const extractedText = document
-            .getElementById("pdfExtractedText")
-            .value.trim();
-          if (!extractedText) {
-            // PDF text extraction removed for MVP — require manual paste
-            setPipelineReport(
-              "배치 중단: PDF 텍스트 추출 기능은 MVP에서 제거되었습니다. 텍스트를 직접 붙여넣어 주세요.",
-              "error",
-            );
-            return;
-          }
-
+          // PDF auto-extraction was removed; extractQuestionsFromPdfText
+          // now accepts attached files or textarea input. Proceed with
+          // AI-backed extraction from attachments/text.
           const parseResult = await extractQuestionsFromPdfText();
           if (!parseResult.ok) {
             setPipelineReport("배치 중단: 문제 자동 추출 실패", "error");
