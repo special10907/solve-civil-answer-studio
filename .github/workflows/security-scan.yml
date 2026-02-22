@@ -1,0 +1,38 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  node-audit:
+    name: Node audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; elif [ -f yarn.lock ]; then npm install; else echo "No lockfile, skipping install"; fi
+      - name: Run npm audit
+        run: |
+          if [ -f package-lock.json ] || [ -f yarn.lock ]; then npm audit --audit-level=moderate; else echo "No lockfile; skipping npm audit"; fi
+
+  trivy-scan:
+    name: Trivy filesystem scan
+    runs-on: ubuntu-latest
+    needs: node-audit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.1.25
+        with:
+          scan-type: fs
+          scan-dir: .
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
