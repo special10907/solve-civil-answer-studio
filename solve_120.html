@@ -2754,7 +2754,12 @@
         }
 
         let parsedQuestions = [];
-        const baseUrl = getBackendBaseUrl();
+        // If the user configured a Foundry/chat endpoint, do not append
+        // `/api/analyze-questions` to that URL. Use the local analysis
+        // backend (mock server) instead for question-extraction calls.
+        const baseUrl = isLikelyFoundryEndpoint()
+          ? (window.__ANALYZE_BACKEND__ || "http://localhost:8787")
+          : getBackendBaseUrl();
         try {
           const response = await fetch(`${baseUrl}/api/analyze-questions`, {
             method: "POST",
