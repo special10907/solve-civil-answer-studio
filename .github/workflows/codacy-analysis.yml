@@ -1,0 +1,26 @@
+name: Codacy Analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  codacy-analysis:
+    name: Run Codacy Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Codacy Analysis CLI
+        uses: codacy/codacy-analysis-cli-action@v4
+        with:
+          args: analyze --force
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+      - name: Upload Codacy report (optional)
+        if: always()
+        run: echo "Codacy analysis finished. Check Codacy dashboard or action logs."
