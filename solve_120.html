@@ -2702,10 +2702,18 @@
       }
 
       async function extractQuestionsFromPdfText() {
-        // Prefer analyzing attached files (images/pdf/text). If no files,
-        // fall back to the extracted-text textarea.
+        // Prefer analyzing attached files (images/pdf/text).
+        // Check both `attachmentFiles` and `pdfFileInput` inputs so users
+        // who used either control are covered.
         const attachmentInput = document.getElementById("attachmentFiles");
-        const attachedFiles = Array.from(attachmentInput?.files || []);
+        const pdfInput = document.getElementById("pdfFileInput");
+        const attachedFiles = [];
+        if (attachmentInput && attachmentInput.files && attachmentInput.files.length) {
+          attachedFiles.push(...Array.from(attachmentInput.files));
+        }
+        if (pdfInput && pdfInput.files && pdfInput.files.length) {
+          attachedFiles.push(...Array.from(pdfInput.files));
+        }
 
         let extracted = "";
 
