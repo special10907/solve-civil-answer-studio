@@ -952,13 +952,11 @@
             </div>
             <div>
               <label class="block text-xs font-bold text-slate-600 mb-1"
-                >추출 텍스트</label
+                >자동 추출 결과</label
               >
-              <textarea
-                id="pdfExtractedText"
-                class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 font-mono"
-                placeholder="PDF 텍스트가 여기에 표시됩니다."
-              ></textarea>
+              <div id="autoExtractReport" class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 overflow-auto">
+                첨부파일을 추가한 뒤 "문제 자동 추출"을 누르면 교시별 인식 개수가 표시됩니다.
+              </div>
             </div>
           </div>
 
@@ -2709,7 +2707,12 @@
         const attachmentInput = document.getElementById("attachmentFiles");
         const attachedFiles = Array.from(attachmentInput?.files || []);
 
-        let extracted = document.getElementById("pdfExtractedText").value.trim();
+        let extracted = "";
+
+        if (!attachedFiles.length) {
+          setPdfStatus("첨부파일이 없습니다. 문제 자동 추출을 사용하려면 파일을 첨부하세요.", "error");
+          return { ok: false, addedCount: 0, examRound: "미지정" };
+        }
 
         if (attachedFiles.length) {
           setAttachmentStatus("첨부파일에서 텍스트 추출 중...", "info");
@@ -2723,9 +2726,6 @@
             }
           }
           extracted = parts.join("\n\n");
-          // show in textarea for transparency
-          const ta = document.getElementById("pdfExtractedText");
-          if (ta) ta.value = extracted;
           setAttachmentStatus("첨부파일 텍스트 준비 완료.", "success");
         }
 
@@ -2778,7 +2778,13 @@
           return { ok: false, addedCount: 0, examRound: "미지정" };
         }
 
-        const examRound = inferExamRoundFromText(extracted);
+        // Compute per-round counts from parsedQuestions (use inference per question)
+        const countsByRound = {};
+        parsedQuestions.forEach((q) => {
+          const maybeRound = q.examRound || inferExamRoundFromText(q.rawQuestion || "") || "미지정";
+          countsByRound[maybeRound] = (countsByRound[maybeRound] || 0) + 1;
+        });
+        const examRound = Object.keys(countsByRound).length === 1 ? Object.keys(countsByRound)[0] : "혼합";
         const existingKeys = new Set(
           data.questions.map(
             (item) => `${item.examRound}|${item.id}|${item.title}`,
@@ -2807,10 +2813,20 @@
 
         syncJsonAndRender(
           data,
-          `첨부파일/텍스트에서 ${addedCount}개 문제를 추가했습니다. (회차: ${examRound})`,
+          `첨부파일에서 ${addedCount}개 문제를 추가했습니다. (회차: ${examRound})`,
         );
         setPdfStatus(`문제 자동 추출 완료: ${addedCount}개 추가`, "success");
-        return { ok: true, addedCount, examRound };
+
+        // Render counts per round into UI
+        const reportEl = document.getElementById("autoExtractReport");
+        if (reportEl) {
+          const rows = Object.entries(countsByRound)
+            .map(([r, c]) => `<div><strong>${escapeHtml(r)}</strong>: ${c}문항</div>`)
+            .join("");
+          reportEl.innerHTML = `<div class=\"text-sm\">인식된 문제 수 (교시별)</div>${rows}`;
+        }
+
+        return { ok: true, addedCount, examRound, countsByRound };
       }
 
       function generateLocalAnswerTemplate(question) {
