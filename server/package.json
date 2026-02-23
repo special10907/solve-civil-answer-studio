@@ -4,7 +4,11 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start:dev": "node index.js",
+    "restart": "powershell -ExecutionPolicy Bypass -File restart_server.ps1",
+    "test:attachment": "node test_post_attachment.js",
+    "test:questions": "node test_post.js"
   },
   "dependencies": {
     "express": "^4.18.2",

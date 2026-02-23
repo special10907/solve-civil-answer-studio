@@ -1,14 +1,20 @@
-// Suppress specific Tailwind CDN advisory warning to reduce console noise.
-(function(){
-  const origWarn = console.warn.bind(console);
-  console.warn = function(...args){
-    try{
-      if(args.length && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')){
-        return; // ignore the Tailwind advisory message
+// Suppress specific library advisories to reduce console noise.
+(function() {
+  const silentStrings = [
+    'cdn.tailwindcss.com should not be used in production',
+    '[PDF.js] Using CDN worker'
+  ];
+
+  const wrap = (original) => function(...args) {
+    try {
+      if (args.length && typeof args[0] === 'string' && silentStrings.some(s => args[0].includes(s))) {
+        return; 
       }
-    }catch(e){
-      // if anything goes wrong, fall back to original warn
-    }
-    origWarn(...args);
+    } catch (e) {}
+    return original.apply(this, args);
   };
+
+  console.warn = wrap(console.warn.bind(console));
+  console.log = wrap(console.log.bind(console));
+  console.info = wrap(console.info.bind(console));
 })();

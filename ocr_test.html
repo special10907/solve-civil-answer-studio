@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OCR 진단 테스트</title>
+    <style>
+      body {
+        font-family: monospace;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 20px;
+      }
+      h1 {
+        color: #38bdf8;
+      }
+      .log {
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 8px 0;
+      }
+      .ok {
+        color: #4ade80;
+      }
+      .err {
+        color: #f87171;
+      }
+      .warn {
+        color: #facc15;
+      }
+      .info {
+        color: #93c5fd;
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin: 4px;
+        font-size: 14px;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      #output {
+        white-space: pre-wrap;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      progress {
+        width: 100%;
+        height: 20px;
+        margin: 8px 0;
+      }
+      canvas {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔬 Tesseract.js OCR 진단 도구</h1>
+    <p class="info">
+      이 페이지는 OCR 기능만 독립적으로 테스트합니다. <b>콘솔(F12)</b>도 함께
+      확인하세요.
+    </p>
+
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0">
+      <button onclick="testTesseractLoaded()">1. Tesseract 로드 확인</button>
+      <button onclick="testWorkerCreate()">2. 워커 생성 테스트</button>
+      <button onclick="testWorkerOcrCanvas()">3. 캔버스 OCR 테스트</button>
+      <button onclick="clearOutput()">로그 지우기</button>
+    </div>
+
+    <input
+      type="file"
+      id="pdfInput"
+      accept=".pdf"
+      style="display: none"
+      onchange="testOcrOnPdf()"
+    />
+    <button onclick="document.getElementById('pdfInput').click()">
+      4. PDF 파일로 OCR 테스트
+    </button>
+
+    <div class="log">
+      <div id="output">여기에 테스트 결과가 표시됩니다...\n</div>
+    </div>
+
+    <canvas id="testCanvas"></canvas>
+
+    <!-- Tesseract.js v5 (로컬 복사본 사용) -->
+    <script src="vendor/js/tesseract.min.js"></script>
+    <!-- PDF.js -->
+    <script src="vendor/js/pdf.min.js"></script>
+
+    <script>
+      const TESS_VERSION = "5.1.1";
+      const TESS_WORKER_PATH = `https://cdn.jsdelivr.net/npm/tesseract.js@v${TESS_VERSION}/dist/worker.min.js`;
+      const TESS_LANG_PATH = "https://tessdata.projectnaptha.com/4.0.0";
+
+      function log(msg, type = "info") {
+        const el = document.getElementById("output");
+        const ts = new Date().toLocaleTimeString();
+        el.innerHTML += `<span class="${type}">[${ts}] ${msg}</span>\n`;
+        el.scrollTop = el.scrollHeight;
+        console.log(`[${type.toUpperCase()}] ${msg}`);
+      }
+
+      function clearOutput() {
+        document.getElementById("output").innerHTML = "";
+      }
+
+      function testTesseractLoaded() {
+        log("=== Tesseract 로드 상태 확인 ===", "info");
+        if (typeof window.Tesseract === "undefined") {
+          log(
+            "❌ window.Tesseract가 정의되지 않음 - tesseract.min.js 로드 실패!",
+            "err",
+          );
+          return;
+        }
+        log(`✅ window.Tesseract 타입: ${typeof window.Tesseract}`, "ok");
+        log(
+          `✅ Tesseract 속성: ${Object.keys(window.Tesseract).join(", ")}`,
+          "ok",
+        );
+        log(
+          `✅ createWorker 함수 존재: ${typeof window.Tesseract.createWorker}`,
+          "ok",
+        );
+        log(
+          `✅ recognize 함수 존재: ${typeof window.Tesseract.recognize}`,
+          "ok",
+        );
+        // 프로토콜 확인
+        log(
+          `ℹ️ 현재 프로토콜: ${location.protocol}`,
+          location.protocol === "file:" ? "warn" : "ok",
+        );
+        log(`ℹ️ 현재 URL: ${location.href}`, "info");
+      }
+
+      async function testWorkerCreate() {
+        log("=== Tesseract 워커 생성 테스트 ===", "info");
+        if (!window.Tesseract) {
+          log("❌ Tesseract 미로드", "err");
+          return;
+        }
+
+        const workerOpts = {
+          workerBlobURL: false,
+          workerPath: TESS_WORKER_PATH,
+          langPath: TESS_LANG_PATH,
+          logger: (m) => {
+            if (m && m.status) {
+              log(
+                `  [진행] ${m.status}: ${m.progress != null ? Math.round(m.progress * 100) + "%" : ""}`,
+                "info",
+              );
+            }
+          },
+          errorHandler: (err) => log(`  [에러] ${err}`, "err"),
+        };
+
+        // 1단계: eng만 시도
+        log("kor+eng 워커 생성 시도...", "warn");
+        try {
+          const w = await window.Tesseract.createWorker(
+            "kor+eng",
+            1,
+            workerOpts,
+          );
+          log("✅ kor+eng 워커 생성 성공!", "ok");
+          await w.terminate();
+          log("✅ 워커 종료 완료.", "ok");
+        } catch (e) {
+          log(`❌ kor+eng 워커 생성 실패: ${(e && e.message) || e}`, "err");
+          log("eng 단독으로 재시도...", "warn");
+          try {
+            const w2 = await window.Tesseract.createWorker(
+              "eng",
+              1,
+              workerOpts,
+            );
+            log("✅ eng 워커 생성 성공!", "ok");
+            await w2.terminate();
+          } catch (e2) {
+            log(`❌ eng 워커도 실패: ${(e2 && e2.message) || e2}`, "err");
+            log(
+              "💡 네트워크 연결 또는 CDN 접근 불가 문제일 수 있습니다.",
+              "warn",
+            );
+          }
+        }
+      }
+
+      async function testWorkerOcrCanvas() {
+        log("=== 캔버스 기반 OCR 테스트 ===", "info");
+        if (!window.Tesseract) {
+          log("❌ Tesseract 미로드", "err");
+          return;
+        }
+
+        // 테스트용 캔버스 생성 (간단한 텍스트를 그림)
+        const canvas = document.getElementById("testCanvas");
+        canvas.width = 400;
+        canvas.height = 100;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, 400, 100);
+        ctx.fillStyle = "black";
+        ctx.font = "30px Arial";
+        ctx.fillText("Hello OCR Test 123", 20, 60);
+
+        log(
+          "테스트 캔버스 생성 완료 (흰 배경에 'Hello OCR Test 123' 텍스트)",
+          "info",
+        );
+
+        const workerOpts = {
+          workerBlobURL: false,
+          workerPath: TESS_WORKER_PATH,
+          langPath: TESS_LANG_PATH,
+          logger: (m) => {
+            if (m && m.status)
+              log(
+                `  [진행] ${m.status}: ${m.progress != null ? Math.round(m.progress * 100) + "%" : ""}`,
+                "info",
+              );
+          },
+        };
+
+        try {
+          log("eng 워커로 캔버스 OCR 인식 중...", "warn");
+          const result = await window.Tesseract.recognize(
+            canvas,
+            "eng",
+            workerOpts,
+          );
+          const text = (result?.data?.text || "").trim();
+          log(`✅ OCR 인식 결과: "${text}"`, text ? "ok" : "warn");
+          if (text.includes("Hello") || text.includes("123")) {
+            log("✅ 텍스트 인식 성공! OCR 기능이 정상 작동합니다.", "ok");
+          } else {
+            log(
+              "⚠️ 예상 텍스트를 찾지 못했습니다. 인식 품질을 확인하세요.",
+              "warn",
+            );
+          }
+        } catch (e) {
+          log(`❌ OCR 인식 실패: ${(e && e.message) || e}`, "err");
+        }
+      }
+
+      async function testOcrOnPdf() {
+        log("=== PDF 파일 OCR 테스트 ===", "info");
+        const input = document.getElementById("pdfInput");
+        const file = input.files[0];
+        if (!file) {
+          log("❌ 파일이 선택되지 않음", "err");
+          return;
+        }
+        log(`파일: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`, "info");
+
+        if (!window.pdfjsLib) {
+          log("❌ pdf.js 미로드", "err");
+          return;
+        }
+        if (!window.Tesseract) {
+          log("❌ Tesseract 미로드", "err");
+          return;
+        }
+
+        try {
+          // PDF.js 설정
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs";
+
+          const buffer = await file.arrayBuffer();
+          const pdf = await window.pdfjsLib.getDocument({ data: buffer })
+            .promise;
+          log(`✅ PDF 로드 완료: ${pdf.numPages}페이지`, "ok");
+
+          // 1페이지만 테스트
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.getElementById("testCanvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d");
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          log("✅ 1페이지 캔버스 렌더링 완료", "ok");
+
+          const workerOpts = {
+            workerBlobURL: false,
+            workerPath: TESS_WORKER_PATH,
+            langPath: TESS_LANG_PATH,
+            logger: (m) => {
+              if (m && m.status)
+                log(
+                  `  [진행] ${m.status}: ${m.progress != null ? Math.round(m.progress * 100) + "%" : ""}`,
+                  "info",
+                );
+            },
+          };
+
+          log("kor+eng OCR 인식 시작...", "warn");
+          const result = await window.Tesseract.recognize(
+            canvas,
+            "kor+eng",
+            workerOpts,
+          );
+          const text = (result?.data?.text || "").trim();
+          log(
+            `✅ OCR 결과 (처음 500자):\n${text.slice(0, 500)}`,
+            text ? "ok" : "warn",
+          );
+        } catch (e) {
+          log(`❌ PDF OCR 실패: ${(e && e.message) || e}`, "err");
+          console.error(e);
+        }
+      }
+
+      // 페이지 로드 시 자동 상태 확인
+      window.addEventListener("load", () => {
+        log("페이지 로드 완료. 버튼을 눌러 테스트를 시작하세요.", "info");
+        testTesseractLoaded();
+      });
+    </script>
+  </body>
+</html>

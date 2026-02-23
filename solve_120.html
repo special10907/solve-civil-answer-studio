@@ -4,10 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>토목구조기술사 회차 누적 분석 및 고득점 전략 노트</title>
-    <script src="vendor/js/suppress-tailwind-warning.js"></script>
+    <script>
+      (function () {
+        const silentStrings = [
+          "cdn.tailwindcss.com should not be used in production",
+          "[PDF.js] Using CDN worker",
+        ];
+        const wrap = (original) =>
+          function (...args) {
+            try {
+              if (
+                args.length &&
+                typeof args[0] === "string" &&
+                silentStrings.some((s) => args[0].includes(s))
+              )
+                return;
+            } catch (e) {}
+            return original.apply(this, args);
+          };
+        console.warn = wrap(console.warn.bind(console));
+        console.log = wrap(console.log.bind(console));
+        console.info = wrap(console.info.bind(console));
+      })();
+    </script>
     <script src="vendor/tailwind.js"></script>
     <script src="vendor/js/chart.min.js"></script>
-    <!-- pdf.min.js removed (OCR disabled for MVP) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="vendor/css/all.min.css" rel="stylesheet" />
 
     <!-- Chosen Palette: Warm Neutrals (Stone/Gray) with Professional Blue/Indigo Accents -->
@@ -86,6 +108,28 @@
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
+      }
+      /* Interactive PDF Overlay Styles */
+      #pdfVisualOverlay .group-box:hover {
+        background-color: rgba(52, 211, 153, 0.4); /* Emerald-400/40 */
+      }
+
+      .handle-nw,
+      .handle-ne,
+      .handle-sw,
+      .handle-se,
+      .handle-n,
+      .handle-s,
+      .handle-w,
+      .handle-e {
+        pointer-events: auto;
+      }
+
+      .cursor-copy {
+        cursor: copy;
+      }
+      .cursor-move {
+        cursor: move;
       }
     </style>
   </head>
@@ -169,6 +213,14 @@
           data-target="datahub"
         >
           <i class="fas fa-database w-6"></i> 문제/답안 데이터
+        </button>
+        <button
+          type="button"
+          onclick="showSection('theory')"
+          class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center"
+          data-target="theory"
+        >
+          <i class="fas fa-book w-6"></i> 이론 지식베이스
         </button>
       </div>
 
@@ -455,7 +507,6 @@
             </div>
           </div>
         </div>
-
       </section>
 
       <!-- SECTION 3: MECHANICS & DYNAMICS -->
@@ -825,6 +876,121 @@
           </p>
         </div>
 
+        <!-- PDF 시각화 모달 (Modal) -->
+        <div
+          id="pdfVisualModal"
+          class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4"
+        >
+          <div
+            class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+          >
+            <div
+              class="p-4 border-b flex items-center justify-between bg-slate-50"
+            >
+              <h4 class="font-bold text-slate-800">
+                <i class="fas fa-eye mr-2 text-indigo-600"></i>문제 인식 영역
+                시각화
+              </h4>
+              <div class="flex items-center gap-4">
+                <div
+                  class="flex flex-col items-end gap-0.5 px-4 border-r border-slate-200"
+                >
+                  <div
+                    class="flex items-center gap-2 text-[10px] text-slate-500"
+                  >
+                    <span
+                      class="w-3 h-3 bg-blue-400/30 border border-blue-600 rounded-sm"
+                    ></span>
+                    <span>파란 박스: 클릭 인식 / 드래그: 자유 영역 캡처</span>
+                  </div>
+                  <div
+                    class="flex items-center gap-2 text-[10px] text-slate-500"
+                  >
+                    <span
+                      class="w-3 h-3 border-2 border-orange-600 bg-orange-400/40 rounded-sm"
+                    ></span>
+                    <span>핸들: 박스 크기 조절 및 위치 이동 가능</span>
+                  </div>
+                </div>
+                <button
+                  onclick="closePdfVisualModal()"
+                  class="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <i class="fas fa-times text-xl"></i>
+                </button>
+              </div>
+            </div>
+            <div class="flex-1 flex overflow-hidden bg-slate-100">
+              <!-- 좌측: PDF 뷰어 -->
+              <div
+                class="flex-1 bg-slate-200 overflow-auto border-r border-slate-200 relative"
+              >
+                <!-- Wrapper for centering -->
+                <div class="min-h-full flex p-8">
+                  <div
+                    id="pdfVisualWorkspace"
+                    class="relative m-auto shadow-2xl bg-white"
+                  >
+                    <canvas id="pdfVisualCanvas" class="block"></canvas>
+                    <div
+                      id="pdfVisualOverlay"
+                      class="absolute inset-0 z-10"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 우측: 실시간 캡처 리스트 -->
+              <div class="w-80 bg-white flex flex-col shrink-0">
+                <div
+                  class="p-3 border-b bg-slate-50 flex items-center justify-between"
+                >
+                  <span class="text-xs font-bold text-slate-700"
+                    >추출 목록</span
+                  >
+                  <span
+                    id="modalCaptureCount"
+                    class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full"
+                    >0개</span
+                  >
+                </div>
+                <div
+                  id="modalCaptureList"
+                  class="flex-1 overflow-auto p-3 space-y-2"
+                >
+                  <p class="text-center text-[11px] text-slate-400 mt-10">
+                    캡처된 문항이 없습니다.<br />PDF 박스를 클릭하세요.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              class="p-4 border-t bg-slate-50 flex items-center justify-between shrink-0"
+            >
+              <p id="pdfVisualStatus" class="text-xs text-slate-600 italic">
+                PDF 페이지 로딩 중...
+              </p>
+              <div class="flex gap-2">
+                <button
+                  id="prevPdfPageBtn"
+                  class="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
+                >
+                  이전
+                </button>
+                <span id="pdfPageLabel" class="text-xs font-bold self-center"
+                  >1 / 1</span
+                >
+                <button
+                  id="nextPdfPageBtn"
+                  class="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div class="glass-panel p-6 rounded-xl shadow-sm">
             <h3 class="text-lg font-bold mb-3">JSON 입력</h3>
@@ -888,7 +1054,13 @@
               class="hidden"
               onchange="importAnswerDataFromFile(event)"
             />
-            <p id="dataStatus" class="mt-3 text-sm text-slate-600"></p>
+            <div class="mt-3 flex items-center justify-between">
+              <p id="dataStatus" class="text-sm text-slate-600"></p>
+              <p
+                id="lastSavedStatus"
+                class="text-[10px] text-slate-400 italic font-mono"
+              ></p>
+            </div>
           </div>
 
           <div class="glass-panel p-6 rounded-xl shadow-sm">
@@ -943,6 +1115,14 @@
                 >
                   자동 배치 실행
                 </button>
+                <button
+                  type="button"
+                  id="openPdfVisualBtn"
+                  onclick="openPdfVisualModal()"
+                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  인식 영역 확인 (PDF)
+                </button>
               </div>
               <div
                 id="pipelineReport"
@@ -954,8 +1134,107 @@
               <label class="block text-xs font-bold text-slate-600 mb-1"
                 >자동 추출 결과</label
               >
-              <div id="autoExtractReport" class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 overflow-auto">
-                첨부파일을 추가한 뒤 "문제 자동 추출"을 누르면 교시별 인식 개수가 표시됩니다.
+              <div
+                id="autoExtractReport"
+                class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 overflow-auto"
+              >
+                첨부파일을 추가한 뒤 "문제 자동 추출"을 누르면 교시별 인식
+                개수가 표시됩니다.
+              </div>
+            </div>
+          </div>
+
+          <!-- 사이드-바이-사이드 리뷰어 섹션 (추출 후 노출) -->
+          <div
+            id="extractReviewer"
+            class="mt-6 hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
+          >
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+              <h4 class="text-sm font-bold text-slate-700">
+                <i class="fas fa-columns mr-2 text-indigo-500"></i>추출 데이터
+                정밀 리뷰 (Side-by-Side)
+              </h4>
+              <button
+                onclick="
+                  document
+                    .getElementById('extractReviewer')
+                    .classList.add('hidden')
+                "
+                class="text-slate-400 hover:text-slate-600"
+              >
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[550px]">
+              <!-- 좌측: 원본 PDF (Blue Border) -->
+              <div
+                class="flex flex-col border-2 border-blue-400 rounded-lg bg-white overflow-hidden shadow-md"
+              >
+                <div
+                  class="p-2 bg-blue-50 border-b border-blue-100 flex items-center justify-between"
+                >
+                  <span class="text-xs font-bold text-blue-700"
+                    ><i class="fas fa-file-pdf mr-1"></i>원본 파일
+                    미리보기</span
+                  >
+                  <div class="flex items-center gap-2">
+                    <button
+                      id="revPrevBtn"
+                      class="px-2 py-0.5 text-[10px] bg-white border border-blue-200 rounded hover:bg-blue-50 transition-colors"
+                    >
+                      이전
+                    </button>
+                    <span
+                      id="revPageLabel"
+                      class="text-[10px] font-mono font-bold text-blue-600"
+                      >1 / 1</span
+                    >
+                    <button
+                      id="revNextBtn"
+                      class="px-2 py-0.5 text-[10px] bg-white border border-blue-200 rounded hover:bg-blue-50 transition-colors"
+                    >
+                      다음
+                    </button>
+                  </div>
+                </div>
+                <div
+                  id="revPdfContainer"
+                  class="flex-1 overflow-auto bg-slate-200 p-4 flex justify-center items-start"
+                >
+                  <div class="relative shadow-2xl bg-white">
+                    <canvas id="revPdfCanvas"></canvas>
+                    <div
+                      id="revPdfOverlay"
+                      class="absolute inset-0 pointer-events-none"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <!-- 우측: 인식된 문제 (Red Border) -->
+              <div
+                class="flex flex-col border-2 border-red-400 rounded-lg bg-white overflow-hidden shadow-md"
+              >
+                <div
+                  class="p-2 bg-red-50 border-b border-red-100 flex items-center justify-between"
+                >
+                  <span class="text-xs font-bold text-red-700"
+                    ><i class="fas fa-list-check mr-1"></i>인식된 문항
+                    리스트</span
+                  >
+                  <span
+                    id="revCountLabel"
+                    class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold"
+                    >0개 발견</span
+                  >
+                </div>
+                <div
+                  id="revQuestionList"
+                  class="flex-1 overflow-auto p-4 space-y-3 bg-slate-50"
+                >
+                  <p class="text-sm text-slate-400 text-center mt-20 italic">
+                    데이터를 분석 중입니다...
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -970,6 +1249,76 @@
               기존 모범답안이 있어도 덮어쓰기
             </label>
             <div class="flex flex-wrap gap-2 mb-3">
+              <div class="flex-1 min-w-[200px]">
+                <label
+                  class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                  >AI 모델 프리셋</label
+                >
+                <div class="flex gap-1">
+                  <select
+                    id="aiModelPresets"
+                    class="flex-1 px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
+                  >
+                    <option value="">프리셋 선택...</option>
+                  </select>
+                  <button
+                    type="button"
+                    onclick="saveCurrentAiPreset()"
+                    class="px-2 py-1 text-xs rounded bg-slate-100 hover:bg-slate-200 border border-slate-200"
+                    title="현재 설정을 프리셋으로 저장"
+                  >
+                    <i class="fas fa-save"></i>
+                  </button>
+                  <button
+                    type="button"
+                    onclick="deleteCurrentAiPreset()"
+                    class="px-2 py-1 text-xs rounded bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200"
+                    title="현재 프리셋 삭제"
+                  >
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="flex-1 min-w-[200px]">
+                <label
+                  class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                  >AI Endpoint URL</label
+                >
+                <input
+                  type="text"
+                  id="aiEndpointUrl"
+                  placeholder="http://localhost:8787"
+                  class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
+                />
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label
+                  class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                  >API Key (선택)</label
+                >
+                <input
+                  type="password"
+                  id="aiApiKey"
+                  placeholder="Bearer Key..."
+                  class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
+                />
+              </div>
+              <div>
+                <label
+                  class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                  >Foundry Model ID</label
+                >
+                <input
+                  type="text"
+                  id="aiFoundryModelId"
+                  placeholder="Llama-3-..."
+                  class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
+                />
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 onclick="generateDraftAnswersLocal()"
@@ -990,36 +1339,7 @@
                 onclick="generateDraftAnswersByFoundryLocal()"
                 class="px-3 py-2 text-sm rounded bg-violet-600 text-white hover:bg-violet-700"
               >
-                초안 자동 작성 (Foundry Local)
-              </button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                id="aiEndpointUrl"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="외부 API URL (예: https://.../generate)"
-              />
-              <input
-                id="aiApiKey"
-                type="password"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="API Key (선택)"
-              />
-              <input
-                id="aiFoundryModelId"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="Foundry 모델 ID (예: qwen2.5-coder-0.5b-instruct-trtrtx-gpu:2)"
-              />
-            </div>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onclick="setFoundryLocalPreset()"
-                class="px-3 py-2 text-sm rounded bg-violet-100 text-violet-800 hover:bg-violet-200"
-              >
-                Foundry Local 프리셋
+                초안 작성 (Foundry)
               </button>
               <button
                 type="button"
@@ -1035,6 +1355,14 @@
               >
                 백엔드 연결 확인
               </button>
+              <button
+                type="button"
+                onclick="validateApiKeys()"
+                class="px-3 py-2 text-sm rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+                title="OpenAI, Gemini, Anthropic API 키 유효성 정밀 검사"
+              >
+                <i class="fas fa-key mr-1"></i>API 키 유효성 검사
+              </button>
               <span
                 id="backendStatus"
                 class="text-xs text-slate-500 self-center"
@@ -1043,7 +1371,7 @@
             </div>
             <div
               id="backendDiagnostics"
-              class="mt-2 text-xs rounded border border-slate-200 bg-slate-50 p-2 text-slate-600"
+              class="mt-2 text-[11px] rounded border border-slate-200 bg-slate-50 p-2.5 text-slate-600 space-y-1"
             >
               Provider 진단 정보 없음
             </div>
@@ -1051,84 +1379,6 @@
               외부 API는 서버를 직접 운영할 때 사용하세요. 브라우저 단독
               환경에서는 로컬 규칙 생성이 기본입니다.
             </p>
-          </div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">
-            첨부 자료 분석 스튜디오 (파일/웹사이트)
-          </h3>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >파일 첨부 (동영상/이미지/PDF/텍스트)</label
-              >
-              <input
-                id="attachmentFiles"
-                type="file"
-                multiple
-                accept="video/*,image/*,application/pdf,.pdf,.txt,.md,.csv"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              />
-              <textarea
-                id="attachmentFocus"
-                class="w-full h-24 mt-2 p-2 text-xs border border-slate-300 rounded bg-slate-50"
-                placeholder="분석 초점(예: PSC 긴장재 부식 대책 중심으로 요약)"
-              ></textarea>
-              <div class="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onclick="analyzeAttachedFiles()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  파일 분석 실행
-                </button>
-                <button
-                  type="button"
-                  onclick="analyzeAttachedWebsite()"
-                  class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  웹사이트 분석 실행
-                </button>
-              </div>
-              <input
-                id="attachmentWebsiteUrl"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mt-2"
-                placeholder="웹사이트 URL 첨부 (예: https://...)"
-              />
-              <p id="attachmentStatus" class="mt-2 text-xs text-slate-500"></p>
-            </div>
-            <div>
-              <div class="text-xs text-slate-600 mb-1">분석 결과 적용</div>
-              <select
-                id="attachmentTargetQuestion"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mb-2"
-              >
-                <option value="">보강 적용할 문제 선택</option>
-              </select>
-              <button
-                type="button"
-                onclick="applyAttachmentInsightToQuestion()"
-                class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-              >
-                선택 문제에 보강 반영
-              </button>
-              <div class="mt-3 p-3 rounded border border-slate-200 bg-slate-50">
-                <div
-                  id="attachmentInsightSummary"
-                  class="text-sm text-slate-700"
-                ></div>
-                <ul
-                  id="attachmentInsightPoints"
-                  class="mt-2 text-xs text-slate-700 list-disc list-inside space-y-1"
-                ></ul>
-                <pre
-                  id="attachmentInsightBoost"
-                  class="mt-2 whitespace-pre-wrap text-xs text-slate-700"
-                ></pre>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1230,134 +1480,6 @@
           <p class="mt-2 text-xs text-slate-500">
             추가 시 JSON 입력창과 렌더링 결과에 즉시 반영됩니다.
           </p>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 지식 베이스 (누적 관리)</h3>
-          <input id="editingTheoryIndex" type="hidden" value="" />
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              id="theoryId"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="이론 ID (예: TH-001)"
-            />
-            <input
-              id="theoryTitle"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="이론 제목"
-            />
-            <input
-              id="theoryCategory"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="카테고리 (예: RC/강구조/동역학)"
-            />
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-            <input
-              id="theoryRound"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="회차 (예: 121회)"
-            />
-            <input
-              id="theoryTags"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="태그 (쉼표 구분)"
-            />
-            <input
-              id="theorySource"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="출처 (예: PDF/메모/경험)"
-            />
-          </div>
-          <textarea
-            id="theoryContent"
-            class="w-full h-32 mt-3 p-3 text-sm border border-slate-300 rounded bg-white"
-            placeholder="이론 내용을 입력하세요. (정의/메커니즘/설계기준/KDS/도해 포인트)"
-          ></textarea>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              id="theorySubmitBtn"
-              onclick="upsertTheoryEntry()"
-              class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              이론 추가
-            </button>
-            <button
-              type="button"
-              onclick="cancelTheoryEditMode()"
-              class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
-            >
-              수정 취소
-            </button>
-            <button
-              type="button"
-              onclick="analyzeTheoryKnowledge()"
-              class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              중복/보강 자동 분석
-            </button>
-            <button
-              type="button"
-              onclick="generateTheoryMergeDrafts()"
-              class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-            >
-              보강 병합 초안 생성
-            </button>
-            <button
-              type="button"
-              onclick="applyTheoryCleanup()"
-              class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"
-            >
-              중복 정리 적용
-            </button>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            분석 기준: 유사도 기반 중복 판단 + 보완 키워드 기반 보강 판단
-          </p>
-          <div id="theoryStatus" class="mt-2 text-xs text-slate-500"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 목록</h3>
-          <div id="theoryList" class="space-y-3"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 중복/보강 분석 결과</h3>
-          <div
-            id="theoryAnalysisSummary"
-            class="text-sm text-slate-700 mb-3"
-          ></div>
-          <div id="theoryAnalysisList" class="space-y-3"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">보강 병합 초안</h3>
-          <div class="mb-3 flex items-center gap-2 text-sm">
-            <label class="text-slate-600">최소 품질 점수</label>
-            <select
-              id="mergeQualityThreshold"
-              class="p-2 text-sm border border-slate-300 rounded bg-white"
-            >
-              <option value="0">전체</option>
-              <option value="60">60점 이상</option>
-              <option value="70" selected>70점 이상</option>
-              <option value="80">80점 이상</option>
-              <option value="90">90점 이상</option>
-            </select>
-          </div>
-          <div
-            id="theoryMergeSummary"
-            class="text-sm text-slate-700 mb-3"
-          ></div>
-          <div id="theoryMergeList" class="space-y-3"></div>
         </div>
 
         <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
@@ -1490,6 +1612,238 @@
           </p>
           <div id="evaluationSummary" class="mb-4 text-sm text-slate-700"></div>
           <div id="evaluationList" class="space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- SECTION 6: THEORY KNOWLEDGE BASE -->
+      <section id="theory" class="content-section max-w-7xl mx-auto">
+        <div class="mb-8">
+          <h2 class="text-3xl font-bold text-slate-800 mb-2">
+            이론 지식베이스 & 분석 스튜디오
+          </h2>
+          <p
+            class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500"
+          >
+            <strong>Context:</strong> 기출문제 분석을 통해 도출된 핵심 이론을
+            체계적으로 관리합니다. 첨부 자료 분석과 중복도 검사를 통해 지식의
+            깊이를 조절할 수 있습니다.
+          </p>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+          <h3 class="text-lg font-bold mb-4">
+            첨부 자료 분석 스튜디오 (파일/웹사이트)
+          </h3>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1"
+                >파일 첨부 (동영상/이미지/PDF/텍스트)</label
+              >
+              <input
+                id="attachmentFiles"
+                type="file"
+                multiple
+                accept="video/*,image/*,application/pdf,.pdf,.txt,.md,.csv"
+                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              />
+              <div class="mt-2 flex items-center gap-2">
+                <label class="text-xs text-slate-600">ASR 모드</label>
+                <select id="asrModeSelect" class="text-xs p-1 rounded border border-slate-200">
+                  <option value="auto" selected>자동(백엔드 전사 시도)</option>
+                  <option value="disabled">전사 비활성화</option>
+                  <option value="mock">모의 전사(로컬)</option>
+                </select>
+                <span class="text-[10px] text-slate-400">오디오/동영상 파일 전사 방식</span>
+              </div>
+              <textarea
+                id="attachmentFocus"
+                class="w-full h-24 mt-2 p-2 text-xs border border-slate-300 rounded bg-slate-50"
+                placeholder="분석 초점(예: PSC 긴장재 부식 대책 중심으로 요약)"
+              ></textarea>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onclick="analyzeAttachedFiles()"
+                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  파일 분석 실행
+                </button>
+                <button
+                  type="button"
+                  onclick="analyzeAttachedWebsite()"
+                  class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  웹사이트 분석 실행
+                </button>
+              </div>
+              <div id="attachmentFilesResult" class="mt-3 text-sm text-slate-600"></div>
+              <input
+                id="attachmentWebsiteUrl"
+                type="text"
+                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mt-2"
+                placeholder="웹사이트 URL 첨부 (예: https://...)"
+              />
+              <p id="attachmentStatus" class="mt-2 text-xs text-slate-500"></p>
+            </div>
+            <div>
+              <div class="text-xs text-slate-600 mb-1">분석 결과 적용</div>
+              <select
+                id="attachmentTargetQuestion"
+                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mb-2"
+              >
+                <option value="">보강 적용할 문제 선택</option>
+              </select>
+              <button
+                type="button"
+                onclick="applyAttachmentInsightToQuestion()"
+                class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                선택 문제에 보강 반영
+              </button>
+              <div class="mt-3 p-3 rounded border border-slate-200 bg-slate-50">
+                <div
+                  id="attachmentInsightSummary"
+                  class="text-sm text-slate-700"
+                ></div>
+                <ul
+                  id="attachmentInsightPoints"
+                  class="mt-2 text-xs text-slate-700 list-disc list-inside space-y-1"
+                ></ul>
+                <pre
+                  id="attachmentInsightBoost"
+                  class="mt-2 whitespace-pre-wrap text-xs text-slate-700"
+                ></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+          <h3 class="text-lg font-bold mb-4">이론 지식 베이스 (누적 관리)</h3>
+          <input id="editingTheoryIndex" type="hidden" value="" />
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input
+              id="theoryId"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="이론 ID (예: TH-001)"
+            />
+            <input
+              id="theoryTitle"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="이론 제목"
+            />
+            <input
+              id="theoryCategory"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="카테고리 (예: RC/강구조/동역학)"
+            />
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            <input
+              id="theoryRound"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="회차 (예: 121회)"
+            />
+            <input
+              id="theoryTags"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="태그 (쉼표 구분)"
+            />
+            <input
+              id="theorySource"
+              type="text"
+              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+              placeholder="출처 (예: PDF/메모/경험)"
+            />
+          </div>
+          <textarea
+            id="theoryContent"
+            class="w-full h-32 mt-3 p-3 text-sm border border-slate-300 rounded bg-white"
+            placeholder="이론 내용을 입력하세요. (정의/메커니즘/설계기준/KDS/도해 포인트)"
+          ></textarea>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              id="theorySubmitBtn"
+              onclick="upsertTheoryEntry()"
+              class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              이론 추가
+            </button>
+            <button
+              type="button"
+              onclick="cancelTheoryEditMode()"
+              class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
+            >
+              수정 취소
+            </button>
+            <button
+              type="button"
+              onclick="analyzeTheoryKnowledge()"
+              class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              중복/보강 자동 분석
+            </button>
+            <button
+              type="button"
+              onclick="generateTheoryMergeDrafts()"
+              class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              보강 병합 초안 생성
+            </button>
+            <button
+              type="button"
+              onclick="applyTheoryCleanup()"
+              class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"
+            >
+              중복 정리 적용
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">
+            분석 기준: 유사도 기반 중복 판단 + 보완 키워드 기반 보강 판단
+          </p>
+          <div id="theoryStatus" class="mt-2 text-xs text-slate-500"></div>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+          <h3 class="text-lg font-bold mb-4">이론 목록</h3>
+          <div id="theoryList" class="space-y-3"></div>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+          <h3 class="text-lg font-bold mb-4">이론 중복/보강 분석 결과</h3>
+          <div
+            id="theoryAnalysisSummary"
+            class="text-sm text-slate-700 mb-3"
+          ></div>
+          <div id="theoryAnalysisList" class="space-y-3"></div>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
+          <h3 class="text-lg font-bold mb-4">보강 병합 초안</h3>
+          <div class="mb-3 flex items-center gap-2 text-sm">
+            <label class="text-slate-600">최소 품질 점수</label>
+            <select
+              id="mergeQualityThreshold"
+              class="p-2 text-sm border border-slate-300 rounded bg-white"
+            >
+              <option value="0">전체</option>
+              <option value="60">60점 이상</option>
+              <option value="70" selected>70점 이상</option>
+              <option value="80">80점 이상</option>
+              <option value="90">90점 이상</option>
+            </select>
+          </div>
+          <div
+            id="theoryMergeSummary"
+            class="text-sm text-slate-700 mb-3"
+          ></div>
+          <div id="theoryMergeList" class="space-y-3"></div>
         </div>
       </section>
     </main>
@@ -1831,18 +2185,25 @@
         mergedDrafts: [],
       };
       let latestAttachmentInsight = null;
+      let visualPdfDoc = null;
+      let visualTextCache = [];
+      let visualCurrentPage = 1;
+      let revCurrentPage = 1;
+      let visualRenderTask = null; // 렌더링 충돌 방지용
+      let reviewerRenderTask = null;
+      let currentVisualViewport = null; // 오버레이 전용 갱신용
+      let currentReviewerViewport = null;
+      let ignoredVisualBlocks = []; // 사용자가 직접 삭제(무시)한 PDF 자동인식 영역
+      window.pendingAssignIndex = null; // 좌표 할당 대기 중인 문항 인덱스 (v18.4)
+      let hideAllVisualCandidates = false; // 모든 자동인식 후보 영역 숨김 여부 (v18.1)
+      window.currentHighlightedBoxIndex = -1;
+      window.currentHighlightedBoxPage = -1;
 
       if (window.pdfjsLib?.GlobalWorkerOptions) {
-        // Updated strategy: Use CDN worker by default to avoid 404 on missing local file,
-        // specifically when running via local HTTP server (e.g. port 9876).
-        const localWorker = "vendor/js/pdf.worker.min.js";
+        // Use CDN worker for maximum compatibility when local worker file is missing.
         const cdnWorker =
           "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-        // If localWorker is missing or we're on file://, use CDN for maximum compatibility.
-        // For now, we force CDN for reliability as vendor/js version is missing.
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = cdnWorker;
-        console.log("[PDF.js] Using CDN worker: " + cdnWorker);
       }
 
       const sampleAnswerData = {
@@ -1930,7 +2291,9 @@
 
       function getChatEndpoint() {
         const input = document.getElementById("aiEndpointUrl");
-        return input ? input.value.trim() : "http://127.0.0.1:5619/v1/chat/completions";
+        return input
+          ? input.value.trim()
+          : "http://127.0.0.1:5619/v1/chat/completions";
       }
 
       function setAttachmentStatus(message, type = "info") {
@@ -2015,22 +2378,45 @@
           ["txt", "md", "csv", "json"].includes(ext)
         ) {
           const text = await file.text();
-          return text.slice(0, 5000);
+          return text.slice(0, 50000); // 5000 -> 50000 확장
         }
 
         if ((type === "application/pdf" || ext === "pdf") && window.pdfjsLib) {
           const buffer = await file.arrayBuffer();
           const pdf = await window.pdfjsLib.getDocument({ data: buffer })
             .promise;
-          const pages = Math.min(pdf.numPages, 5);
+          visualPdfDoc = pdf; // 시각화를 위해 문서 저장
+          const pages = Math.min(pdf.numPages, 30); // 10 -> 30페이지까지 분석 (기술사 시험지 대응)
           const parts = [];
+          visualTextCache = []; // 초기화
+
           for (let pageNum = 1; pageNum <= pages; pageNum += 1) {
             const page = await pdf.getPage(pageNum);
             const content = await page.getTextContent();
+
+            // 좌표 정보 포함하여 캐싱
+            const pageTexts = content.items.map((item) => {
+              const tx = item.transform; // [scaleX, skewY, skewX, scaleY, transX, transY]
+              return {
+                str: item.str,
+                x: tx[4],
+                y: tx[5],
+                w: item.width,
+                h: item.height,
+                transform: tx,
+              };
+            });
+
+            visualTextCache.push({ page: pageNum, texts: pageTexts });
             const pageText = content.items.map((item) => item.str).join(" ");
-            parts.push(pageText);
+            parts.push(pageText + "\n");
           }
-          return parts.join("\n").slice(0, 5000);
+
+          let fullText = parts.join("\n");
+          // 텍스트 세정 (Cleaning): 깨진 특수 유니코드(\uf000 계열) 및 불필요한 컨트롤 문자 제거
+          fullText = fullText.replace(/[\uE000-\uF8FF]|\u0000/g, "");
+
+          return fullText.slice(0, 150000);
         }
 
         if (type.startsWith("image/")) {
@@ -2042,6 +2428,1108 @@
         }
 
         return `파일 메타정보: ${file.name}, type=${type || "unknown"}, size=${file.size}`;
+      }
+
+      function openPdfVisualModal() {
+        if (!visualPdfDoc) {
+          alert("먼저 PDF 파일을 첨부하고 추출 버튼을 눌러주세요.");
+          return;
+        }
+        document.getElementById("pdfVisualModal").classList.remove("hidden");
+        document.getElementById("pdfVisualModal").classList.add("flex");
+        visualCurrentPage = 1;
+        renderVisualPage(1);
+
+        // 모달 내 리스트 초기화 (현재 추출된 목록 강제 렌더링)
+        try {
+          const data = getCurrentAnswerData();
+          renderReviewerList(data.questions || []);
+        } catch (e) {}
+
+        // 이벤트 리스너 설정 (중복 방지)
+        document.getElementById("prevPdfPageBtn").onclick = () => {
+          if (visualCurrentPage > 1) {
+            visualCurrentPage--;
+            renderVisualPage(visualCurrentPage);
+          }
+        };
+        document.getElementById("nextPdfPageBtn").onclick = () => {
+          if (visualCurrentPage < visualPdfDoc.numPages) {
+            visualCurrentPage++;
+            renderVisualPage(visualCurrentPage);
+          }
+        };
+      }
+
+      function groupTextItems(items, thresholdY = 12) {
+        if (!items || items.length === 0) return [];
+
+        // Y좌표 기준 정렬 (PDF는 하단이 0일 수 있으므로 주의, 여기서는 위에서 아래로 정렬 시도)
+        // PDF.js 좌표계: y는 아래에서 위로 증가하는 경우가 많음.
+        const sorted = [...items].sort((a, b) => b.y - a.y);
+
+        const groups = [];
+        let currentGroup = null;
+
+        sorted.forEach((item) => {
+          if (!currentGroup) {
+            currentGroup = {
+              texts: [item],
+              minX: item.x,
+              maxX: item.x + (item.w || 20),
+              minY: item.y,
+              maxY: item.y + (item.h || 10),
+            };
+          } else {
+            // 줄 간격(Y차이)이 임계값 이내면 같은 블록으로 간주
+            const verticalGap = Math.abs(currentGroup.minY - item.y);
+            // X축 거리가 너무 멀지 않은지도 체크할 수 있음 (여기선 주로 Y축 기준 그룹화)
+            if (verticalGap < thresholdY * 2) {
+              currentGroup.texts.push(item);
+              currentGroup.minX = Math.min(currentGroup.minX, item.x);
+              currentGroup.maxX = Math.max(
+                currentGroup.maxX,
+                item.x + (item.w || 20),
+              );
+              currentGroup.minY = Math.min(currentGroup.minY, item.y);
+              currentGroup.maxY = Math.max(
+                currentGroup.maxY,
+                item.y + (item.h || 10),
+              );
+            } else {
+              groups.push(currentGroup);
+              currentGroup = {
+                texts: [item],
+                minX: item.x,
+                maxX: item.x + (item.w || 20),
+                minY: item.y,
+                maxY: item.y + (item.h || 10),
+              };
+            }
+          }
+        });
+        if (currentGroup) groups.push(currentGroup);
+
+        return groups.map((g) => ({
+          str: g.texts.map((t) => t.str).join(" "),
+          x: g.minX,
+          y: g.minY,
+          w: g.maxX - g.minX,
+          h: g.maxY - g.minY,
+          rect: {
+            x: g.minX,
+            y: g.minY,
+            w: g.maxX - g.minX,
+            h: g.maxY - g.minY,
+          }, // 좌표 저장
+          isCandidate: /^\s*\d+\s*[.]/.test(g.texts[0].str), // 숫자로 시작하면 문항 후보
+        }));
+      }
+
+      function closePdfVisualModal() {
+        document.getElementById("pdfVisualModal").classList.add("hidden");
+        document.getElementById("pdfVisualModal").classList.remove("flex");
+      }
+
+      async function renderVisualPage(pageNum) {
+        if (!visualPdfDoc) {
+          console.warn("No visualPdfDoc loaded");
+          return;
+        }
+        currentPdfPage = pageNum;
+        visualCurrentPage = pageNum; // v18.3: 전역 페이지 변수 항상 동기화
+
+        // 1. 이전 렌더링 작업이 있으면 취소
+        if (visualRenderTask) {
+          try {
+            visualRenderTask.cancel();
+          } catch (e) {}
+          visualRenderTask = null;
+        }
+
+        const statusEl = document.getElementById("pdfVisualStatus");
+        if (statusEl) statusEl.textContent = `${pageNum}페이지 렌더링 중...`;
+
+        try {
+          const page = await visualPdfDoc.getPage(pageNum);
+          const canvas = document.getElementById("pdfVisualCanvas");
+          if (!canvas) throw new Error("Canvas element not found");
+
+          const context = canvas.getContext("2d");
+          const viewport = page.getViewport({ scale: 1.5 });
+          currentVisualViewport = viewport; // 전역 저장 (오버레이 업데이트용)
+
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
+
+          const workspace = document.getElementById("pdfVisualWorkspace");
+          if (workspace) {
+            workspace.style.width = `${viewport.width}px`;
+            workspace.style.height = `${viewport.height}px`;
+          }
+
+          // Clear previous
+          context.clearRect(0, 0, canvas.width, canvas.height);
+
+          // 2. 새로운 렌더링 태스크 시작
+          visualRenderTask = page.render({
+            canvasContext: context,
+            viewport: viewport,
+          });
+          await visualRenderTask.promise;
+          visualRenderTask = null;
+          console.log(`[PDF] Page ${pageNum} rendered successfully.`);
+
+          // 3. 오버레이 업데이트
+          updateVisualOverlayBoxes(pageNum, viewport);
+
+          if (document.getElementById("pdfPageLabel")) {
+            document.getElementById("pdfPageLabel").textContent =
+              `${pageNum} / ${visualPdfDoc.numPages}`;
+          }
+          if (document.getElementById("prevPdfPageBtn")) {
+            document.getElementById("prevPdfPageBtn").disabled = pageNum <= 1;
+          }
+          if (document.getElementById("nextPdfPageBtn")) {
+            document.getElementById("nextPdfPageBtn").disabled =
+              pageNum >= visualPdfDoc.numPages;
+          }
+          if (statusEl)
+            statusEl.textContent =
+              "렌더링 완료. 인식된 텍스트 영역이 표시되었습니다.";
+        } catch (err) {
+          if (err.name === "RenderingCancelledException") {
+            console.log(`[PDF] Page ${pageNum} rendering cancelled.`);
+          } else {
+            console.error("Rendering failed:", err);
+            if (statusEl) statusEl.textContent = `렌더링 오류: ${err.message}`;
+          }
+        }
+      }
+
+      function updateVisualOverlayBoxes(pageNum, viewport) {
+        if (!viewport) return;
+        const overlay = document.getElementById("pdfVisualOverlay");
+        if (!overlay) return;
+
+        overlay.innerHTML = "";
+        overlay.style.width = `${viewport.width}px`;
+        overlay.style.height = `${viewport.height}px`;
+
+        const pageData = visualTextCache.find((c) => c.page === pageNum);
+        if (!pageData || !pageData.texts) return;
+
+        // 전체 숨김 플래그가 켜져 있으면 자동인식 후보 영역 렌더링 생략 (v18.1)
+        // 단, 이미 등록된 문항(Green/Orange)은 그대로 보여야 하므로 groupedBlocks 렌더링 부분에서 체크
+
+        // 텍스트 매칭을 위한 정규화 유틸리티 (v18.2)
+        const normalizeForMatch = (str) =>
+          (str || "").replace(/\s+/g, "").replace(/[.·,]/g, "").slice(0, 30);
+
+        const questions = window.currentReviewingQuestions || [];
+
+        // ──── 자동 좌표 매칭 (Auto-Linker) ────
+        // 좌표가 없는 문항(AI 자동추출 등)에 대해 현재 페이지의 텍스트 블록과 매칭 시도
+        if (pageData && pageData.texts) {
+          const blocks = groupTextItems(pageData.texts);
+          questions.forEach((q) => {
+            if (!q.rect) {
+              const qNorm = normalizeForMatch(q.rawQuestion || q.title);
+              const match = blocks.find((b) => {
+                const bNorm = normalizeForMatch(b.str);
+                return qNorm.includes(bNorm) || bNorm.includes(qNorm);
+              });
+              if (match) {
+                q.rect = {
+                  page: pageNum,
+                  x: match.x,
+                  y: match.y,
+                  w: match.w,
+                  h: match.h,
+                };
+                console.log(
+                  `[Auto-Linker] Matched "${q.title}" to page ${pageNum}`,
+                );
+              }
+            }
+          });
+        }
+
+        const capturedTexts = questions.map((q) =>
+          normalizeForMatch(q.rawQuestion || q.title || ""),
+        );
+
+        // ──── 문항(Question) 기반 박스 렌더링 ────
+        questions.forEach((q, idx) => {
+          if (!q.rect || q.rect.page !== pageNum) return;
+
+          const rect = document.createElement("div");
+          const isSelected =
+            window.currentHighlightedBoxIndex === idx &&
+            window.currentHighlightedBoxPage === pageNum;
+
+          rect.className = `absolute rounded border-2 transition-all cursor-move group-box ${
+            isSelected
+              ? "bg-orange-400/40 border-orange-600 z-30"
+              : "bg-emerald-400/30 border-emerald-500/60 z-20"
+          }`;
+          rect.dataset.index = idx;
+
+          const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
+            q.rect.x,
+            q.rect.y,
+            q.rect.x + q.rect.w,
+            q.rect.y + q.rect.h,
+          ]);
+
+          const left = Math.min(vx, vx + vw);
+          const top = Math.min(vy, vy + vh);
+          const width = Math.abs(vw);
+          const height = Math.abs(vh);
+
+          rect.style.left = `${left}px`;
+          rect.style.top = `${top}px`;
+          rect.style.width = `${width}px`;
+          rect.style.height = `${height}px`;
+
+          if (isSelected) addResizeHandles(rect, idx);
+
+          rect.onmousedown = (e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            startBoxMove(e, idx);
+          };
+          rect.onclick = (e) => {
+            e.stopPropagation();
+            highlightQuestionOnPdf(idx);
+          };
+          overlay.appendChild(rect);
+        });
+
+        // ──── 인식 후보(Candidate) 박스 렌더링 ────
+        if (!hideAllVisualCandidates) {
+          const groupedBlocks = groupTextItems(pageData.texts).filter(
+            (block) => {
+              // 1. 이미 등록된 문항과 겹치지 않는지
+              const cleanStr = normalizeForMatch(block.str);
+              const isCaptured = capturedTexts.some(
+                (ct) => ct.includes(cleanStr) || cleanStr.includes(ct),
+              );
+              if (isCaptured) return false;
+
+              // 2. 사용자가 삭제(무시)한 영역인지 (v18.0)
+              const isIgnored = ignoredVisualBlocks.some(
+                (ib) =>
+                  ib.page === pageNum &&
+                  Math.abs(ib.x - block.x) < 2 &&
+                  Math.abs(ib.y - block.y) < 2,
+              );
+              return !isIgnored;
+            },
+          );
+
+          groupedBlocks.forEach((block) => {
+            const rect = document.createElement("div");
+            rect.className =
+              "absolute rounded border border-blue-400/40 bg-blue-400/10 hover:bg-blue-400/25 cursor-copy transition-all z-10 group-candidate group";
+
+            const [x, y, w, h] = viewport.convertToViewportRectangle([
+              block.x,
+              block.y,
+              block.x + block.w,
+              block.y + block.h,
+            ]);
+            rect.style.left = `${Math.min(x, x + w) - 2}px`;
+            rect.style.top = `${Math.min(y, y + h) - 2}px`;
+            rect.style.width = `${Math.max(10, Math.abs(w)) + 4}px`;
+            rect.style.height = `${Math.max(10, Math.abs(h)) + 4}px`;
+
+            // 후보 박스 클릭 시 캡처
+            rect.onclick = (e) => {
+              e.stopPropagation();
+              captureManualQuestion(block.str, {
+                page: pageNum,
+                x: block.x,
+                y: block.y,
+                w: block.w,
+                h: block.h,
+              });
+            };
+
+            // ──── 인식 후보 삭제 버튼 (v18.0/18.1 스타일 개선) ────
+            const delBtn = document.createElement("button");
+            delBtn.className =
+              "absolute -top-2 -right-2 w-5 h-5 bg-white border-2 border-slate-400 rounded-full flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-500 shadow-md opacity-0 group-hover:opacity-100 transition-all z-20 scale-90 hover:scale-110";
+            delBtn.innerHTML = '<i class="fas fa-times text-[10px]"></i>';
+            delBtn.title = "이 후보 영역 숨기기";
+            delBtn.onclick = (e) => {
+              e.stopPropagation();
+              ignoreVisualBlock(pageNum, block.x, block.y, block.str);
+            };
+            rect.appendChild(delBtn);
+
+            overlay.appendChild(rect);
+          });
+        }
+
+        // ──── 드래그 선택 라이브러리 (Drag-to-Capture) ────
+        initDragSelection(overlay, viewport, pageNum);
+      }
+
+      // ──── 사이드-바이-사이드 리뷰어 전용 함수 ────
+      async function renderReviewerPdf(pageNum) {
+        if (!visualPdfDoc) return;
+
+        // 1. 이전 렌더링 작업 취소
+        if (reviewerRenderTask) {
+          try {
+            reviewerRenderTask.cancel();
+          } catch (e) {}
+          reviewerRenderTask = null;
+        }
+
+        try {
+          const page = await visualPdfDoc.getPage(pageNum);
+          const canvas = document.getElementById("revPdfCanvas");
+          const container = document.getElementById("revPdfContainer");
+          if (!canvas || !container) return;
+
+          const ctx = canvas.getContext("2d");
+          // 컨테이너 너비에 맞춰 자동 스케일 조정 (약 0.8~1.0)
+          const scale =
+            (container.clientWidth - 40) / page.getViewport({ scale: 1 }).width;
+          const viewport = page.getViewport({ scale: Math.min(scale, 1.2) });
+          currentReviewerViewport = viewport; // 전역 저장
+
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          // 2. 렌더링 태스크 시작
+          reviewerRenderTask = page.render({
+            canvasContext: ctx,
+            viewport: viewport,
+          });
+          await reviewerRenderTask.promise;
+          reviewerRenderTask = null;
+
+          // 3. 오버레이 (하이라이트) 처리
+          updateReviewerOverlayBoxes(pageNum, viewport);
+
+          document.getElementById("revPageLabel").textContent =
+            `${pageNum} / ${visualPdfDoc.numPages}`;
+          document.getElementById("revPrevBtn").disabled = pageNum <= 1;
+          document.getElementById("revNextBtn").disabled =
+            pageNum >= visualPdfDoc.numPages;
+        } catch (err) {
+          if (err.name === "RenderingCancelledException") {
+            console.log(`[Reviewer] Page ${pageNum} rendering cancelled.`);
+          } else {
+            console.error("Reviewer PDF render failed:", err);
+          }
+        }
+      }
+
+      function updateReviewerOverlayBoxes(pageNum, viewport) {
+        const overlay = document.getElementById("revPdfOverlay");
+        if (!overlay || !viewport) return;
+
+        overlay.innerHTML = "";
+        overlay.style.width = `${viewport.width}px`;
+        overlay.style.height = `${viewport.height}px`;
+
+        const pageData = visualTextCache.find((c) => c.page === pageNum);
+        if (pageData && pageData.texts) {
+          const normalize = (str) =>
+            (str || "").replace(/\s+/g, "").replace(/[.·,]/g, "").slice(0, 30);
+          const questions = window.currentReviewingQuestions || [];
+          const capturedTexts = questions.map((q) =>
+            normalize(q.rawQuestion || q.title || ""),
+          );
+
+          const grouped = groupTextItems(pageData.texts).filter((block) => {
+            // 1. 이미 등록된 문항과 겹치지 않는지 (이미 캡처됨)
+            const cleanStr = normalize(block.str);
+            const isCaptured = capturedTexts.some(
+              (ct) => ct.includes(cleanStr) || cleanStr.includes(ct),
+            );
+            if (isCaptured) return false;
+
+            // 2. 사용자가 삭제(무시)한 영역인지
+            const isIgnored = ignoredVisualBlocks.some(
+              (ib) =>
+                ib.page === pageNum &&
+                Math.abs(ib.x - block.x) < 2 &&
+                Math.abs(ib.y - block.y) < 2,
+            );
+            return !isIgnored;
+          });
+
+          grouped.forEach((block) => {
+            const rect = document.createElement("div");
+            rect.className =
+              "absolute bg-blue-400/10 border border-blue-400/20 rounded-sm hover:bg-blue-400/30 transition-colors cursor-crosshair";
+            const [x, y, w, h] = viewport.convertToViewportRectangle([
+              block.x,
+              block.y,
+              block.x + block.w,
+              block.y + block.h,
+            ]);
+            rect.style.left = `${Math.min(x, x + w) - 1}px`;
+            rect.style.top = `${Math.min(y, y + h) - 1}px`;
+            rect.style.width = `${Math.max(5, Math.abs(w)) + 2}px`;
+            rect.style.height = `${Math.max(5, Math.abs(h)) + 2}px`;
+
+            rect.title = "클릭하여 문항으로 추가: " + block.str.slice(0, 50);
+            rect.onclick = (e) => {
+              e.stopPropagation();
+              captureManualQuestion(block.str, {
+                page: pageNum,
+                x: block.x,
+                y: block.y,
+                w: block.w,
+                h: block.h,
+              });
+            };
+
+            overlay.appendChild(rect);
+          });
+        }
+      }
+
+      function renderReviewerList(questions) {
+        const container = document.getElementById("revQuestionList");
+        const countLabel = document.getElementById("revCountLabel");
+        const modalList = document.getElementById("modalCaptureList");
+        const modalCount = document.getElementById("modalCaptureCount");
+
+        if (!container) return;
+
+        // 전역 참조용 업데이트
+        window.currentReviewingQuestions = Array.isArray(questions)
+          ? [...questions]
+          : [];
+
+        const groupedBlocksCount =
+          visualTextCache.length > 0
+            ? visualTextCache.reduce((acc, curr) => {
+                const pageBlocks = groupTextItems(curr.texts);
+
+                // 1. 이미 등록된 문항 정보 수집 (v18.1/18.2 필터링 일관성 확보)
+                const questions = window.currentReviewingQuestions || [];
+                const normalize = (str) =>
+                  (str || "")
+                    .replace(/\s+/g, "")
+                    .replace(/[.·,]/g, "")
+                    .slice(0, 30);
+                const capturedTexts = questions.map((q) =>
+                  normalize(q.rawQuestion || q.title || ""),
+                );
+
+                // 2. 필터링 로직 적용 (이미 캡처됨 + 사용자가 무시함)
+                const activeBlocks = pageBlocks.filter((block) => {
+                  // 이미 캡처된 문항인지 확인
+                  const cleanStr = normalize(block.str);
+                  const isCaptured = capturedTexts.some(
+                    (ct) => ct.includes(cleanStr) || cleanStr.includes(ct),
+                  );
+                  if (isCaptured) return false;
+
+                  // 사용자가 무시(X 버튼)한 영역인지 확인
+                  return !ignoredVisualBlocks.some(
+                    (ib) =>
+                      ib.page === curr.page &&
+                      Math.abs(ib.x - block.x) < 2 &&
+                      Math.abs(ib.y - block.y) < 2,
+                  );
+                });
+                return acc + activeBlocks.length;
+              }, 0)
+            : 0;
+
+        // 전체 숨김 플래그가 켜져 있으면 카운트를 0으로 표시 (선택 사항, 여기선 실제 개수 유지할수도 있지만 정합성을 위해 0으로)
+        const displayBlocksCount = hideAllVisualCandidates
+          ? 0
+          : groupedBlocksCount;
+
+        const qs = window.currentReviewingQuestions;
+        const isPending = (idx) => window.pendingAssignIndex === idx;
+
+        if (!qs.length) {
+          container.innerHTML = `<p class="text-xs text-slate-400 text-center mt-10">인식된 문항이 없습니다.<br>PDF의 파란 박스를 클릭하여 직접 추가하세요.</p>`;
+          if (countLabel) countLabel.textContent = "표시할 문항 0개";
+          if (modalCount)
+            modalCount.textContent = `현재 선택된 문항: 0개 (인식영역: ${displayBlocksCount})`;
+        } else {
+          if (countLabel) countLabel.textContent = `표시 중: ${qs.length}개`;
+          if (modalCount)
+            modalCount.textContent = `현재 선택된 문항: ${qs.length}개 (인식영역: ${displayBlocksCount})`;
+        }
+
+        const listHtml = window.currentReviewingQuestions
+          .map((q, i) => {
+            const pending = isPending(i);
+            return `
+          <div 
+            onclick="highlightQuestionOnPdf(${i})"
+            class="p-3 border rounded-lg bg-white transition-all cursor-pointer group mb-2 relative ${
+              pending
+                ? "border-blue-500 ring-2 ring-blue-200 animate-pulse shadow-md"
+                : "border-slate-200 hover:border-blue-400 hover:shadow-md"
+            }"
+          >
+            <div class="pr-8">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">${q.examRound || "미지정"}</span>
+                <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
+              </div>
+              <h5 class="text-sm font-bold text-slate-800 line-clamp-2 mb-1 group-hover:text-blue-700">${escapeHtml(q.title)}</h5>
+              ${
+                pending
+                  ? '<div class="text-[9px] text-blue-600 font-bold mt-1 animate-bounce"><i class="fas fa-crosshairs mr-1"></i>PDF에서 영역을 클릭하세요</div>'
+                  : ""
+              }
+            </div>
+            
+            <!-- 할당 취소 또는 삭제 버튼 -->
+            <div class="absolute top-2 right-2 flex gap-1">
+              ${
+                pending
+                  ? `
+                <button 
+                  onclick="event.stopPropagation(); window.pendingAssignIndex = null; renderReviewerList(window.currentReviewingQuestions);"
+                  class="w-6 h-6 flex items-center justify-center text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
+                  title="할당 취소"
+                >
+                  <i class="fas fa-undo text-[10px]"></i>
+                </button>
+              `
+                  : `
+                <button 
+                  onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
+                  class="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                  title="삭제"
+                >
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+              `
+              }
+            </div>
+          </div>
+        `;
+          })
+          .join("");
+
+        if (window.currentReviewingQuestions.length > 0) {
+          container.innerHTML = listHtml;
+        }
+
+        // 모달 내 리스트 동기화 (수동 추가 버튼 포함)
+        // 모달 내 리스트 동기화 (수동 추가 입력 폼 포함)
+        if (modalList) {
+          const manualInputArea = `
+            <div class="mb-4 sticky top-0 z-10 bg-white border-b pb-3 shadow-sm">
+              <div class="flex items-center justify-between mb-2 px-1">
+                <span class="text-[10px] font-bold text-slate-500"><i class="fas fa-keyboard mr-1"></i>문항 직접 타이핑 추가</span>
+                <!-- 일괄 숨기기 토글 버튼 (v18.1) -->
+                <button 
+                  onclick="hideAllVisualCandidates = !hideAllVisualCandidates; renderReviewerList(window.currentReviewingQuestions); renderVisualPage(visualCurrentPage);"
+                  class="text-[9px] px-2 py-0.5 rounded border transition-colors ${hideAllVisualCandidates ? "bg-blue-600 text-white border-blue-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}"
+                >
+                  <i class="fas ${hideAllVisualCandidates ? "fa-eye" : "fa-eye-slash"} mr-1"></i>인식 영역 ${hideAllVisualCandidates ? "보이기" : "전체 숨기기"}
+                </button>
+              </div>
+              <textarea 
+                id="manualInputText"
+                class="w-full h-20 p-2 text-[11px] border border-slate-200 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none mb-2"
+                placeholder="추가할 문항 내용을 입력하세요..."
+              ></textarea>
+              <button 
+                onclick="const el=document.getElementById('manualInputText'); if(el.value.trim()){ captureManualQuestion(el.value.trim()); el.value=''; }"
+                class="w-full py-1.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+              >
+                리스트에 추가
+              </button>
+            </div>
+            <div class="mb-2 text-[9px] text-slate-400 px-1">
+              <i class="fas fa-info-circle mr-1 text-emerald-500"></i> 초록색: 이미 캡처됨 / 파란색: 인식 후보
+            </div>
+          `;
+
+          if (!window.currentReviewingQuestions.length) {
+            modalList.innerHTML =
+              manualInputArea +
+              `<p class="text-center text-[11px] text-slate-400 mt-10">캡처된 문항이 없습니다.<br>PDF 박스를 클릭하거나 드래그하세요.</p>`;
+          } else {
+            modalList.innerHTML =
+              manualInputArea +
+              window.currentReviewingQuestions
+                .map(
+                  (q, i) => `
+              <div 
+                onclick="highlightQuestionOnPdf(${i})"
+                class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors"
+                title="클록하여 PDF 위치 확인"
+              >
+                <div class="text-[11px] font-bold text-slate-700 truncate pr-5">${escapeHtml(q.title)}</div>
+                <button 
+                  onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
+                  class="absolute right-1 top-1 w-4 h-4 text-slate-300 hover:text-rose-500"
+                  title="삭제"
+                >
+                  <i class="fas fa-times text-[10px]"></i>
+                </button>
+              </div>
+            `,
+                )
+                .join("");
+          }
+        }
+      }
+
+      function deleteCapturedQuestion(index) {
+        const questions = window.currentReviewingQuestions || [];
+        if (index < 0 || index >= questions.length) return;
+
+        const removed = questions.splice(index, 1)[0];
+
+        // 메인 데이터에서도 삭제
+        try {
+          const data = getCurrentAnswerData();
+          const oldLen = data.questions.length;
+          data.questions = data.questions.filter((q) => q.id !== removed.id);
+          if (data.questions.length !== oldLen) {
+            syncJsonAndRender(data, "문항이 삭제되었습니다.", true);
+          }
+        } catch (e) {
+          console.error("데이터 동기화 실패:", e);
+        }
+
+        renderReviewerList([...questions]);
+        renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
+        refreshAutoExtractSummary(); // 상단 대시보드 갱신
+      }
+
+      function captureManualQuestion(text, rectData = null) {
+        if (!text || !text.trim()) return;
+        const questions = window.currentReviewingQuestions || [];
+
+        // ──── 좌표 할당 모드 (Assign Mode) 처리 (v18.4) ────
+        if (window.pendingAssignIndex !== null && rectData) {
+          const idx = window.pendingAssignIndex;
+          const targetQ = questions[idx];
+          if (targetQ) {
+            targetQ.rect = rectData;
+
+            // 전역 데이터(DB)와 동기화
+            try {
+              const data = getCurrentAnswerData();
+              const dbQ = data.questions.find((q) => q.id === targetQ.id);
+              if (dbQ) {
+                dbQ.rect = rectData;
+                syncJsonAndRender(
+                  data,
+                  `"${targetQ.title}" 문항에 좌표를 연결했습니다.`,
+                  true,
+                );
+              }
+            } catch (e) {
+              console.error("데이터 동기화 실패:", e);
+            }
+
+            window.pendingAssignIndex = null; // 대기 모드 해제
+            window.currentHighlightedBoxIndex = idx; // 해당 박스 선택 강조
+            window.currentHighlightedBoxPage = rectData.page;
+
+            renderReviewerList([...questions]);
+            renderVisualPage(visualCurrentPage);
+            setPdfStatus("문항 좌표 연결 완료", "success");
+            return;
+          }
+        }
+
+        // 중복 체크 (좌표가 있는 경우 좌표 기준, 없는 경우 텍스트 기준)
+        if (rectData) {
+          if (
+            questions.some(
+              (q) =>
+                q.rect &&
+                q.rect.page === rectData.page &&
+                Math.abs(q.rect.x - rectData.x) < 2 &&
+                Math.abs(q.rect.y - rectData.y) < 2,
+            )
+          ) {
+            setPdfStatus("이미 해당 영역에 등록된 문항이 있습니다.", "info");
+            return;
+          }
+        } else if (questions.some((q) => q.rawQuestion === text)) {
+          setPdfStatus("이미 동일한 텍스트로 캡처된 내용입니다.", "info");
+          return;
+        }
+
+        const newQ = {
+          id: "MANUAL-" + Date.now(),
+          title:
+            text.length > 50 ? text.slice(0, 50).trim() + "..." : text.trim(),
+          examRound: "미지정",
+          rawQuestion: text,
+          tags: ["수동추출"],
+          rect: rectData, // 좌표 정보 저장
+        };
+
+        // 동기화
+        try {
+          const data = getCurrentAnswerData();
+          const payload = {
+            ...newQ,
+            modelAnswer: "",
+            source: "Manual Capture",
+            reviewed: false,
+          };
+          data.questions.push(payload);
+          syncJsonAndRender(data, "문항을 캡처했습니다.", true);
+        } catch (e) {}
+
+        renderReviewerList(window.currentReviewingQuestions.concat(newQ));
+
+        // v13.0: 추가된 문항 자동 선택 (하이라이트 및 핸들 노출)
+        const newIndex = (window.currentReviewingQuestions || []).length - 1;
+        if (newIndex >= 0) {
+          window.currentHighlightedBoxIndex = newIndex;
+          window.currentHighlightedBoxPage = rectData
+            ? rectData.page
+            : visualCurrentPage;
+        }
+
+        renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
+        refreshAutoExtractSummary(); // 상단 대시보드 갱신
+        setPdfStatus("문항 캡처 완료 및 자동 선택됨", "success");
+      }
+
+      function ignoreVisualBlock(pageNum, x, y, str) {
+        ignoredVisualBlocks.push({
+          page: pageNum,
+          x: x,
+          y: y,
+          str: str,
+        });
+
+        // 1. 메인 오버레이 갱신 (파란 박스 제거)
+        updateVisualOverlayBoxes(pageNum, currentVisualViewport);
+
+        // 2. 리뷰어 오버레이 갱신 (사이드-바이-사이드 동기화)
+        if (
+          typeof updateReviewerOverlayBoxes === "function" &&
+          currentReviewerViewport
+        ) {
+          updateReviewerOverlayBoxes(pageNum, currentReviewerViewport);
+        }
+
+        // 3. 문항 리스트 및 카운트 레이블 갱신 (중요: v18.3 카운트 즉시 반영)
+        renderReviewerList(window.currentReviewingQuestions || []);
+
+        setPdfStatus("선택한 인식 영역을 숨겼습니다.", "info");
+      }
+
+      function refreshAutoExtractSummary(lastAddedCount = null) {
+        const reportArea = document.getElementById("autoExtractReport");
+        if (!reportArea) return;
+
+        try {
+          const data = getCurrentAnswerData();
+          const qs = data.questions || [];
+
+          let html = `<div class="p-1">`;
+
+          if (lastAddedCount !== null) {
+            html += `<div class="mb-3 p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-center font-bold text-xs">
+                <i class="fas fa-plus-circle mr-1"></i>방금 ${lastAddedCount}개의 문항이 새롭게 추가되었습니다!
+              </div>`;
+          }
+
+          if (!qs.length) {
+            html += `<p class="text-slate-400 text-xs text-center py-4">저장된 문항 데이터가 없습니다.</p>`;
+          } else {
+            const countsByRound = {};
+            qs.forEach((q) => {
+              const r = q.examRound || "미지정";
+              countsByRound[r] = (countsByRound[r] || 0) + 1;
+            });
+
+            html += `<div class="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider border-b pb-1">데이터베이스 검색 요약 (${qs.length}문항)</div>`;
+            html += `<div class="grid grid-cols-2 gap-2">`;
+            Object.entries(countsByRound)
+              .sort()
+              .forEach(([round, count]) => {
+                html += `<div class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-100">
+                  <span class="text-xs font-bold text-slate-700">${escapeHtml(round)}</span>
+                  <span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">${count}</span>
+                </div>`;
+              });
+            html += `</div>`;
+          }
+
+          html += `</div>`;
+          reportArea.innerHTML = html;
+        } catch (e) {
+          console.error("Summary refresh failed:", e);
+        }
+      }
+
+      function findAndGoToPage(
+        searchText,
+        targetPage = null,
+        targetIndex = null,
+      ) {
+        if (!visualTextCache) return;
+
+        // ──── 좌표/인덱스 기반 직접 이동 (v12.0 고도화) ────
+        if (targetPage !== null) {
+          window.currentHighlightedBoxIndex = targetIndex;
+          window.currentHighlightedBoxPage = targetPage;
+          revCurrentPage = targetPage;
+          visualCurrentPage = targetPage;
+          renderReviewerPdf(revCurrentPage);
+          renderVisualPage(visualCurrentPage);
+
+          // 스크롤 포커스 (선택 사항: 필요한 경우 추가 가능)
+          return;
+        }
+
+        if (!searchText) return;
+        const cleanSearch = searchText.replace(/\s+/g, "").toLowerCase();
+        for (const entry of visualTextCache) {
+          const grouped = groupTextItems(entry.texts);
+          const pageFullText = entry.texts
+            .map((t) => t.str)
+            .join("")
+            .replace(/\s+/g, "")
+            .toLowerCase();
+
+          if (pageFullText.includes(cleanSearch)) {
+            const boxIndex = grouped.findIndex((b) =>
+              b.str
+                .replace(/\s+/g, "")
+                .toLowerCase()
+                .includes(cleanSearch.slice(0, 10)),
+            );
+            window.currentHighlightedBoxIndex = boxIndex;
+            window.currentHighlightedBoxPage = entry.page;
+
+            revCurrentPage = entry.page;
+            visualCurrentPage = entry.page;
+            renderReviewerPdf(revCurrentPage);
+            renderVisualPage(visualCurrentPage);
+            return;
+          }
+        }
+      }
+
+      function highlightQuestionOnPdf(index) {
+        const q = window.currentReviewingQuestions[index];
+        if (!q) return;
+
+        // 좌표 데이터가 있으면 즉시 이동, 없으면 좌표 할당 모드(Assign Mode)로 전환 (v18.4)
+        if (q.rect && q.rect.page) {
+          window.pendingAssignIndex = null; // 이미 좌표가 있으면 할당 모드 해제
+          findAndGoToPage(null, q.rect.page, index);
+        } else {
+          window.pendingAssignIndex = index;
+          renderReviewerList(window.currentReviewingQuestions); // 상태 UI 반영
+          setPdfStatus(
+            `"${q.title}" 문항의 위치를 지정하세요. PDF 영역을 클릭하거나 드래그하면 좌표가 연결됩니다.`,
+            "info",
+          );
+        }
+      }
+
+      let activeBoxIndex = null;
+      let activeHandleType = null;
+      let boxInitialPos = null;
+      let mouseInitialPos = null;
+      let dragStart = null;
+      let dragRect = null;
+
+      function addResizeHandles(box, index) {
+        const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+        handles.forEach((type) => {
+          const h = document.createElement("div");
+          h.className = `absolute w-2 h-2 bg-orange-600 border border-white z-40 handle-${type}`;
+          h.style.cursor = `${type}-resize`;
+
+          // 위치 설정
+          if (type.includes("n")) h.style.top = "-4px";
+          if (type.includes("s")) h.style.bottom = "-4px";
+          if (type.includes("w")) h.style.left = "-4px";
+          if (type.includes("e")) h.style.right = "-4px";
+          if (type === "n" || type === "s") h.style.left = "calc(50% - 4px)";
+          if (type === "w" || type === "e") h.style.top = "calc(50% - 4px)";
+
+          h.onmousedown = (e) => {
+            e.stopPropagation();
+            startBoxResize(e, index, type);
+          };
+          box.appendChild(h);
+        });
+      }
+
+      function startBoxMove(e, index) {
+        activeBoxIndex = index;
+        activeHandleType = "move";
+        mouseInitialPos = { x: e.clientX, y: e.clientY };
+        const q = window.currentReviewingQuestions[index];
+        boxInitialPos = { ...q.rect };
+        document.addEventListener("mousemove", handleMouseInteraction);
+        document.addEventListener("mouseup", endMouseInteraction);
+      }
+
+      function startBoxResize(e, index, type) {
+        activeBoxIndex = index;
+        activeHandleType = type;
+        mouseInitialPos = { x: e.clientX, y: e.clientY };
+        const q = window.currentReviewingQuestions[index];
+        boxInitialPos = { ...q.rect };
+        document.addEventListener("mousemove", handleMouseInteraction);
+        document.addEventListener("mouseup", endMouseInteraction);
+      }
+
+      function handleMouseInteraction(e) {
+        if (activeBoxIndex === null) return;
+        const q = window.currentReviewingQuestions[activeBoxIndex];
+        const dx = (e.clientX - mouseInitialPos.x) / 1.5; // PDF Viewport scale 보정
+        const dy = -(e.clientY - mouseInitialPos.y) / 1.5; // PDF 좌표계 inverse 보정 (y는 위로 증가)
+
+        if (activeHandleType === "move") {
+          q.rect.x = boxInitialPos.x + dx;
+          q.rect.y = boxInitialPos.y + dy;
+        } else {
+          // Resize 로직 (좌표계 주의: y 증가는 위쪽)
+          if (activeHandleType.includes("n")) q.rect.h = boxInitialPos.h + dy;
+          if (activeHandleType.includes("s")) {
+            q.rect.y = boxInitialPos.y + dy;
+            q.rect.h = boxInitialPos.h - dy;
+          }
+          if (activeHandleType.includes("e")) q.rect.w = boxInitialPos.w + dx;
+          if (activeHandleType.includes("w")) {
+            q.rect.x = boxInitialPos.x + dx;
+            q.rect.w = boxInitialPos.w - dx;
+          }
+        }
+        // 전체 재렌더링 대신 오버레이 박스만 갱신 (성능 및 충돌 방지)
+        updateVisualOverlayBoxes(visualCurrentPage, currentVisualViewport);
+      }
+
+      function endMouseInteraction() {
+        if (activeBoxIndex !== null) {
+          const data = getCurrentAnswerData();
+          data.questions[activeBoxIndex].rect =
+            window.currentReviewingQuestions[activeBoxIndex].rect;
+          syncJsonAndRender(data, "영역 정보가 업데이트되었습니다.", true);
+        }
+        activeBoxIndex = null;
+        activeHandleType = null;
+        document.removeEventListener("mousemove", handleMouseInteraction);
+        document.removeEventListener("mouseup", endMouseInteraction);
+      }
+
+      function initDragSelection(overlay, viewport, pageNum) {
+        overlay.onmousedown = (e) => {
+          if (e.button !== 0 || e.target !== overlay) return;
+          dragStart = { x: e.offsetX, y: e.offsetY };
+          dragRect = document.createElement("div");
+          dragRect.className =
+            "absolute border-2 border-dashed border-blue-500 bg-blue-500/20 z-50 pointer-events-none shadow-lg rounded-sm animate-pulse";
+          overlay.appendChild(dragRect);
+        };
+
+        overlay.onmousemove = (e) => {
+          if (!dragStart) return;
+          const current = { x: e.offsetX, y: e.offsetY };
+          const x = Math.min(dragStart.x, current.x);
+          const y = Math.min(dragStart.y, current.y);
+          const w = Math.abs(dragStart.x - current.x);
+          const h = Math.abs(dragStart.y - current.y);
+          dragRect.style.left = `${x}px`;
+          dragRect.style.top = `${y}px`;
+          dragRect.style.width = `${w}px`;
+          dragRect.style.height = `${h}px`;
+        };
+
+        overlay.onmouseup = (e) => {
+          if (!dragStart) return;
+          const selX = dragStart.x;
+          const selY = dragStart.y;
+          const endX = e.offsetX;
+          const endY = e.offsetY;
+
+          const minX = Math.min(selX, endX);
+          const maxX = Math.max(selX, endX);
+          const minY = Math.min(selY, endY);
+          const maxY = Math.max(selY, endY);
+
+          // 뷰포트 -> PDF 좌표로 역변환
+          const [p1x, p1y, p2x, p2y] = viewport.convertToPdfPoint(
+            minX,
+            minY,
+            maxX,
+            maxY,
+          );
+          const rect = {
+            page: pageNum,
+            x: Math.min(p1x, p2x),
+            y: Math.min(p1y, p2y),
+            w: Math.abs(p1x - p2x),
+            h: Math.abs(p1y - p2y),
+          };
+
+          // 드래그 영역 내의 텍스트 찾기
+          const pageData = visualTextCache.find((d) => d.page === pageNum);
+          if (pageData) {
+            const capturedTexts = pageData.texts.filter((t) => {
+              const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
+                t.x,
+                t.y,
+                t.x + (t.w || 20),
+                t.y + (t.h || 10),
+              ]);
+              const tx = Math.min(vx, vx + vw);
+              const ty = Math.min(vy, vy + vh);
+              const cx = tx + Math.abs(vw) / 2;
+              const cy = ty + Math.abs(vh) / 2;
+              return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+            });
+
+            const fullText =
+              capturedTexts.length > 0
+                ? capturedTexts
+                    .map((t) => t.str)
+                    .join(" ")
+                    .trim()
+                : "수동 드래그 영역";
+
+            captureManualQuestion(fullText, rect);
+          }
+
+          if (dragRect) dragRect.remove();
+          dragStart = null;
+          dragRect = null;
+        };
+      }
+
+      function initReviewerControls() {
+        document.getElementById("revPrevBtn").onclick = () => {
+          if (revCurrentPage > 1) {
+            revCurrentPage--;
+            renderReviewerPdf(revCurrentPage);
+          }
+        };
+        document.getElementById("revNextBtn").onclick = () => {
+          if (visualPdfDoc && revCurrentPage < visualPdfDoc.numPages) {
+            revCurrentPage++;
+            renderReviewerPdf(revCurrentPage);
+          }
+        };
       }
 
       function buildLocalAttachmentInsight(items, focus, title = "첨부자료") {
@@ -2095,9 +3583,35 @@
         setAttachmentStatus("첨부 파일 분석 준비 중...", "info");
 
         const items = [];
+        const baseUrl = isLikelyFoundryEndpoint()
+          ? window.__ANALYZE_BACKEND__ || "http://localhost:8787"
+          : getBackendBaseUrl();
+
         for (const file of files) {
           try {
-            const textExcerpt = await readAttachmentTextExcerpt(file);
+            let textExcerpt;
+            // For audio/video try backend transcription endpoint first (mock)
+            if (file.type && (file.type.startsWith("video/") || file.type.startsWith("audio/"))) {
+              try {
+                const tResp = await fetch(`${baseUrl}/api/transcribe`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
+                });
+                if (tResp.ok) {
+                  const tj = await tResp.json();
+                  textExcerpt = tj.transcript || `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
+                } else {
+                  textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
+                }
+              } catch (e) {
+                // fallback to client-side meta when transcription/backend fails
+                textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
+              }
+            } else {
+              textExcerpt = await readAttachmentTextExcerpt(file);
+            }
+
             items.push({
               name: file.name,
               type: file.type,
@@ -2113,8 +3627,6 @@
             });
           }
         }
-
-        const baseUrl = getBackendBaseUrl();
         try {
           setAttachmentStatus("백엔드 파일 분석 실행 중...", "info");
           const response = await fetch(`${baseUrl}/api/analyze-attachments`, {
@@ -2160,7 +3672,9 @@
           return;
         }
 
-        const baseUrl = getBackendBaseUrl();
+        const baseUrl = isLikelyFoundryEndpoint()
+          ? window.__ANALYZE_BACKEND__ || "http://localhost:8787"
+          : getBackendBaseUrl();
         try {
           setAttachmentStatus("웹사이트 분석 실행 중...", "info");
           const response = await fetch(`${baseUrl}/api/analyze-webpage`, {
@@ -2380,7 +3894,7 @@
         } catch (error) {
           if (!silent) {
             setBackendStatus(
-              `Foundry 모델 감해 실패: ${error.message}`,
+              `Foundry 모델 감지 실패: ${error.message}`,
               "error",
             );
           } else {
@@ -2409,35 +3923,114 @@
 
         const providerObj =
           providers && typeof providers === "object" ? providers : null;
-        const providerText = providerObj
-          ? Object.entries(providerObj)
-              .map(([name, enabled]) => `${name}:${enabled ? "ON" : "OFF"}`)
-              .join(" · ")
-          : "provider 정보 없음";
 
-        const rows = Array.isArray(diagnostics) ? diagnostics : [];
-        if (!rows.length) {
-          el.textContent = `Providers: ${providerText}`;
+        if (!providerObj) {
+          el.innerHTML = `<div class="text-slate-400">Provider 정보 없음</div>`;
           return;
         }
 
-        const latestByProvider = new Map();
-        rows.forEach((row) => {
-          if (row?.provider) {
-            latestByProvider.set(row.provider, row);
-          }
+        const statusMap = {
+          openai: { label: "OpenAI (GPT-4o-mini)", color: "blue" },
+          gemini: { label: "Google (Gemini 2.0)", color: "emerald" },
+          anthropic: { label: "Anthropic (Claude 3.5)", color: "orange" },
+        };
+
+        let html = '<div class="flex flex-wrap gap-x-4 gap-y-1">';
+        Object.entries(providerObj).forEach(([name, enabled]) => {
+          const config = statusMap[name] || { label: name, color: "slate" };
+          const dotColor = enabled ? `bg-${config.color}-500` : "bg-slate-300";
+          const textColor = enabled
+            ? `text-${config.color}-700`
+            : "text-slate-400";
+          html += `
+            <div class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+              <span class="font-bold uppercase text-[9px] ${textColor}">${config.label}</span>
+              <span class="text-[9px] ${enabled ? "text-emerald-600" : "text-slate-400"}">${enabled ? "ON" : "OFF"}</span>
+            </div>
+          `;
         });
+        html += "</div>";
 
-        const detail = [...latestByProvider.values()]
-          .map((row) => {
-            const reason = row.reason
-              ? ` (${String(row.reason).slice(0, 90)})`
-              : "";
-            return `${row.provider}:${row.status}${reason}`;
-          })
-          .join(" · ");
+        const rows = Array.isArray(diagnostics) ? diagnostics : [];
+        if (rows.length > 0) {
+          html +=
+            '<div class="mt-1.5 pt-1.5 border-t border-slate-200 text-[10px] space-y-0.5">';
+          rows.forEach((row) => {
+            const statusColor =
+              row.status === "valid"
+                ? "text-emerald-600"
+                : row.status === "invalid"
+                  ? "text-rose-600"
+                  : "text-slate-500";
+            const icon =
+              row.status === "valid"
+                ? "fa-check-circle"
+                : row.status === "invalid"
+                  ? "fa-exclamation-triangle"
+                  : "fa-circle";
+            html += `<div class="${statusColor} flex items-center gap-1">
+              <i class="fas ${icon}"></i>
+              <span class="font-bold">[${row.provider}]</span>
+              <span>${row.status === "valid" ? "검증 성공" : row.status === "invalid" ? `검증 실패: ${row.error || "unknown"}` : "설정 미흡"}</span>
+            </div>`;
+          });
+          html += "</div>";
+        }
 
-        el.textContent = `Providers: ${providerText} | LLM: ${detail}`;
+        el.innerHTML = html;
+      }
+
+      async function validateApiKeys() {
+        const baseUrl = isLikelyFoundryEndpoint()
+          ? window.__ANALYZE_BACKEND__ || "http://localhost:8787"
+          : getBackendBaseUrl();
+        const el = document.getElementById("backendDiagnostics");
+
+        try {
+          setBackendStatus("API 키 유효성 검사 중...", "info");
+          el.innerHTML = `
+            <div class="flex items-center gap-2 text-slate-500 animate-pulse">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>각 클라우드 제공업체(OpenAI, Gemini, Anthropic)에 테스트 요청을 보내는 중입니다...</span>
+            </div>
+          `;
+
+          const response = await fetch(`${baseUrl}/api/validate-keys`);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+          const results = await response.json();
+          const diagnostics = Object.entries(results).map(
+            ([provider, res]) => ({
+              provider,
+              status: res.status,
+              error: res.error,
+            }),
+          );
+
+          const providers = {
+            openai: results.openai?.status !== "missing",
+            gemini: results.gemini?.status !== "missing",
+            anthropic: results.anthropic?.status !== "missing",
+          };
+
+          renderBackendDiagnostics(diagnostics, providers);
+
+          const validCount = Object.values(results).filter(
+            (r) => r.status === "valid",
+          ).length;
+          const totalCount = Object.values(results).filter(
+            (r) => r.status !== "missing",
+          ).length;
+
+          setBackendStatus(
+            `검증 완료: ${validCount}/${totalCount} 유효`,
+            validCount > 0 ? "success" : "error",
+          );
+        } catch (err) {
+          setBackendStatus(`검증 실패: ${err.message}`, "error");
+          el.textContent = `API 키 검증 중 오류가 발생했습니다: ${err.message}`;
+        }
       }
 
       function summarizeLlmDiagnostics(diagnostics) {
@@ -2460,6 +4053,129 @@
         return "LLM 진단 정보가 수집되었습니다.";
       }
 
+      const AI_PRESETS_STORAGE_KEY = "solve_ai_presets_v1";
+
+      function loadAiPresets() {
+        const select = document.getElementById("aiModelPresets");
+        if (!select) return;
+
+        const raw = localStorage.getItem(AI_PRESETS_STORAGE_KEY);
+        let presets = [];
+        try {
+          presets = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+          presets = [];
+        }
+
+        // Default local backend preset if empty
+        if (presets.length === 0) {
+          presets = [
+            {
+              name: "Local Backend (v14.0)",
+              url: "http://localhost:8787",
+              key: "",
+              model: "",
+            },
+            {
+              name: "Foundry Local",
+              url: "http://127.0.0.1:5619/v1/chat/completions",
+              key: "",
+              model: "",
+            },
+          ];
+          localStorage.setItem(AI_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+        }
+
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">프리셋 선택...</option>';
+        presets.forEach((p, idx) => {
+          const opt = document.createElement("option");
+          opt.value = idx;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+
+        select.value = currentVal;
+      }
+
+      function saveCurrentAiPreset() {
+        const url = document.getElementById("aiEndpointUrl").value.trim();
+        const key = document.getElementById("aiApiKey").value.trim();
+        const model = document.getElementById("aiFoundryModelId").value.trim();
+
+        if (!url) {
+          alert("먼저 Endpoint URL을 입력하세요.");
+          return;
+        }
+
+        const name = prompt(
+          "이 설정의 프리셋 이름을 입력하세요:",
+          `AI-${new Date().toLocaleTimeString()}`,
+        );
+        if (!name) return;
+
+        const raw = localStorage.getItem(AI_PRESETS_STORAGE_KEY);
+        let presets = [];
+        try {
+          presets = raw ? JSON.parse(raw) : [];
+        } catch (e) {}
+
+        presets.push({ name, url, key, model });
+        localStorage.setItem(AI_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+        loadAiPresets();
+        alert("프리셋이 저장되었습니다.");
+      }
+
+      function deleteCurrentAiPreset() {
+        const select = document.getElementById("aiModelPresets");
+        const idx = select.value;
+        if (idx === "") {
+          alert("삭제할 프리셋을 선택하세요.");
+          return;
+        }
+
+        if (!confirm("정말 이 프리셋을 삭제하시겠습니까?")) return;
+
+        const raw = localStorage.getItem(AI_PRESETS_STORAGE_KEY);
+        let presets = [];
+        try {
+          presets = raw ? JSON.parse(raw) : [];
+        } catch (e) {}
+
+        presets.splice(idx, 1);
+        localStorage.setItem(AI_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+        select.value = "";
+        loadAiPresets();
+      }
+
+      function applyAiPreset(idx) {
+        if (idx === "") return;
+        const raw = localStorage.getItem(AI_PRESETS_STORAGE_KEY);
+        let presets = [];
+        try {
+          presets = raw ? JSON.parse(raw) : [];
+        } catch (e) {}
+
+        const p = presets[idx];
+        if (!p) return;
+
+        document.getElementById("aiEndpointUrl").value = p.url || "";
+        document.getElementById("aiApiKey").value = p.key || "";
+        document.getElementById("aiFoundryModelId").value = p.model || "";
+
+        localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, p.url || "");
+        localStorage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, p.model || "");
+
+        updateAiModeUx();
+        checkBackendConnection();
+      }
+
+      // Initialize PDF.js worker
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      }
+
       async function checkBackendConnection() {
         const baseUrl = isLikelyFoundryEndpoint()
           ? getFoundryBaseUrl()
@@ -2468,13 +4184,18 @@
           setBackendStatus("백엔드 연결 확인 중...", "info");
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const timeoutId = setTimeout(() => controller.abort(), 2000); // Timeout reduced to 2s
 
           if (isLikelyFoundryEndpoint()) {
             // For Foundry, check status or models silently
-            const statusResponse = await fetch(`${baseUrl}/openai/status`, {
+            const statusUrl = `${baseUrl}/openai/status`;
+            const statusResponse = await fetch(statusUrl, {
               signal: controller.signal,
             }).catch(() => null);
+
+            if (!statusResponse) {
+              throw new Error("Foundry Local 오프라인");
+            }
 
             const modelResponse = await fetch(`${baseUrl}/v1/models`, {
               signal: controller.signal,
@@ -2482,7 +4203,7 @@
 
             clearTimeout(timeoutId);
 
-            if (statusResponse?.ok && modelResponse?.ok) {
+            if (statusResponse.ok && modelResponse?.ok) {
               const modelPayload = await modelResponse.json();
               const modelCount = Array.isArray(modelPayload?.data)
                 ? modelPayload.data.length
@@ -2494,17 +4215,18 @@
               renderBackendDiagnostics([], null);
               return true;
             } else {
-              throw new Error("Foundry Local 서비스 응답 없음");
+              throw new Error("Foundry 서비스 응답 이상");
             }
           }
 
           const response = await fetch(`${baseUrl}/health`, {
             signal: controller.signal,
-          });
+          }).catch(() => ({ ok: false })); // Prevent console noise
+
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            throw new Error(`HTTP ${response.status || "오프라인"}`);
           }
           const payload = await response.json();
           const providers =
@@ -2664,41 +4386,104 @@
       }
 
       function parseQuestionsFromText(text) {
-        const cleaned = String(text || "")
-          .replace(/\r/g, "\n")
-          .replace(/\n{3,}/g, "\n\n")
-          .trim();
-        if (!cleaned) return [];
+        const cleaned = String(text || "").replace(/\r/g, "\n");
+        if (!cleaned.trim()) return [];
 
-        const blocks = cleaned
-          .split(/\n(?=\s*(?:Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번))/g)
-          .map((block) => block.trim())
-          .filter((block) => block.length >= 25);
+        const sessionRegex =
+          /(?:제?\s*([1-4])\s*(?:교시|부)|([1-4])\s*(?:교시|부))/gi;
+        const sessionMatches = [...cleaned.matchAll(sessionRegex)];
+        const sessions = [];
 
-        const resultBlocks = blocks.length
-          ? blocks
-          : cleaned
-              .split(/\n\n+/)
-              .map((block) => block.trim())
-              .filter((block) => block.length >= 40)
-              .slice(0, 20);
+        if (sessionMatches.length > 0) {
+          sessionMatches.forEach((m, i) => {
+            const start = m.index;
+            const end = sessionMatches[i + 1]
+              ? sessionMatches[i + 1].index
+              : cleaned.length;
+            sessions.push({
+              round: (m[1] || m[2]) + "교시",
+              content: cleaned.slice(start, end),
+            });
+          });
+        } else {
+          sessions.push({ round: "미지정", content: cleaned });
+        }
 
-        return resultBlocks.map((block, index) => {
-          const compact = block.replace(/\s+/g, " ").trim();
-          const title =
-            compact.length > 70 ? `${compact.slice(0, 70)}...` : compact;
-          const idMatch = compact.match(
-            /^(Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번)/i,
-          );
-          const normalizedId = idMatch
-            ? idMatch[0].replace(/\s+/g, "")
-            : `Q${index + 1}`;
-          return {
-            id: normalizedId.startsWith("Q") ? normalizedId : `Q${index + 1}`,
-            title,
-            rawQuestion: compact,
-          };
+        const parsedResult = [];
+        sessions.forEach((session) => {
+          let content = session.content.trim();
+
+          // 메타데이터 헤더나 파일 정보만 있는 경우 필터링 (강화)
+          if (
+            content.startsWith("===== ") ||
+            (content.includes("===== ") &&
+              content.length < 500 &&
+              !/\d+\s*[.)]/.test(content))
+          ) {
+            return;
+          }
+
+          // Enhanced marker detection for technical exams (v16.0)
+          const questionMarkers = [
+            ...content.matchAll(
+              /(?:\n|^|\s{2,})\s*(?:Q\s*[.:]?\s*\d+|\d+\s*[.\-:)]\s*|문제\s*\d+|\d+\s*번|\[\d+\]|【\d+】)/gi,
+            ),
+          ];
+
+          if (questionMarkers.length > 0) {
+            questionMarkers.forEach((m, idx) => {
+              const start = m.index;
+              const end = questionMarkers[idx + 1]
+                ? questionMarkers[idx + 1].index
+                : content.length;
+              const block = content.slice(start, end).trim();
+
+              const compact = block.replace(/\s+/g, " ").trim();
+
+              // 실제 문제 내용 유효성 검사 강화 (v2.5)
+              if (compact.length < 35 || compact.startsWith("===== ")) return;
+              if (compact.includes("시험시간: 100분") && compact.length < 100)
+                return;
+
+              const idMatch = compact.match(
+                /^(?:Q\s*[.:]?\s*(\d+)|(\d+)\s*[.\-:)]\s*|문제\s*(\d+)|(\d+)\s*번)/i,
+              );
+              let rawNum = "0";
+              if (idMatch) {
+                rawNum = idMatch[1] || idMatch[2] || idMatch[3] || idMatch[4];
+              } else {
+                rawNum = idx + 1;
+              }
+
+              const uniqueId =
+                session.round !== "미지정"
+                  ? `${session.round}-${rawNum}`
+                  : `Q${rawNum}`;
+
+              // 제목 추출 시 마커 제거 및 가독성 개선
+              let cleanTitle = compact;
+              if (idMatch) cleanTitle = compact.slice(idMatch[0].length).trim();
+              const titleSnippet =
+                cleanTitle.length > 100
+                  ? cleanTitle.slice(0, 100) + "..."
+                  : cleanTitle;
+
+              parsedResult.push({
+                id: uniqueId,
+                title: titleSnippet,
+                examRound: session.round,
+                rawQuestion: block,
+              });
+            });
+          }
         });
+
+        // 결과 검증: 너무 적은 문항이나 메타데이터만 포함된 경우 빈 배열 반환 가능성 고려
+        if (parsedResult.length === 0) {
+          console.warn("No valid questions parsed from text.");
+        }
+
+        return parsedResult;
       }
 
       async function extractQuestionsFromPdfText() {
@@ -2708,7 +4493,11 @@
         const attachmentInput = document.getElementById("attachmentFiles");
         const pdfInput = document.getElementById("pdfFileInput");
         const attachedFiles = [];
-        if (attachmentInput && attachmentInput.files && attachmentInput.files.length) {
+        if (
+          attachmentInput &&
+          attachmentInput.files &&
+          attachmentInput.files.length
+        ) {
           attachedFiles.push(...Array.from(attachmentInput.files));
         }
         if (pdfInput && pdfInput.files && pdfInput.files.length) {
@@ -2718,7 +4507,10 @@
         let extracted = "";
 
         if (!attachedFiles.length) {
-          setPdfStatus("첨부파일이 없습니다. 문제 자동 추출을 사용하려면 파일을 첨부하세요.", "error");
+          setPdfStatus(
+            "첨부파일이 없습니다. 문제 자동 추출을 사용하려면 파일을 첨부하세요.",
+            "error",
+          );
           return { ok: false, addedCount: 0, examRound: "미지정" };
         }
 
@@ -2730,7 +4522,9 @@
               const snippet = await readAttachmentTextExcerpt(f);
               parts.push(`===== ${f.name} =====\n${snippet}`);
             } catch (err) {
-              parts.push(`===== ${f.name} =====\n(텍스트 추출 실패: ${err.message})`);
+              parts.push(
+                `===== ${f.name} =====\n(텍스트 추출 실패: ${err.message})`,
+              );
             }
           }
           extracted = parts.join("\n\n");
@@ -2754,11 +4548,16 @@
         }
 
         let parsedQuestions = [];
-        // If the user configured a Foundry/chat endpoint, do not append
-        // `/api/analyze-questions` to that URL. Use the local analysis
-        // backend (mock server) instead for question-extraction calls.
+        let aiQuestions = [];
+        let localQuestions = [];
+
+        // 1. Local Parsing (Baseline)
+        localQuestions = parseQuestionsFromText(extracted);
+        console.log(`[Local Parser] Found ${localQuestions.length} questions`);
+
+        // 2. AI Parsing (Optional Enhancement)
         const baseUrl = isLikelyFoundryEndpoint()
-          ? (window.__ANALYZE_BACKEND__ || "http://localhost:8787")
+          ? window.__ANALYZE_BACKEND__ || "http://localhost:8787"
           : getBackendBaseUrl();
         try {
           const response = await fetch(`${baseUrl}/api/analyze-questions`, {
@@ -2767,25 +4566,44 @@
             body: JSON.stringify({ text: extracted, source: "attachments" }),
           });
 
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+          if (response.ok) {
+            const payload = await response.json();
+            aiQuestions = Array.isArray(payload.questions)
+              ? payload.questions
+              : [];
+            console.log(`[AI Parser] Found ${aiQuestions.length} questions`);
+            setBackendStatus(
+              aiQuestions.length > 1
+                ? "문제 추출: 백엔드 AI 분석 사용"
+                : "문제 추출: AI 분석 불충분, 로컬 병합",
+              "success",
+            );
           }
-
-          const payload = await response.json();
-          parsedQuestions = Array.isArray(payload.questions)
-            ? payload.questions
-            : [];
-          setBackendStatus("문제 추출: 백엔드 AI 분석 사용", "success");
         } catch (err) {
-          // Fallback to local parsing heuristics
-          console.warn("AI analyze failed, falling back to local parser:", err?.message || err);
-          parsedQuestions = parseQuestionsFromText(extracted);
-          setBackendStatus("문제 추출: 로컬 분석 사용", "info");
+          console.warn("AI analyze failed:", err?.message || err);
+          setBackendStatus("문제 추출: 로컬 분석 전용", "info");
+        }
+
+        // 3. Smart Merge
+        // 로컬 파서가 1개 이하(보통 파일명 헤더만 찾은 경우)를 찾았고 AI가 더 많이 찾았다면 AI 우선.
+        // 기술사 시험(31문항)인 경우 로컬 파서의 정확도가 높을 확률이 큼.
+        if (
+          localQuestions.length <= 1 &&
+          aiQuestions.length > localQuestions.length
+        ) {
+          parsedQuestions = aiQuestions;
+        } else if (localQuestions.length >= aiQuestions.length) {
+          parsedQuestions = localQuestions;
+        } else {
+          // 둘 다 유효한 경우, 더 많이 찾은 쪽을 선택하되
+          // 로컬이 최소 10개 이상 찾았다면 로컬 파서의 구조적 신뢰도를 우선함.
+          parsedQuestions =
+            localQuestions.length > 10 ? localQuestions : aiQuestions;
         }
 
         if (!parsedQuestions.length) {
           setPdfStatus(
-            "문제 추출에 실패했습니다. 텍스트를 확인하세요.",
+            "문제 추출에 실패했습니다. 텍스트 파싱 결과를 확인하세요.",
             "error",
           );
           return { ok: false, addedCount: 0, examRound: "미지정" };
@@ -2794,10 +4612,16 @@
         // Compute per-round counts from parsedQuestions (use inference per question)
         const countsByRound = {};
         parsedQuestions.forEach((q) => {
-          const maybeRound = q.examRound || inferExamRoundFromText(q.rawQuestion || "") || "미지정";
+          const maybeRound =
+            q.examRound ||
+            inferExamRoundFromText(q.rawQuestion || "") ||
+            "미지정";
           countsByRound[maybeRound] = (countsByRound[maybeRound] || 0) + 1;
         });
-        const examRound = Object.keys(countsByRound).length === 1 ? Object.keys(countsByRound)[0] : "혼합";
+        const examRound =
+          Object.keys(countsByRound).length === 1
+            ? Object.keys(countsByRound)[0]
+            : "혼합";
         const existingKeys = new Set(
           data.questions.map(
             (item) => `${item.examRound}|${item.id}|${item.title}`,
@@ -2806,10 +4630,14 @@
         let addedCount = 0;
 
         parsedQuestions.forEach((item, index) => {
+          const qRound =
+            item.examRound && item.examRound !== "미지정"
+              ? item.examRound
+              : examRound;
           const payload = {
             id: item.id || `Q${data.questions.length + index + 1}`,
             title: item.title || `문제 ${index + 1}`,
-            examRound,
+            examRound: qRound,
             tags: ["자동추출"],
             modelAnswer: "",
             source: attachedFiles.length ? "Attachment AI" : "Text Input",
@@ -2826,17 +4654,30 @@
 
         syncJsonAndRender(
           data,
-          `첨부파일에서 ${addedCount}개 문제를 추가했습니다. (회차: ${examRound})`,
+          `자동 추출 완료: ${addedCount}개 신규 추가 (총 ${data.questions.length}문항 보유)`,
         );
-        setPdfStatus(`문제 자동 추출 완료: ${addedCount}개 추가`, "success");
+        setPdfStatus(
+          `추출 결과: ${parsedQuestions.length}개 발견 (${addedCount}개 신규 추가)`,
+          "success",
+        );
 
-        // Render counts per round into UI
-        const reportEl = document.getElementById("autoExtractReport");
-        if (reportEl) {
-          const rows = Object.entries(countsByRound)
-            .map(([r, c]) => `<div><strong>${escapeHtml(r)}</strong>: ${c}문항</div>`)
-            .join("");
-          reportEl.innerHTML = `<div class=\"text-sm\">인식된 문제 수 (교시별)</div>${rows}`;
+        // ──── 보강된 공통 리포트 함수 호출 ────
+        refreshAutoExtractSummary(addedCount);
+
+        // ──── 사이드-바이-사이드 리뷰어 활성화 ────
+        const reviewerSection = document.getElementById("extractReviewer");
+        if (reviewerSection) {
+          reviewerSection.classList.remove("hidden");
+          revCurrentPage = 1;
+          renderReviewerPdf(1);
+          renderReviewerList(parsedQuestions);
+          initReviewerControls(); // 버튼 리스너 연동
+
+          // 스크롤 이동
+          reviewerSection.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
         }
 
         return { ok: true, addedCount, examRound, countsByRound };
@@ -3188,13 +5029,18 @@
         return normalized;
       }
 
-      function updateFilterOptions(questions) {
+      function updateFilterOptions(questions, theories = []) {
         const roundSelect = document.getElementById("filterRound");
         const tagSelect = document.getElementById("filterTag");
         const globalRoundSelect = document.getElementById("globalRoundSelect");
 
         const rounds = [
-          ...new Set(questions.map((q) => q.examRound).filter(Boolean)),
+          ...new Set(
+            [
+              ...questions.map((q) => q.examRound),
+              ...theories.map((t) => t.examRound),
+            ].filter(Boolean),
+          ),
         ];
         const tags = [
           ...new Set(
@@ -3470,7 +5316,7 @@
         renderTheoryData(normalized.theories);
         refreshAttachmentTargetOptions(questions);
 
-        updateFilterOptions(questions);
+        updateFilterOptions(questions, normalized.theories);
         updateRoundDashboard(questions);
         const filteredEntries = getFilteredEntries(questions);
 
@@ -4274,7 +6120,7 @@
       function getCurrentAnswerData() {
         const raw = document.getElementById("answerJsonInput").value.trim();
         if (!raw) {
-          return { questions: [] };
+          return { questions: [], theories: [] };
         }
         const parsed = JSON.parse(raw);
         return normalizeData(parsed);
@@ -4284,6 +6130,11 @@
         const updatedJson = JSON.stringify(data, null, 2);
         document.getElementById("answerJsonInput").value = updatedJson;
         renderAnswerData(data);
+        refreshAutoExtractSummary(); // 요약 레포트 상시 동기화 (v6.0)
+
+        // 자동 저장 실행 (v20.0)
+        saveAnswerData(true); // silent mode
+
         if (statusMessage) {
           setDataStatus(statusMessage, "success");
         }
@@ -4420,14 +6271,29 @@
         }
       }
 
-      function saveAnswerData() {
+      function saveAnswerData(silent = false) {
         const raw = document.getElementById("answerJsonInput").value.trim();
         if (!raw) {
-          setDataStatus("저장할 JSON이 없습니다.", "error");
+          if (!silent) setDataStatus("저장할 JSON이 없습니다.", "error");
           return;
         }
         localStorage.setItem(ANSWER_STORAGE_KEY, raw);
-        setDataStatus("브라우저 로컬 저장소에 저장했습니다.", "success");
+
+        // 마지막 저장 시간 업데이트 (v20.0)
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        const lastSavedEl = document.getElementById("lastSavedStatus");
+        if (lastSavedEl) {
+          lastSavedEl.textContent = `Last Saved: ${timeStr} (Auto)`;
+        }
+
+        if (!silent) {
+          setDataStatus("브라우저 로컬 저장소에 저장했습니다.", "success");
+        }
       }
 
       function loadAnswerData() {
@@ -4440,8 +6306,24 @@
           loadSampleData();
           return;
         }
-        document.getElementById("answerJsonInput").value = saved;
-        applyAnswerData();
+        try {
+          const parsed = JSON.parse(saved);
+          document.getElementById("answerJsonInput").value = saved;
+          renderAnswerData(parsed);
+          setDataStatus("마지막 작업 세션을 복구했습니다.", "success");
+
+          // 저장 시간 표시 초기화 (복구 시점)
+          const lastSavedEl = document.getElementById("lastSavedStatus");
+          if (lastSavedEl) {
+            lastSavedEl.textContent = "Last Session Restored";
+          }
+        } catch (e) {
+          setDataStatus(
+            "저장된 데이터복구 중 오류가 발생하여 샘플을 로드합니다.",
+            "error",
+          );
+          loadSampleData();
+        }
       }
 
       function exportAnswerDataToFile() {
@@ -4641,8 +6523,14 @@
           data,
           `${selectedRound} 회차 삭제 완료: 문제 ${questionCount}개, 이론 ${theoryCount}개`,
         );
+
+        // 삭제 후 UI 레이블 초기화 (v20.1)
+        updateGlobalRoundLabels("");
+        const filterRound = document.getElementById("filterRound");
+        if (filterRound) filterRound.value = "";
+
         setTheoryStatus(
-          `${selectedRound} 회차 이론 ${theoryCount}개를 삭제했습니다.`,
+          `${selectedRound} 회차 데이터(문제 ${questionCount}, 이론 ${theoryCount})를 삭제했습니다.`,
           "success",
         );
       }
@@ -4672,6 +6560,8 @@
         importAnswerDataFromFile,
         addModelAnswerEntry,
         deleteSelectedGlobalRound,
+        applyAnswerFilters,
+        getFilteredEntries,
         // ──── 이하 onclick에서 호출되나 누락된 함수 추가 ────
         loadAnswerData,
         loadSampleData,
@@ -4684,6 +6574,13 @@
         generateDraftAnswersByFoundryLocal,
         generateDraftAnswersLocal,
         analyzeTheoryKnowledge,
+        // ──── 리뷰어 관련 함수 ────
+        renderReviewerPdf,
+        renderReviewerList,
+        initReviewerControls,
+        findAndGoToPage,
+        captureManualQuestion,
+        deleteCapturedQuestion,
       });
 
       document
@@ -4737,6 +6634,12 @@
           );
         });
 
+        const presetSelect = document.getElementById("aiModelPresets");
+        presetSelect.addEventListener("change", (e) =>
+          applyAiPreset(e.target.value),
+        );
+        loadAiPresets();
+
         if (isLikelyFoundryEndpoint() && !modelInput.value.trim()) {
           // Pass silent=true during auto-init to avoid error spam if service is down
           await detectFoundryModelId(true);
@@ -4746,51 +6649,94 @@
       checkBackendConnection();
 
       loadAnswerData();
+
+      // 수동 JSON 편집 시 자동 저장 (v20.0)
+      let saveTimeout;
+      document
+        .getElementById("answerJsonInput")
+        .addEventListener("input", () => {
+          clearTimeout(saveTimeout);
+          saveTimeout = setTimeout(() => saveAnswerData(true), 1000);
+        });
     </script>
     <script>
       // OCR removed for MVP — provide safe stubs and user-facing messages
       window.OCR_REMOVED = true;
 
       function _ocrRemovedNotice() {
-        const el = document.getElementById('analysisPdfOcrStatus') || document.getElementById('pdfStatus');
-        if (el) el.textContent = 'OCR 기능은 MVP에서 제거되었습니다. AI가 텍스트(또는 문제)를 인식하도록 텍스트를 붙여넣어 주세요.';
-        console.warn('OCR functionality disabled (MVP)');
+        const el =
+          document.getElementById("analysisPdfOcrStatus") ||
+          document.getElementById("pdfStatus");
+        if (el)
+          el.textContent =
+            "OCR 기능은 MVP에서 제거되었습니다. AI가 텍스트(또는 문제)를 인식하도록 텍스트를 붙여넣어 주세요.";
+        // console.warn removed to keep console clean
       }
 
       // Replace common OCR entrypoints with no-ops that inform the user
       try {
-        window.runExamPdfOcrCheck = async function() { _ocrRemovedNotice(); return { ok:false }; };
+        window.runExamPdfOcrCheck = async function () {
+          _ocrRemovedNotice();
+          return { ok: false };
+        };
       } catch (e) {}
       try {
-        window.runTesseractPass = async function() { return ''; };
+        window.runTesseractPass = async function () {
+          return "";
+        };
       } catch (e) {}
       try {
-        window.initTesseractWorkerPool = function() { return; };
+        window.initTesseractWorkerPool = function () {
+          return;
+        };
       } catch (e) {}
       try {
-        window.acquireTesseractWorker = async function(){ return null; };
+        window.acquireTesseractWorker = async function () {
+          return null;
+        };
       } catch (e) {}
       try {
-        window.releaseTesseractWorker = function(){ return; };
+        window.releaseTesseractWorker = function () {
+          return;
+        };
       } catch (e) {}
       try {
-        window.runRobustOcr = async function(){ return ''; };
+        window.runRobustOcr = async function () {
+          return "";
+        };
       } catch (e) {}
       try {
-        window.createEnhancedOcrCanvas = function(){ const c=document.createElement('canvas'); c.width=1;c.height=1; return c; };
+        window.createEnhancedOcrCanvas = function () {
+          const c = document.createElement("canvas");
+          c.width = 1;
+          c.height = 1;
+          return c;
+        };
       } catch (e) {}
       try {
-        window.rotateCanvas = function(){ const c=document.createElement('canvas'); c.width=1;c.height=1; return c; };
+        window.rotateCanvas = function () {
+          const c = document.createElement("canvas");
+          c.width = 1;
+          c.height = 1;
+          return c;
+        };
       } catch (e) {}
       try {
-        window.renderAnalysisOcrPageLayout = async function(){ _ocrRemovedNotice(); return; };
+        window.renderAnalysisOcrPageLayout = async function () {
+          _ocrRemovedNotice();
+          return;
+        };
       } catch (e) {}
       try {
-        window.updateOcrProgress = function(){ return; };
+        window.updateOcrProgress = function () {
+          return;
+        };
       } catch (e) {}
 
-      // Update any visible OCR status on load
-      window.addEventListener('load', () => setTimeout(_ocrRemovedNotice, 200));
+      // Update any visible OCR status on load (once is enough)
+      window.addEventListener("load", () => {
+        _ocrRemovedNotice();
+      });
     </script>
   </body>
 </html>

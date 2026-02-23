@@ -196,30 +196,83 @@ async function callGemini({ apiKey, model, userPrompt, temperature = 0.3 }) {
   return { text: content, provider: 'gemini', model };
 }
 
+async function callAnthropic({ apiKey, model, userPrompt, temperature = 0.3 }) {
+  if (!apiKey) {
+    return null;
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model || 'claude-3-5-sonnet-20240620',
+      max_tokens: 4000,
+      temperature,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 240);
+    throw new Error(`anthropic API failed: ${response.status}${body ? ` ${body}` : ''}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.content?.[0]?.text;
+  if (!content) {
+    return null;
+  }
+
+  return { text: String(content), provider: 'anthropic', model };
+}
+
+const isValidKey = (key) => Boolean(key && !String(key).includes('your_'));
+
+/**
+ * AI Provider 우선순위 정책 (Sir의 요청에 따름):
+ * 1. Gemini (유효한 키가 있는 경우 최우선 시도)
+ * 2. OpenAI
+ * 3. Anthropic
+ * 4. 모든 클라우드 AI가 실패하거나 키가 없는 경우에만 '로컬 규칙 템플릿' 적용
+ */
 async function generateTextWithProviders({ systemPrompt = '', userPrompt = '', temperature = 0.3 }) {
   const diagnostics = [];
   const attempts = [
     {
-      provider: 'openai',
-      enabled: Boolean(process.env.OPENAI_API_KEY),
-      run: async () => callOpenAICompatible({
-      provider: 'openai',
-      baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      systemPrompt,
-      userPrompt,
-      temperature
+      provider: 'gemini',
+      enabled: isValidKey(process.env.GEMINI_API_KEY),
+      run: async () => callGemini({
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+        userPrompt: `${systemPrompt}\n\n${userPrompt}`,
+        temperature
       })
     },
     {
-      provider: 'gemini',
-      enabled: Boolean(process.env.GEMINI_API_KEY),
-      run: async () => callGemini({
-      apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
-      userPrompt: `${systemPrompt}\n\n${userPrompt}`,
-      temperature
+      provider: 'openai',
+      enabled: isValidKey(process.env.OPENAI_API_KEY),
+      run: async () => callOpenAICompatible({
+        provider: 'openai',
+        baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        systemPrompt,
+        userPrompt,
+        temperature
+      })
+    },
+    {
+      provider: 'anthropic',
+      enabled: isValidKey(process.env.ANTHROPIC_API_KEY),
+      run: async () => callAnthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620',
+        userPrompt: `${systemPrompt}\n\n${userPrompt}`,
+        temperature
       })
     }
   ];
@@ -251,8 +304,9 @@ async function generateTextWithProviders({ systemPrompt = '', userPrompt = '', t
 
 function getProviderConfigStatus() {
   return {
-    openai: Boolean(process.env.OPENAI_API_KEY),
-    gemini: Boolean(process.env.GEMINI_API_KEY)
+    openai: isValidKey(process.env.OPENAI_API_KEY),
+    gemini: isValidKey(process.env.GEMINI_API_KEY),
+    anthropic: isValidKey(process.env.ANTHROPIC_API_KEY)
   };
 }
 
@@ -392,6 +446,66 @@ async function generateInsightWithLLM({ title = '', text = '', focus = '' }) {
 
 app.get('/health', (_, res) => {
   res.json({ ok: true, service: 'civil-answer-backend', providers: getProviderConfigStatus() });
+});
+
+app.get('/api/validate-keys', async (req, res) => {
+  const providers = getProviderConfigStatus();
+  const results = {};
+
+  const testPrompt = 'Hi, please reply with "OK".';
+
+  if (providers.openai) {
+    try {
+      await callOpenAICompatible({
+        provider: 'openai',
+        baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        systemPrompt: 'System',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.openai = { status: 'valid' };
+    } catch (e) {
+      results.openai = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.openai = { status: 'missing' };
+  }
+
+  if (providers.gemini) {
+    try {
+      await callGemini({
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.gemini = { status: 'valid' };
+    } catch (e) {
+      results.gemini = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.gemini = { status: 'missing' };
+  }
+
+  if (providers.anthropic) {
+    try {
+      await callAnthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.anthropic = { status: 'valid' };
+    } catch (e) {
+      results.anthropic = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.anthropic = { status: 'missing' };
+  }
+
+  res.json({ ok: true, results });
 });
 
 app.post('/api/analyze-questions', (req, res) => {

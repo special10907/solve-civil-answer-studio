@@ -67,6 +67,63 @@ app.post('/api/analyze-questions', (req, res) => {
   });
 });
 
+app.post('/api/analyze-attachments', (req, res) => {
+  const { items, focus } = req.body || {};
+  if (!Array.isArray(items)) {
+    return res.status(400).json({ error: 'items (array) required' });
+  }
+
+  // Aggregate text excerpts and parse
+  const combined = items.map(it => (it && it.textExcerpt) || '').join('\n\n');
+  const questions = simpleParseQuestions(combined);
+
+  // counts per file (rough)
+  const countsByFile = items.map(it => ({
+    name: it.name || 'unknown',
+    count: simpleParseQuestions((it && it.textExcerpt) || '').length,
+  }));
+
+  return res.json({
+    ok: true,
+    mode: 'local-mock',
+    files: items.length,
+    focus: focus || null,
+    countsByFile,
+    questions,
+    count: questions.length,
+  });
+});
+
+app.post('/api/analyze-webpage', (req, res) => {
+  const { url, focus } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  // placeholder: return a minimal insight
+  const summary = `간단 요약: ${url}`;
+  return res.json({ ok: true, mode: 'local-mock', url, focus: focus || null, summary });
+});
+
+app.post('/api/transcribe', async (req, res) => {
+  // Development mock: accept metadata and return a fake transcript
+  const { name, type, size } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name required' });
+
+  // Simulate processing latency
+  await new Promise((r) => setTimeout(r, 350));
+
+  const transcript = `자동 전사(모의): 파일 ${name} (${type || 'unknown'})의 요약/전사 결과입니다.`;
+  return res.json({ ok: true, mode: 'transcribe-mock', name, transcript });
+});
+
+app.get('/api/validate-keys', (req, res) => {
+  // Return fake provider diagnostics for development
+  return res.json({
+    openai: { status: 'missing' },
+    google: { status: 'missing' },
+    anthropic: { status: 'missing' },
+  });
+});
+
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
   console.log(`Analyze-questions mock server listening on http://localhost:${PORT}`);
