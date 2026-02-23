@@ -1,6 +1,10 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const multer = require('multer');
+
+// Multer memory storage so we can forward buffers to external ASR providers
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 const app = express();
 app.use(cors());
@@ -103,15 +107,106 @@ app.post('/api/analyze-webpage', (req, res) => {
   return res.json({ ok: true, mode: 'local-mock', url, focus: focus || null, summary });
 });
 
-app.post('/api/transcribe', async (req, res) => {
-  // Development mock: accept metadata and return a fake transcript
-  const { name, type, size } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'name required' });
+app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+  // Support multiple modes: 'openai' (server-side whisper), 'whispercpp' (not-implemented here), 'mock'
+  const provider = (process.env.TRANSCRIBE_PROVIDER || 'mock').toLowerCase();
 
-  // Simulate processing latency
+  // If client uploaded a file via multipart/form-data, multer placed it in req.file
+  const uploaded = req.file;
+
+  if (provider === 'openai' && process.env.OPENAI_API_KEY && uploaded) {
+    try {
+      // Forward the audio file to OpenAI's transcription endpoint
+      const form = new FormData();
+      form.append('file', uploaded.buffer, { filename: uploaded.originalname, contentType: uploaded.mimetype });
+      // Use a stable whisper model name; change if your OpenAI account expects a different model id
+      form.append('model', 'whisper-1');
+
+      const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: form,
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        return res.status(502).json({ ok: false, error: 'openai-transcribe-failed', detail: text });
+      }
+
+      const json = await resp.json();
+      const transcript = json.text || json.transcript || '';
+      return res.json({ ok: true, mode: 'openai', name: uploaded.originalname, transcript, raw: json });
+    } catch (err) {
+      console.error('OpenAI transcribe error', err);
+      return res.status(500).json({ ok: false, error: 'openai-error', message: String(err) });
+    }
+  }
+
+  if (provider === 'whispercpp') {
+    // Whisper.cpp/local models require an external binary and are environment-specific.
+    // To enable, set env WHISPERCPP_COMMAND to the command or script that accepts an input file path
+    // and writes transcript to stdout. Example: WHISPERCPP_COMMAND="/usr/local/bin/whisper_cpp_runner"
+    const cmd = process.env.WHISPERCPP_COMMAND;
+    if (!cmd || !uploaded) {
+      return res.status(501).json({ ok: false, error: 'whispercpp-not-configured', message: 'WHISPERCPP_COMMAND not configured or no file uploaded. See server README.' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const { spawn } = require('child_process');
+
+    // Write uploaded buffer to a temp file
+    const tmpDir = os.tmpdir();
+    const tmpName = `transcribe_${Date.now()}_${Math.random().toString(36).slice(2,8)}_${uploaded.originalname}`;
+    const tmpPath = path.join(tmpDir, tmpName);
+    try {
+      fs.writeFileSync(tmpPath, uploaded.buffer);
+    } catch (err) {
+      console.error('Failed to write temp file for whispercpp', err);
+      return res.status(500).json({ ok: false, error: 'whispercpp-tempfile-failed', message: String(err) });
+    }
+
+    // Spawn the configured command with the temp file path as final argument
+    const parts = Array.isArray(cmd) ? cmd : cmd.split(' ');
+    const proc = spawn(parts[0], parts.slice(1).concat([tmpPath]), { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+    proc.on('close', (code) => {
+      // Clean up temp file
+      try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+
+      if (code !== 0) {
+        console.error('whispercpp command failed', { code, stderr });
+        return res.status(502).json({ ok: false, error: 'whispercpp-failed', code, stderr });
+      }
+
+      const transcript = stdout.trim();
+      return res.json({ ok: true, mode: 'whispercpp', name: uploaded.originalname, transcript, raw: { stderr } });
+    });
+
+    // In case of spawn error
+    proc.on('error', (err) => {
+      try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+      console.error('whispercpp spawn error', err);
+      return res.status(500).json({ ok: false, error: 'whispercpp-spawn-error', message: String(err) });
+    });
+
+    return; // response will be sent from event handlers
+  }
+
+  // Fallback / mock behaviour: accept either multipart upload or JSON body with name
+  const name = uploaded ? uploaded.originalname : (req.body && req.body.name) || 'unknown';
+  const type = uploaded ? uploaded.mimetype : (req.body && req.body.type) || 'unknown';
+
+  // Simulate processing latency for mock
   await new Promise((r) => setTimeout(r, 350));
 
-  const transcript = `자동 전사(모의): 파일 ${name} (${type || 'unknown'})의 요약/전사 결과입니다.`;
+  const transcript = `자동 전사(모의): 파일 ${name} (${type})의 요약/전사 결과입니다.`;
   return res.json({ ok: true, mode: 'transcribe-mock', name, transcript });
 });
 

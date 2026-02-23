@@ -3592,21 +3592,30 @@
             let textExcerpt;
             // For audio/video try backend transcription endpoint first (mock)
             if (file.type && (file.type.startsWith("video/") || file.type.startsWith("audio/"))) {
-              try {
-                const tResp = await fetch(`${baseUrl}/api/transcribe`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
-                });
-                if (tResp.ok) {
-                  const tj = await tResp.json();
-                  textExcerpt = tj.transcript || `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
-                } else {
+              const asrMode = document.getElementById('asrModeSelect')?.value || 'auto';
+              if (asrMode === 'disabled') {
+                textExcerpt = await readAttachmentTextExcerpt(file);
+              } else {
+                // Try to upload the actual file to the backend transcribe endpoint (multipart/form-data)
+                try {
+                  const fd = new FormData();
+                  fd.append('file', file, file.name);
+                  const tResp = await fetch(`${baseUrl}/api/transcribe`, {
+                    method: 'POST',
+                    body: fd,
+                  });
+
+                  if (tResp.ok) {
+                    const tj = await tResp.json();
+                    textExcerpt = tj.transcript || tj.text || `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
+                  } else {
+                    // Fallback to client-side metadata if backend fails
+                    textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
+                  }
+                } catch (e) {
+                  // Network/backend failure -> fallback
                   textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
                 }
-              } catch (e) {
-                // fallback to client-side meta when transcription/backend fails
-                textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
               }
             } else {
               textExcerpt = await readAttachmentTextExcerpt(file);
