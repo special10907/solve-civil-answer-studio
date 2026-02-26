@@ -29,7 +29,7 @@
     </script>
     <script src="vendor/tailwind.js"></script>
     <script src="vendor/js/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="vendor/js/pdf.min.js"></script>
     <link href="vendor/css/all.min.css" rel="stylesheet" />
 
     <!-- Chosen Palette: Warm Neutrals (Stone/Gray) with Professional Blue/Indigo Accents -->
@@ -882,7 +882,7 @@
           class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4"
         >
           <div
-            class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+            class="bg-white rounded-xl shadow-2xl w-[98vw] h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
           >
             <div
               class="p-4 border-b flex items-center justify-between bg-slate-50"
@@ -941,7 +941,7 @@
               </div>
 
               <!-- 우측: 실시간 캡처 리스트 -->
-              <div class="w-80 bg-white flex flex-col shrink-0">
+              <div class="w-[450px] bg-white flex flex-col shrink-0">
                 <div
                   class="p-3 border-b bg-slate-50 flex items-center justify-between"
                 >
@@ -2472,18 +2472,19 @@
         let currentGroup = null;
 
         sorted.forEach((item) => {
+          // 텍스트 높이 정규화 (PDF.js의 height가 실제 문자보다 큰 경우 보정)
+          const adjustedH = (item.h || 10) * 0.85; 
+
           if (!currentGroup) {
             currentGroup = {
               texts: [item],
               minX: item.x,
               maxX: item.x + (item.w || 20),
               minY: item.y,
-              maxY: item.y + (item.h || 10),
+              maxY: item.y + adjustedH,
             };
           } else {
-            // 줄 간격(Y차이)이 임계값 이내면 같은 블록으로 간주
             const verticalGap = Math.abs(currentGroup.minY - item.y);
-            // X축 거리가 너무 멀지 않은지도 체크할 수 있음 (여기선 주로 Y축 기준 그룹화)
             if (verticalGap < thresholdY * 2) {
               currentGroup.texts.push(item);
               currentGroup.minX = Math.min(currentGroup.minX, item.x);
@@ -2494,7 +2495,7 @@
               currentGroup.minY = Math.min(currentGroup.minY, item.y);
               currentGroup.maxY = Math.max(
                 currentGroup.maxY,
-                item.y + (item.h || 10),
+                item.y + adjustedH,
               );
             } else {
               groups.push(currentGroup);
@@ -2503,7 +2504,7 @@
                 minX: item.x,
                 maxX: item.x + (item.w || 20),
                 minY: item.y,
-                maxY: item.y + (item.h || 10),
+                maxY: item.y + adjustedH,
               };
             }
           }
@@ -2670,12 +2671,12 @@
             window.currentHighlightedBoxIndex === idx &&
             window.currentHighlightedBoxPage === pageNum;
 
-          rect.className = `absolute rounded border-2 transition-all cursor-move group-box ${
+          rect.className = `absolute rounded border-2 transition-all cursor-move group-box reviewer-item-${q.id} ${
             isSelected
               ? "bg-orange-400/40 border-orange-600 z-30"
               : "bg-emerald-400/30 border-emerald-500/60 z-20"
           }`;
-          rect.dataset.index = idx;
+          rect.dataset.qId = q.id;
 
           const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
             q.rect.x,
@@ -2694,16 +2695,43 @@
           rect.style.width = `${width}px`;
           rect.style.height = `${height}px`;
 
-          if (isSelected) addResizeHandles(rect, idx);
+          // ──── ID 라벨 표시 (v22.0 추가) ────
+          const label = document.createElement("div");
+          label.className = "absolute -bottom-5 left-0 px-1 py-0.5 bg-slate-800 text-white text-[9px] font-bold rounded shadow-sm whitespace-nowrap z-40 pointer-events-none opacity-80 group-box-hover:opacity-100";
+          label.textContent = q.id;
+          rect.appendChild(label);
+
+          // ──── 인식 영역 삭제 버튼 (v21.0 추가) ────
+          const delBtn = document.createElement("button");
+          delBtn.className =
+            "absolute -top-2 -right-2 w-5 h-5 bg-white border-2 border-rose-500 rounded-full flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white shadow-md z-40 transition-all scale-90 hover:scale-110";
+          delBtn.innerHTML = '<i class="fas fa-times text-[10px]"></i>';
+          delBtn.title = "이 영역 및 문항 삭제";
+          delBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm("이 영역과 연동된 문항을 삭제하시겠습니까?")) {
+              deleteCapturedQuestion(idx);
+            }
+          };
+          rect.appendChild(delBtn);
+
+          if (isSelected) addResizeHandles(rect, q.id, viewport);
+
+          rect.onmouseenter = () => setHoverHighlight(q.id, true);
+          rect.onmouseleave = () => setHoverHighlight(q.id, false);
 
           rect.onmousedown = (e) => {
             if (e.button !== 0) return;
             e.stopPropagation();
-            startBoxMove(e, idx);
+            startBoxMove(e, q.id, viewport);
           };
           rect.onclick = (e) => {
             e.stopPropagation();
             highlightQuestionOnPdf(idx);
+          };
+          rect.ondblclick = (e) => {
+            e.stopPropagation();
+            scrollReviewerListItemIntoView(q.id);
           };
           overlay.appendChild(rect);
         });
@@ -2735,16 +2763,19 @@
             rect.className =
               "absolute rounded border border-blue-400/40 bg-blue-400/10 hover:bg-blue-400/25 cursor-copy transition-all z-10 group-candidate group";
 
-            const [x, y, w, h] = viewport.convertToViewportRectangle([
+            const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
               block.x,
               block.y,
               block.x + block.w,
               block.y + block.h,
             ]);
-            rect.style.left = `${Math.min(x, x + w) - 2}px`;
-            rect.style.top = `${Math.min(y, y + h) - 2}px`;
-            rect.style.width = `${Math.max(10, Math.abs(w)) + 4}px`;
-            rect.style.height = `${Math.max(10, Math.abs(h)) + 4}px`;
+            rect.style.left = `${Math.min(vx, vx + vw)}px`;
+            rect.style.top = `${Math.min(vy, vy + vh)}px`;
+            rect.style.width = `${Math.max(10, Math.abs(vw)) + 2}px`;
+            rect.style.height = `${Math.max(10, Math.abs(vh)) + 2}px`;
+
+            // 후보 박스에도 호버 시 안내용 가이드 표시
+            rect.title = "클릭하여 문항으로 등록";
 
             // 후보 박스 클릭 시 캡처
             rect.onclick = (e) => {
@@ -2972,11 +3003,19 @@
             const pending = isPending(i);
             return `
           <div 
+            draggable="true"
+            data-q-id="${q.id}"
+            onmouseenter="setHoverHighlight('${q.id}', true)"
+            onmouseleave="setHoverHighlight('${q.id}', false)"
+            ondragstart="handleDragStart(event, ${i})"
+            ondragover="handleDragOver(event)"
+            ondrop="handleDrop(event, ${i})"
             onclick="highlightQuestionOnPdf(${i})"
-            class="p-3 border rounded-lg bg-white transition-all cursor-pointer group mb-2 relative ${
+            ondblclick="highlightQuestionOnPdf(${i})"
+            class="p-3 border rounded-lg bg-white transition-all cursor-pointer group mb-2 relative reviewer-list-item item-${q.id} ${
               pending
                 ? "border-blue-500 ring-2 ring-blue-200 animate-pulse shadow-md"
-                : "border-slate-200 hover:border-blue-400 hover:shadow-md"
+                : "border-slate-200 hover:border-blue-400 hover:shadow-md cursor-grab active:cursor-grabbing"
             }"
           >
             <div class="pr-8">
@@ -3022,7 +3061,7 @@
           .join("");
 
         if (window.currentReviewingQuestions.length > 0) {
-          container.innerHTML = listHtml;
+          container.innerHTML = `<div class="grid grid-cols-2 gap-2 h-full content-start">${listHtml}</div>`;
         }
 
         // 모달 내 리스트 동기화 (수동 추가 버튼 포함)
@@ -3036,8 +3075,16 @@
                 <button 
                   onclick="hideAllVisualCandidates = !hideAllVisualCandidates; renderReviewerList(window.currentReviewingQuestions); renderVisualPage(visualCurrentPage);"
                   class="text-[9px] px-2 py-0.5 rounded border transition-colors ${hideAllVisualCandidates ? "bg-blue-600 text-white border-blue-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}"
+                  title="모든 페이지의 후보 영역을 모두 숨기거나 보입니다."
                 >
-                  <i class="fas ${hideAllVisualCandidates ? "fa-eye" : "fa-eye-slash"} mr-1"></i>인식 영역 ${hideAllVisualCandidates ? "보이기" : "전체 숨기기"}
+                  <i class="fas ${hideAllVisualCandidates ? "fa-eye" : "fa-eye-slash"} mr-1"></i>후보<sup>ALL</sup> ${hideAllVisualCandidates ? "보이기" : "숨기기"}
+                </button>
+                <button 
+                  onclick="ignoreAllCandidatesOnPage()"
+                  class="text-[9px] px-2 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors ml-1"
+                  title="현재 페이지의 모든 후보 영역을 무시(삭제) 처리합니다."
+                >
+                  <i class="fas fa-trash-alt mr-1"></i>현재 페이지 비우기
                 </button>
               </div>
               <textarea 
@@ -3069,8 +3116,11 @@
                   (q, i) => `
               <div 
                 onclick="highlightQuestionOnPdf(${i})"
-                class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors"
-                title="클록하여 PDF 위치 확인"
+                ondblclick="highlightQuestionOnPdf(${i})"
+                onmouseenter="setHoverHighlight('${q.id}', true)"
+                onmouseleave="setHoverHighlight('${q.id}', false)"
+                class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors item-${q.id}"
+                title="클릭하여 PDF 위치 확인"
               >
                 <div class="text-[11px] font-bold text-slate-700 truncate pr-5">${escapeHtml(q.title)}</div>
                 <button 
@@ -3088,27 +3138,89 @@
         }
       }
 
-      function deleteCapturedQuestion(index) {
+       function deleteCapturedQuestion(index) {
         const questions = window.currentReviewingQuestions || [];
         if (index < 0 || index >= questions.length) return;
 
-        const removed = questions.splice(index, 1)[0];
+        const removed = questions[index];
+        const hasRect = !!removed.rect;
+
+        let deleteArea = false;
+        if (hasRect) {
+          deleteArea = confirm(`"${removed.title}" 문항을 리스트에서 삭제합니다.\n\n해당 인식 영역도 다시 나타나지 않도록 함께 제거하시겠습니까?`);
+        } else {
+          if (!confirm(`"${removed.title}" 문항을 리스트에서 삭제하시겠습니까?`)) return;
+        }
+
+        // 실제 리스트에서 제거
+        questions.splice(index, 1);
+
+        if (deleteArea && removed.rect) {
+          ignoredVisualBlocks.push({
+            page: removed.rect.page,
+            x: removed.rect.x,
+            y: removed.rect.y,
+            str: removed.rawQuestion || removed.title
+          });
+        }
 
         // 메인 데이터에서도 삭제
         try {
           const data = getCurrentAnswerData();
-          const oldLen = data.questions.length;
           data.questions = data.questions.filter((q) => q.id !== removed.id);
-          if (data.questions.length !== oldLen) {
-            syncJsonAndRender(data, "문항이 삭제되었습니다.", true);
-          }
+          syncJsonAndRender(data, "문항이 삭제되었습니다.", true);
         } catch (e) {
           console.error("데이터 동기화 실패:", e);
         }
 
         renderReviewerList([...questions]);
-        renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
-        refreshAutoExtractSummary(); // 상단 대시보드 갱신
+        renderVisualPage(visualCurrentPage);
+        refreshAutoExtractSummary();
+      }
+
+      // ──── 드래그 앤 드롭 리스트 순서 변경 (v21.0 추가) ────
+      let draggedItemIndex = null;
+
+      function handleDragStart(e, index) {
+        draggedItemIndex = index;
+        e.dataTransfer.effectAllowed = "move";
+        e.currentTarget.classList.add("opacity-50");
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      }
+
+      function handleDrop(e, toIndex) {
+        e.preventDefault();
+        if (draggedItemIndex === null || draggedItemIndex === toIndex) return;
+
+        const questions = [...window.currentReviewingQuestions];
+        const [movedItem] = questions.splice(draggedItemIndex, 1);
+        questions.splice(toIndex, 0, movedItem);
+
+        // 메인 데이터 동기화
+        try {
+          const data = getCurrentAnswerData();
+          // window.currentReviewingQuestions와 data.questions 간의 순서 동기화
+          // id를 기준으로 기존 맵 유지하면서 순서만 재배열
+          const newQuestions = questions.map(q => {
+            return data.questions.find(dbQ => dbQ.id === q.id) || q;
+          });
+          
+          // 데이터에 없던 항목이 있을 경우(그럴 가능성은 낮지만) 대비하여 필터링된 누락분 추가
+          const missing = data.questions.filter(dbQ => !questions.some(q => q.id === dbQ.id));
+          data.questions = [...newQuestions, ...missing];
+
+          syncJsonAndRender(data, "문항 순서가 변경되었습니다.", true);
+        } catch (e) {
+          console.error("순서 동기화 실패:", e);
+        }
+
+        renderReviewerList(questions);
+        renderVisualPage(visualCurrentPage); // 인덱스 변경에 따른 하이라이트 갱신
+        draggedItemIndex = null;
       }
 
       function captureManualQuestion(text, rectData = null) {
@@ -3205,6 +3317,41 @@
         renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
         refreshAutoExtractSummary(); // 상단 대시보드 갱신
         setPdfStatus("문항 캡처 완료 및 자동 선택됨", "success");
+      }
+
+      function ignoreAllCandidatesOnPage() {
+        const pageNum = visualCurrentPage;
+        const pageData = visualTextCache.find((d) => d.page === pageNum);
+        if (!pageData) return;
+
+        const questions = window.currentReviewingQuestions || [];
+        const normalizeForMatch = (str) => (str || "").replace(/\s+/g, "").replace(/[.·,]/g, "").slice(0, 30);
+        const capturedTexts = questions.map((q) => normalizeForMatch(q.rawQuestion || q.title || ""));
+
+        const blocks = groupTextItems(pageData.texts);
+        const candidates = blocks.filter(block => {
+          const cleanStr = normalizeForMatch(block.str);
+          return !capturedTexts.some(ct => ct.includes(cleanStr) || cleanStr.includes(ct));
+        });
+
+        if (candidates.length === 0) {
+          setPdfStatus("현재 페이지에 숨길 후보 영역이 없습니다.", "info");
+          return;
+        }
+
+        if (confirm(`현재 페이지의 ${candidates.length}개 후보 영역을 모두 숨기시겠습니까?`)) {
+          candidates.forEach(block => {
+            ignoredVisualBlocks.push({
+              page: pageNum,
+              x: block.x,
+              y: block.y,
+              str: block.str,
+            });
+          });
+          renderVisualPage(pageNum);
+          renderReviewerList(window.currentReviewingQuestions);
+          setPdfStatus(`${candidates.length}개의 후보 영역을 숨겼습니다.`, "success");
+        }
       }
 
       function ignoreVisualBlock(pageNum, x, y, str) {
@@ -3344,91 +3491,188 @@
         }
       }
 
-      let activeBoxIndex = null;
+      function scrollReviewerListItemIntoView(qId) {
+        const item = document.querySelector(`.item-${CSS.escape(qId)}`);
+        if (item) {
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // 시각적 피드백: 잠시 동안 강조 효과
+          item.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+          setTimeout(() => {
+            item.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+          }, 1500);
+        } else {
+          // 모달 리스트에도 시도
+          const modalItem = document.querySelector(`#revExtractList .item-${CSS.escape(qId)}`);
+          if (modalItem) {
+            modalItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            modalItem.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+            setTimeout(() => {
+              modalItem.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+            }, 1500);
+          }
+        }
+      }
+
+      function setHoverHighlight(qId, isHover) {
+        // 1. PDF 오버레이 박스 강조
+        const boxes = document.querySelectorAll(`.reviewer-item-${CSS.escape(qId)}`);
+        boxes.forEach(box => {
+          if (isHover) {
+            box.classList.add('ring-4', 'ring-blue-400', 'z-50', 'scale-[1.02]');
+          } else {
+            box.classList.remove('ring-4', 'ring-blue-400', 'z-50', 'scale-[1.02]');
+          }
+        });
+
+        // 2. 리스트 아이템 강조
+        const listItems = document.querySelectorAll(`.item-${CSS.escape(qId)}`);
+        listItems.forEach(item => {
+          if (isHover) {
+            item.classList.add('bg-blue-50', 'border-blue-400', 'shadow-md');
+          } else {
+            item.classList.remove('bg-blue-50', 'border-blue-400', 'shadow-md');
+          }
+        });
+      }
+
+      let activeQuestionId = null;
       let activeHandleType = null;
       let boxInitialPos = null;
       let mouseInitialPos = null;
       let dragStart = null;
       let dragRect = null;
 
-      function addResizeHandles(box, index) {
+      function addResizeHandles(box, qId, viewport) {
         const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
         handles.forEach((type) => {
           const h = document.createElement("div");
-          h.className = `absolute w-2 h-2 bg-orange-600 border border-white z-40 handle-${type}`;
+          h.className = `absolute w-2.5 h-2.5 bg-orange-600 border border-white z-40 handle-${type} shadow-sm`;
           h.style.cursor = `${type}-resize`;
 
           // 위치 설정
-          if (type.includes("n")) h.style.top = "-4px";
-          if (type.includes("s")) h.style.bottom = "-4px";
-          if (type.includes("w")) h.style.left = "-4px";
-          if (type.includes("e")) h.style.right = "-4px";
-          if (type === "n" || type === "s") h.style.left = "calc(50% - 4px)";
-          if (type === "w" || type === "e") h.style.top = "calc(50% - 4px)";
+          if (type.includes("n")) h.style.top = "-5px";
+          if (type.includes("s")) h.style.bottom = "-5px";
+          if (type.includes("w")) h.style.left = "-5px";
+          if (type.includes("e")) h.style.right = "-5px";
+          if (type === "n" || type === "s") h.style.left = "calc(50% - 5px)";
+          if (type === "w" || type === "e") h.style.top = "calc(50% - 5px)";
 
           h.onmousedown = (e) => {
             e.stopPropagation();
-            startBoxResize(e, index, type);
+            startBoxResize(e, qId, type, viewport);
           };
           box.appendChild(h);
         });
       }
 
-      function startBoxMove(e, index) {
-        activeBoxIndex = index;
+      let activeViewport = null;
+
+      function startBoxMove(e, qId, viewport) {
+        activeQuestionId = qId;
         activeHandleType = "move";
+        activeViewport = viewport;
         mouseInitialPos = { x: e.clientX, y: e.clientY };
-        const q = window.currentReviewingQuestions[index];
-        boxInitialPos = { ...q.rect };
+        const questions = window.currentReviewingQuestions || [];
+        const q = questions.find(item => item.id === qId);
+        if (!q || !q.rect) return;
+        
+        boxInitialPos = JSON.parse(JSON.stringify(q.rect)); // 확실한 Deep Copy
         document.addEventListener("mousemove", handleMouseInteraction);
         document.addEventListener("mouseup", endMouseInteraction);
       }
 
-      function startBoxResize(e, index, type) {
-        activeBoxIndex = index;
+      function startBoxResize(e, qId, type, viewport) {
+        activeQuestionId = qId;
         activeHandleType = type;
+        activeViewport = viewport;
         mouseInitialPos = { x: e.clientX, y: e.clientY };
-        const q = window.currentReviewingQuestions[index];
-        boxInitialPos = { ...q.rect };
+        const questions = window.currentReviewingQuestions || [];
+        const q = questions.find(item => item.id === qId);
+        if (!q || !q.rect) return;
+
+        boxInitialPos = JSON.parse(JSON.stringify(q.rect)); // 확실한 Deep Copy
         document.addEventListener("mousemove", handleMouseInteraction);
         document.addEventListener("mouseup", endMouseInteraction);
       }
 
       function handleMouseInteraction(e) {
-        if (activeBoxIndex === null) return;
-        const q = window.currentReviewingQuestions[activeBoxIndex];
-        const dx = (e.clientX - mouseInitialPos.x) / 1.5; // PDF Viewport scale 보정
-        const dy = -(e.clientY - mouseInitialPos.y) / 1.5; // PDF 좌표계 inverse 보정 (y는 위로 증가)
+        if (!activeQuestionId || !activeViewport) return;
+        const questions = window.currentReviewingQuestions || [];
+        const q = questions.find(item => item.id === activeQuestionId);
+        if (!q || !q.rect) return;
+        
+        // 마우스 이동 거리 (Screen coordinate)
+        const mouseDx = (e.clientX - mouseInitialPos.x);
+        const mouseDy = (e.clientY - mouseInitialPos.y);
+
+        // PDF 좌표계에서의 변화량 계산 (v21.0: 뷰포트 기반 정밀 계산)
+        // convertToPdfPoint는 [x, y] 인자를 받으며 [pdfX, pdfY] 반환
+        // 원본 좌표를 화면(Viewport)으로 변환했을 때의 거리와 마우스 이동 거리를 결합
+        const [vStartX, vStartY] = activeViewport.convertToViewportPoint(boxInitialPos.x, boxInitialPos.y);
+        const [newPdfX, newPdfY] = activeViewport.convertToPdfPoint(vStartX + mouseDx, vStartY + mouseDy);
+        
+        const pdfDx = newPdfX - boxInitialPos.x;
+        const pdfDy = newPdfY - boxInitialPos.y;
 
         if (activeHandleType === "move") {
-          q.rect.x = boxInitialPos.x + dx;
-          q.rect.y = boxInitialPos.y + dy;
+          // 이동 시 크기(w, h)는 절대 변경하지 않음 (v21.0 안정성 강화)
+          q.rect.x = boxInitialPos.x + pdfDx;
+          q.rect.y = boxInitialPos.y + pdfDy;
+          q.rect.w = boxInitialPos.w;
+          q.rect.h = boxInitialPos.h;
         } else {
-          // Resize 로직 (좌표계 주의: y 증가는 위쪽)
-          if (activeHandleType.includes("n")) q.rect.h = boxInitialPos.h + dy;
-          if (activeHandleType.includes("s")) {
-            q.rect.y = boxInitialPos.y + dy;
-            q.rect.h = boxInitialPos.h - dy;
+          // Resize (PDF 좌표계: y는 위로 증가, (x, y)는 좌측 하단)
+          const MIN_SIZE = 5;
+          
+          if (activeHandleType.includes("n")) {
+            // North: 상단 경계(y+h) 조절 -> y는 고정, h 변화
+            const newH = boxInitialPos.h + pdfDy;
+            if (newH > MIN_SIZE) q.rect.h = newH;
           }
-          if (activeHandleType.includes("e")) q.rect.w = boxInitialPos.w + dx;
+          if (activeHandleType.includes("s")) {
+            // South: 하단 경계(y) 조절 -> y 변화, h는 역방향으로 변화
+            const newY = boxInitialPos.y + pdfDy;
+            const newH = boxInitialPos.h - pdfDy;
+            if (newH > MIN_SIZE) {
+              q.rect.y = newY;
+              q.rect.h = newH;
+            }
+          }
+          if (activeHandleType.includes("e")) {
+            // East: 우측 경계(x+w) 조절 -> x는 고정, w 변화
+            const newW = boxInitialPos.w + pdfDx;
+            if (newW > MIN_SIZE) q.rect.w = newW;
+          }
           if (activeHandleType.includes("w")) {
-            q.rect.x = boxInitialPos.x + dx;
-            q.rect.w = boxInitialPos.w - dx;
+            // West: 좌측 경계(x) 조절 -> x 변화, w는 역방향으로 변화
+            const newX = boxInitialPos.x + pdfDx;
+            const newW = boxInitialPos.w - pdfDx;
+            if (newW > MIN_SIZE) {
+              q.rect.x = newX;
+              q.rect.w = newW;
+            }
           }
         }
-        // 전체 재렌더링 대신 오버레이 박스만 갱신 (성능 및 충돌 방지)
-        updateVisualOverlayBoxes(visualCurrentPage, currentVisualViewport);
+        // 오버레이 박스 즉시 갱신
+        updateVisualOverlayBoxes(visualCurrentPage, activeViewport);
       }
 
       function endMouseInteraction() {
-        if (activeBoxIndex !== null) {
+        if (activeQuestionId !== null) {
           const data = getCurrentAnswerData();
-          data.questions[activeBoxIndex].rect =
-            window.currentReviewingQuestions[activeBoxIndex].rect;
-          syncJsonAndRender(data, "영역 정보가 업데이트되었습니다.", true);
+          const qIdxInDb = data.questions.findIndex(dbQ => dbQ.id === activeQuestionId);
+          const qInReview = window.currentReviewingQuestions.find(rQ => rQ.id === activeQuestionId);
+
+          if (qIdxInDb !== -1 && qInReview) {
+            data.questions[qIdxInDb].rect = JSON.parse(JSON.stringify(qInReview.rect));
+            syncJsonAndRender(data, "영역 정보가 동기화되었습니다.", true);
+            // v21.0: 리스트 UI도 즉시 갱신하여 인덱스/좌표 정합성 확보
+            renderReviewerList(window.currentReviewingQuestions);
+          }
         }
-        activeBoxIndex = null;
+        activeQuestionId = null;
         activeHandleType = null;
+        activeViewport = null;
         document.removeEventListener("mousemove", handleMouseInteraction);
         document.removeEventListener("mouseup", endMouseInteraction);
       }
@@ -3468,19 +3712,16 @@
           const minY = Math.min(selY, endY);
           const maxY = Math.max(selY, endY);
 
-          // 뷰포트 -> PDF 좌표로 역변환
-          const [p1x, p1y, p2x, p2y] = viewport.convertToPdfPoint(
-            minX,
-            minY,
-            maxX,
-            maxY,
-          );
+          // 뷰포트 -> PDF 좌표로 역변환 (v21.0: 인자 오류 수정)
+          const p1 = viewport.convertToPdfPoint(minX, minY);
+          const p2 = viewport.convertToPdfPoint(maxX, maxY);
+          
           const rect = {
             page: pageNum,
-            x: Math.min(p1x, p2x),
-            y: Math.min(p1y, p2y),
-            w: Math.abs(p1x - p2x),
-            h: Math.abs(p1y - p2y),
+            x: Math.min(p1[0], p2[0]),
+            y: Math.min(p1[1], p2[1]),
+            w: Math.abs(p1[0] - p2[0]),
+            h: Math.abs(p1[1] - p2[1]),
           };
 
           // 드래그 영역 내의 텍스트 찾기
