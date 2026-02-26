@@ -1648,12 +1648,17 @@
               />
               <div class="mt-2 flex items-center gap-2">
                 <label class="text-xs text-slate-600">ASR 모드</label>
-                <select id="asrModeSelect" class="text-xs p-1 rounded border border-slate-200">
+                <select
+                  id="asrModeSelect"
+                  class="text-xs p-1 rounded border border-slate-200"
+                >
                   <option value="auto" selected>자동(백엔드 전사 시도)</option>
                   <option value="disabled">전사 비활성화</option>
                   <option value="mock">모의 전사(로컬)</option>
                 </select>
-                <span class="text-[10px] text-slate-400">오디오/동영상 파일 전사 방식</span>
+                <span class="text-[10px] text-slate-400"
+                  >오디오/동영상 파일 전사 방식</span
+                >
               </div>
               <textarea
                 id="attachmentFocus"
@@ -1676,7 +1681,10 @@
                   웹사이트 분석 실행
                 </button>
               </div>
-              <div id="attachmentFilesResult" class="mt-3 text-sm text-slate-600"></div>
+              <div
+                id="attachmentFilesResult"
+                class="mt-3 text-sm text-slate-600"
+              ></div>
               <input
                 id="attachmentWebsiteUrl"
                 type="text"
@@ -2461,36 +2469,50 @@
         };
       }
 
-      function groupTextItems(items, thresholdY = 12) {
+      function groupTextItems(items, thresholdY = 8) {
         if (!items || items.length === 0) return [];
 
-        // Y좌표 기준 정렬 (PDF는 하단이 0일 수 있으므로 주의, 여기서는 위에서 아래로 정렬 시도)
-        // PDF.js 좌표계: y는 아래에서 위로 증가하는 경우가 많음.
-        const sorted = [...items].sort((a, b) => b.y - a.y);
+        // Y좌표 기준 내림차순 정렬 (위에서 아래로), 같은 Y면 X좌표 오름차순
+        const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
 
         const groups = [];
         let currentGroup = null;
 
         sorted.forEach((item) => {
-          // 텍스트 높이 정규화 (PDF.js의 height가 실제 문자보다 큰 경우 보정)
-          const adjustedH = (item.h || 10) * 0.85; 
+          // 텍스트 높이 보정 (v18.5)
+          const adjustedH = (item.h || 10) * 0.9;
+          // 문항 시작 패턴 (1., Q1, (1) 등) 감지
+          const isQuestionStart = /^\s*(\d+\s*[.]|Q\d+|[(]\d+[)])/.test(
+            item.str,
+          );
 
           if (!currentGroup) {
             currentGroup = {
               texts: [item],
               minX: item.x,
-              maxX: item.x + (item.w || 20),
+              maxX: item.x + (item.w || 0),
               minY: item.y,
               maxY: item.y + adjustedH,
             };
           } else {
             const verticalGap = Math.abs(currentGroup.minY - item.y);
-            if (verticalGap < thresholdY * 2) {
+            // X축 변화량 감지 (들여쓰기나 중앙 정렬 변화 대응)
+            const horizontalShift = Math.abs(currentGroup.minX - item.x);
+
+            // 1. 문항 시작
+            // 2. 줄 간격이 임계값보다 큼
+            // 3. X축 위치가 크게 변함 (다른 문단이나 컬럼)
+            const shouldSplit =
+              isQuestionStart ||
+              verticalGap > thresholdY * 0.9 ||
+              (horizontalShift > 50 && verticalGap > 2);
+
+            if (!shouldSplit) {
               currentGroup.texts.push(item);
               currentGroup.minX = Math.min(currentGroup.minX, item.x);
               currentGroup.maxX = Math.max(
                 currentGroup.maxX,
-                item.x + (item.w || 20),
+                item.x + (item.w || 0),
               );
               currentGroup.minY = Math.min(currentGroup.minY, item.y);
               currentGroup.maxY = Math.max(
@@ -2502,7 +2524,7 @@
               currentGroup = {
                 texts: [item],
                 minX: item.x,
-                maxX: item.x + (item.w || 20),
+                maxX: item.x + (item.w || 0),
                 minY: item.y,
                 maxY: item.y + adjustedH,
               };
@@ -2522,8 +2544,10 @@
             y: g.minY,
             w: g.maxX - g.minX,
             h: g.maxY - g.minY,
-          }, // 좌표 저장
-          isCandidate: /^\s*\d+\s*[.]/.test(g.texts[0].str), // 숫자로 시작하면 문항 후보
+          },
+          isCandidate:
+            /^\s*(\d+\s*[.]|Q\d+|[(]\d+[)])/.test(g.texts[0].str) ||
+            g.texts.map((t) => t.str).join("").length > 50,
         }));
       }
 
@@ -2678,26 +2702,28 @@
           }`;
           rect.dataset.qId = q.id;
 
-          const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
+          const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
             q.rect.x,
             q.rect.y,
             q.rect.x + q.rect.w,
             q.rect.y + q.rect.h,
           ]);
 
-          const left = Math.min(vx, vx + vw);
-          const top = Math.min(vy, vy + vh);
-          const width = Math.abs(vw);
-          const height = Math.abs(vh);
+          // Bounding Box 좌표 및 크기 정밀 계산 (v18.4)
+          const vx = Math.min(vx1, vx2);
+          const vy = Math.min(vy1, vy2);
+          const vw = Math.abs(vx2 - vx1);
+          const vh = Math.abs(vy2 - vy1);
 
-          rect.style.left = `${left}px`;
-          rect.style.top = `${top}px`;
-          rect.style.width = `${width}px`;
-          rect.style.height = `${height}px`;
+          rect.style.left = `${vx}px`;
+          rect.style.top = `${vy}px`;
+          rect.style.width = `${vw}px`;
+          rect.style.height = `${vh}px`;
 
           // ──── ID 라벨 표시 (v22.0 추가) ────
           const label = document.createElement("div");
-          label.className = "absolute -bottom-5 left-0 px-1 py-0.5 bg-slate-800 text-white text-[9px] font-bold rounded shadow-sm whitespace-nowrap z-40 pointer-events-none opacity-80 group-box-hover:opacity-100";
+          label.className =
+            "absolute -bottom-5 left-0 px-1 py-0.5 bg-slate-800 text-white text-[9px] font-bold rounded shadow-sm whitespace-nowrap z-40 pointer-events-none opacity-80 group-box-hover:opacity-100";
           label.textContent = q.id;
           rect.appendChild(label);
 
@@ -2763,16 +2789,21 @@
             rect.className =
               "absolute rounded border border-blue-400/40 bg-blue-400/10 hover:bg-blue-400/25 cursor-copy transition-all z-10 group-candidate group";
 
-            const [vx, vy, vw, vh] = viewport.convertToViewportRectangle([
+            const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
               block.x,
               block.y,
               block.x + block.w,
               block.y + block.h,
             ]);
-            rect.style.left = `${Math.min(vx, vx + vw)}px`;
-            rect.style.top = `${Math.min(vy, vy + vh)}px`;
-            rect.style.width = `${Math.max(10, Math.abs(vw)) + 2}px`;
-            rect.style.height = `${Math.max(10, Math.abs(vh)) + 2}px`;
+            const vx = Math.min(vx1, vx2);
+            const vy = Math.min(vy1, vy2);
+            const vw = Math.abs(vx2 - vx1);
+            const vh = Math.abs(vy2 - vy1);
+
+            rect.style.left = `${vx}px`;
+            rect.style.top = `${vy}px`;
+            rect.style.width = `${Math.max(10, vw) + 2}px`;
+            rect.style.height = `${Math.max(10, vh) + 2}px`;
 
             // 후보 박스에도 호버 시 안내용 가이드 표시
             rect.title = "클릭하여 문항으로 등록";
@@ -2901,16 +2932,21 @@
             const rect = document.createElement("div");
             rect.className =
               "absolute bg-blue-400/10 border border-blue-400/20 rounded-sm hover:bg-blue-400/30 transition-colors cursor-crosshair";
-            const [x, y, w, h] = viewport.convertToViewportRectangle([
+            const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
               block.x,
               block.y,
               block.x + block.w,
               block.y + block.h,
             ]);
-            rect.style.left = `${Math.min(x, x + w) - 1}px`;
-            rect.style.top = `${Math.min(y, y + h) - 1}px`;
-            rect.style.width = `${Math.max(5, Math.abs(w)) + 2}px`;
-            rect.style.height = `${Math.max(5, Math.abs(h)) + 2}px`;
+            const vx = Math.min(vx1, vx2);
+            const vy = Math.min(vy1, vy2);
+            const vw = Math.abs(vx2 - vx1);
+            const vh = Math.abs(vy2 - vy1);
+
+            rect.style.left = `${vx - 1}px`;
+            rect.style.top = `${vy - 1}px`;
+            rect.style.width = `${Math.max(5, vw) + 2}px`;
+            rect.style.height = `${Math.max(5, vh) + 2}px`;
 
             rect.title = "클릭하여 문항으로 추가: " + block.str.slice(0, 50);
             rect.onclick = (e) => {
@@ -3138,7 +3174,7 @@
         }
       }
 
-       function deleteCapturedQuestion(index) {
+      function deleteCapturedQuestion(index) {
         const questions = window.currentReviewingQuestions || [];
         if (index < 0 || index >= questions.length) return;
 
@@ -3147,9 +3183,14 @@
 
         let deleteArea = false;
         if (hasRect) {
-          deleteArea = confirm(`"${removed.title}" 문항을 리스트에서 삭제합니다.\n\n해당 인식 영역도 다시 나타나지 않도록 함께 제거하시겠습니까?`);
+          deleteArea = confirm(
+            `"${removed.title}" 문항을 리스트에서 삭제합니다.\n\n해당 인식 영역도 다시 나타나지 않도록 함께 제거하시겠습니까?`,
+          );
         } else {
-          if (!confirm(`"${removed.title}" 문항을 리스트에서 삭제하시겠습니까?`)) return;
+          if (
+            !confirm(`"${removed.title}" 문항을 리스트에서 삭제하시겠습니까?`)
+          )
+            return;
         }
 
         // 실제 리스트에서 제거
@@ -3160,7 +3201,7 @@
             page: removed.rect.page,
             x: removed.rect.x,
             y: removed.rect.y,
-            str: removed.rawQuestion || removed.title
+            str: removed.rawQuestion || removed.title,
           });
         }
 
@@ -3175,6 +3216,7 @@
 
         renderReviewerList([...questions]);
         renderVisualPage(visualCurrentPage);
+        renderReviewerPdf(visualCurrentPage); // v18.4: 사이드 리뷰어 오버레이 동기화
         refreshAutoExtractSummary();
       }
 
@@ -3205,12 +3247,14 @@
           const data = getCurrentAnswerData();
           // window.currentReviewingQuestions와 data.questions 간의 순서 동기화
           // id를 기준으로 기존 맵 유지하면서 순서만 재배열
-          const newQuestions = questions.map(q => {
-            return data.questions.find(dbQ => dbQ.id === q.id) || q;
+          const newQuestions = questions.map((q) => {
+            return data.questions.find((dbQ) => dbQ.id === q.id) || q;
           });
-          
+
           // 데이터에 없던 항목이 있을 경우(그럴 가능성은 낮지만) 대비하여 필터링된 누락분 추가
-          const missing = data.questions.filter(dbQ => !questions.some(q => q.id === dbQ.id));
+          const missing = data.questions.filter(
+            (dbQ) => !questions.some((q) => q.id === dbQ.id),
+          );
           data.questions = [...newQuestions, ...missing];
 
           syncJsonAndRender(data, "문항 순서가 변경되었습니다.", true);
@@ -3220,6 +3264,7 @@
 
         renderReviewerList(questions);
         renderVisualPage(visualCurrentPage); // 인덱스 변경에 따른 하이라이트 갱신
+        renderReviewerPdf(visualCurrentPage); // v18.4: 사이드 리뷰어 오버레이 동기화
         draggedItemIndex = null;
       }
 
@@ -3256,6 +3301,7 @@
 
             renderReviewerList([...questions]);
             renderVisualPage(visualCurrentPage);
+            renderReviewerPdf(visualCurrentPage); // v18.4: 사이드 리뷰어 오버레이 동기화
             setPdfStatus("문항 좌표 연결 완료", "success");
             return;
           }
@@ -3315,6 +3361,7 @@
         }
 
         renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
+        renderReviewerPdf(visualCurrentPage); // v18.4: 사이드 리뷰어 오버레이 동기화
         refreshAutoExtractSummary(); // 상단 대시보드 갱신
         setPdfStatus("문항 캡처 완료 및 자동 선택됨", "success");
       }
@@ -3325,13 +3372,18 @@
         if (!pageData) return;
 
         const questions = window.currentReviewingQuestions || [];
-        const normalizeForMatch = (str) => (str || "").replace(/\s+/g, "").replace(/[.·,]/g, "").slice(0, 30);
-        const capturedTexts = questions.map((q) => normalizeForMatch(q.rawQuestion || q.title || ""));
+        const normalizeForMatch = (str) =>
+          (str || "").replace(/\s+/g, "").replace(/[.·,]/g, "").slice(0, 30);
+        const capturedTexts = questions.map((q) =>
+          normalizeForMatch(q.rawQuestion || q.title || ""),
+        );
 
         const blocks = groupTextItems(pageData.texts);
-        const candidates = blocks.filter(block => {
+        const candidates = blocks.filter((block) => {
           const cleanStr = normalizeForMatch(block.str);
-          return !capturedTexts.some(ct => ct.includes(cleanStr) || cleanStr.includes(ct));
+          return !capturedTexts.some(
+            (ct) => ct.includes(cleanStr) || cleanStr.includes(ct),
+          );
         });
 
         if (candidates.length === 0) {
@@ -3339,8 +3391,12 @@
           return;
         }
 
-        if (confirm(`현재 페이지의 ${candidates.length}개 후보 영역을 모두 숨기시겠습니까?`)) {
-          candidates.forEach(block => {
+        if (
+          confirm(
+            `현재 페이지의 ${candidates.length}개 후보 영역을 모두 숨기시겠습니까?`,
+          )
+        ) {
+          candidates.forEach((block) => {
             ignoredVisualBlocks.push({
               page: pageNum,
               x: block.x,
@@ -3350,7 +3406,10 @@
           });
           renderVisualPage(pageNum);
           renderReviewerList(window.currentReviewingQuestions);
-          setPdfStatus(`${candidates.length}개의 후보 영역을 숨겼습니다.`, "success");
+          setPdfStatus(
+            `${candidates.length}개의 후보 영역을 숨겼습니다.`,
+            "success",
+          );
         }
       }
 
@@ -3494,20 +3553,26 @@
       function scrollReviewerListItemIntoView(qId) {
         const item = document.querySelector(`.item-${CSS.escape(qId)}`);
         if (item) {
-          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          item.scrollIntoView({ behavior: "smooth", block: "center" });
           // 시각적 피드백: 잠시 동안 강조 효과
-          item.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+          item.classList.add("ring-2", "ring-blue-500", "bg-blue-50");
           setTimeout(() => {
-            item.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+            item.classList.remove("ring-2", "ring-blue-500", "bg-blue-50");
           }, 1500);
         } else {
           // 모달 리스트에도 시도
-          const modalItem = document.querySelector(`#revExtractList .item-${CSS.escape(qId)}`);
+          const modalItem = document.querySelector(
+            `#revExtractList .item-${CSS.escape(qId)}`,
+          );
           if (modalItem) {
-            modalItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            modalItem.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+            modalItem.scrollIntoView({ behavior: "smooth", block: "center" });
+            modalItem.classList.add("ring-2", "ring-blue-500", "bg-blue-50");
             setTimeout(() => {
-              modalItem.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+              modalItem.classList.remove(
+                "ring-2",
+                "ring-blue-500",
+                "bg-blue-50",
+              );
             }, 1500);
           }
         }
@@ -3515,22 +3580,34 @@
 
       function setHoverHighlight(qId, isHover) {
         // 1. PDF 오버레이 박스 강조
-        const boxes = document.querySelectorAll(`.reviewer-item-${CSS.escape(qId)}`);
-        boxes.forEach(box => {
+        const boxes = document.querySelectorAll(
+          `.reviewer-item-${CSS.escape(qId)}`,
+        );
+        boxes.forEach((box) => {
           if (isHover) {
-            box.classList.add('ring-4', 'ring-blue-400', 'z-50', 'scale-[1.02]');
+            box.classList.add(
+              "ring-4",
+              "ring-blue-400",
+              "z-50",
+              "scale-[1.02]",
+            );
           } else {
-            box.classList.remove('ring-4', 'ring-blue-400', 'z-50', 'scale-[1.02]');
+            box.classList.remove(
+              "ring-4",
+              "ring-blue-400",
+              "z-50",
+              "scale-[1.02]",
+            );
           }
         });
 
         // 2. 리스트 아이템 강조
         const listItems = document.querySelectorAll(`.item-${CSS.escape(qId)}`);
-        listItems.forEach(item => {
+        listItems.forEach((item) => {
           if (isHover) {
-            item.classList.add('bg-blue-50', 'border-blue-400', 'shadow-md');
+            item.classList.add("bg-blue-50", "border-blue-400", "shadow-md");
           } else {
-            item.classList.remove('bg-blue-50', 'border-blue-400', 'shadow-md');
+            item.classList.remove("bg-blue-50", "border-blue-400", "shadow-md");
           }
         });
       }
@@ -3573,9 +3650,9 @@
         activeViewport = viewport;
         mouseInitialPos = { x: e.clientX, y: e.clientY };
         const questions = window.currentReviewingQuestions || [];
-        const q = questions.find(item => item.id === qId);
+        const q = questions.find((item) => item.id === qId);
         if (!q || !q.rect) return;
-        
+
         boxInitialPos = JSON.parse(JSON.stringify(q.rect)); // 확실한 Deep Copy
         document.addEventListener("mousemove", handleMouseInteraction);
         document.addEventListener("mouseup", endMouseInteraction);
@@ -3587,7 +3664,7 @@
         activeViewport = viewport;
         mouseInitialPos = { x: e.clientX, y: e.clientY };
         const questions = window.currentReviewingQuestions || [];
-        const q = questions.find(item => item.id === qId);
+        const q = questions.find((item) => item.id === qId);
         if (!q || !q.rect) return;
 
         boxInitialPos = JSON.parse(JSON.stringify(q.rect)); // 확실한 Deep Copy
@@ -3598,19 +3675,25 @@
       function handleMouseInteraction(e) {
         if (!activeQuestionId || !activeViewport) return;
         const questions = window.currentReviewingQuestions || [];
-        const q = questions.find(item => item.id === activeQuestionId);
+        const q = questions.find((item) => item.id === activeQuestionId);
         if (!q || !q.rect) return;
-        
+
         // 마우스 이동 거리 (Screen coordinate)
-        const mouseDx = (e.clientX - mouseInitialPos.x);
-        const mouseDy = (e.clientY - mouseInitialPos.y);
+        const mouseDx = e.clientX - mouseInitialPos.x;
+        const mouseDy = e.clientY - mouseInitialPos.y;
 
         // PDF 좌표계에서의 변화량 계산 (v21.0: 뷰포트 기반 정밀 계산)
         // convertToPdfPoint는 [x, y] 인자를 받으며 [pdfX, pdfY] 반환
         // 원본 좌표를 화면(Viewport)으로 변환했을 때의 거리와 마우스 이동 거리를 결합
-        const [vStartX, vStartY] = activeViewport.convertToViewportPoint(boxInitialPos.x, boxInitialPos.y);
-        const [newPdfX, newPdfY] = activeViewport.convertToPdfPoint(vStartX + mouseDx, vStartY + mouseDy);
-        
+        const [vStartX, vStartY] = activeViewport.convertToViewportPoint(
+          boxInitialPos.x,
+          boxInitialPos.y,
+        );
+        const [newPdfX, newPdfY] = activeViewport.convertToPdfPoint(
+          vStartX + mouseDx,
+          vStartY + mouseDy,
+        );
+
         const pdfDx = newPdfX - boxInitialPos.x;
         const pdfDy = newPdfY - boxInitialPos.y;
 
@@ -3623,7 +3706,7 @@
         } else {
           // Resize (PDF 좌표계: y는 위로 증가, (x, y)는 좌측 하단)
           const MIN_SIZE = 5;
-          
+
           if (activeHandleType.includes("n")) {
             // North: 상단 경계(y+h) 조절 -> y는 고정, h 변화
             const newH = boxInitialPos.h + pdfDy;
@@ -3660,11 +3743,17 @@
       function endMouseInteraction() {
         if (activeQuestionId !== null) {
           const data = getCurrentAnswerData();
-          const qIdxInDb = data.questions.findIndex(dbQ => dbQ.id === activeQuestionId);
-          const qInReview = window.currentReviewingQuestions.find(rQ => rQ.id === activeQuestionId);
+          const qIdxInDb = data.questions.findIndex(
+            (dbQ) => dbQ.id === activeQuestionId,
+          );
+          const qInReview = window.currentReviewingQuestions.find(
+            (rQ) => rQ.id === activeQuestionId,
+          );
 
           if (qIdxInDb !== -1 && qInReview) {
-            data.questions[qIdxInDb].rect = JSON.parse(JSON.stringify(qInReview.rect));
+            data.questions[qIdxInDb].rect = JSON.parse(
+              JSON.stringify(qInReview.rect),
+            );
             syncJsonAndRender(data, "영역 정보가 동기화되었습니다.", true);
             // v21.0: 리스트 UI도 즉시 갱신하여 인덱스/좌표 정합성 확보
             renderReviewerList(window.currentReviewingQuestions);
@@ -3715,7 +3804,7 @@
           // 뷰포트 -> PDF 좌표로 역변환 (v21.0: 인자 오류 수정)
           const p1 = viewport.convertToPdfPoint(minX, minY);
           const p2 = viewport.convertToPdfPoint(maxX, maxY);
-          
+
           const rect = {
             page: pageNum,
             x: Math.min(p1[0], p2[0]),
@@ -3832,30 +3921,43 @@
           try {
             let textExcerpt;
             // For audio/video try backend transcription endpoint first (mock)
-            if (file.type && (file.type.startsWith("video/") || file.type.startsWith("audio/"))) {
-              const asrMode = document.getElementById('asrModeSelect')?.value || 'auto';
-              if (asrMode === 'disabled') {
+            if (
+              file.type &&
+              (file.type.startsWith("video/") || file.type.startsWith("audio/"))
+            ) {
+              const asrMode =
+                document.getElementById("asrModeSelect")?.value || "auto";
+              if (asrMode === "disabled") {
                 textExcerpt = await readAttachmentTextExcerpt(file);
               } else {
                 // Try to upload the actual file to the backend transcribe endpoint (multipart/form-data)
                 try {
                   const fd = new FormData();
-                  fd.append('file', file, file.name);
+                  fd.append("file", file, file.name);
                   const tResp = await fetch(`${baseUrl}/api/transcribe`, {
-                    method: 'POST',
+                    method: "POST",
                     body: fd,
                   });
 
                   if (tResp.ok) {
                     const tj = await tResp.json();
-                    textExcerpt = tj.transcript || tj.text || `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
+                    textExcerpt =
+                      tj.transcript ||
+                      tj.text ||
+                      `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`;
                   } else {
                     // Fallback to client-side metadata if backend fails
-                    textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
+                    textExcerpt = await readAttachmentTextExcerpt(file).catch(
+                      () =>
+                        `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`,
+                    );
                   }
                 } catch (e) {
                   // Network/backend failure -> fallback
-                  textExcerpt = await readAttachmentTextExcerpt(file).catch(() => `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`);
+                  textExcerpt = await readAttachmentTextExcerpt(file).catch(
+                    () =>
+                      `동영상 파일 메타정보: ${file.name}, ${Math.round(file.size / (1024 * 1024))}MB`,
+                  );
                 }
               }
             } else {
