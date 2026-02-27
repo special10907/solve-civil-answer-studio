@@ -14,6 +14,8 @@ logs/
 
 # Dependencies
 backend/node_modules/
+server/node_modules/
+node_modules/
 
 # OS / editor artifacts
 Thumbs.db

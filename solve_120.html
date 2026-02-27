@@ -1109,19 +1109,19 @@
                 </button>
                 <button
                   type="button"
-                  id="runPipelineBtn"
-                  onclick="runAutoPipeline()"
-                  class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800"
-                >
-                  자동 배치 실행
-                </button>
-                <button
-                  type="button"
                   id="openPdfVisualBtn"
                   onclick="openPdfVisualModal()"
                   class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
                 >
                   인식 영역 확인 (PDF)
+                </button>
+                <button
+                  type="button"
+                  id="runPipelineBtn"
+                  onclick="runAutoPipeline()"
+                  class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800"
+                >
+                  자동 배치 실행
                 </button>
               </div>
               <div
@@ -2202,6 +2202,7 @@
       let currentVisualViewport = null; // 오버레이 전용 갱신용
       let currentReviewerViewport = null;
       let ignoredVisualBlocks = []; // 사용자가 직접 삭제(무시)한 PDF 자동인식 영역
+      let isAddAreaMode = false;
       window.pendingAssignIndex = null; // 좌표 할당 대기 중인 문항 인덱스 (v18.4)
       let hideAllVisualCandidates = false; // 모든 자동인식 후보 영역 숨김 여부 (v18.1)
       window.currentHighlightedBoxIndex = -1;
@@ -2459,12 +2460,14 @@
           if (visualCurrentPage > 1) {
             visualCurrentPage--;
             renderVisualPage(visualCurrentPage);
+            renderReviewerList(window.currentReviewingQuestions);
           }
         };
         document.getElementById("nextPdfPageBtn").onclick = () => {
           if (visualCurrentPage < visualPdfDoc.numPages) {
             visualCurrentPage++;
             renderVisualPage(visualCurrentPage);
+            renderReviewerList(window.currentReviewingQuestions);
           }
         };
       }
@@ -2691,14 +2694,17 @@
           if (!q.rect || q.rect.page !== pageNum) return;
 
           const rect = document.createElement("div");
+          const hasHighlight = window.currentHighlightedBoxIndex !== null;
           const isSelected =
             window.currentHighlightedBoxIndex === idx &&
             window.currentHighlightedBoxPage === pageNum;
 
           rect.className = `absolute rounded border-2 transition-all cursor-move group-box reviewer-item-${q.id} ${
             isSelected
-              ? "bg-orange-400/40 border-orange-600 z-30"
-              : "bg-emerald-400/30 border-emerald-500/60 z-20"
+              ? "bg-orange-400/50 border-orange-600 z-40 ring-4 ring-orange-400 shadow-xl scale-[1.02]"
+              : hasHighlight
+                ? "bg-emerald-400/10 border-emerald-500/30 z-10 opacity-40"
+                : "bg-emerald-400/30 border-emerald-500/60 z-20"
           }`;
           rect.dataset.qId = q.id;
 
@@ -2735,9 +2741,7 @@
           delBtn.title = "이 영역 및 문항 삭제";
           delBtn.onclick = (e) => {
             e.stopPropagation();
-            if (confirm("이 영역과 연동된 문항을 삭제하시겠습니까?")) {
-              deleteCapturedQuestion(idx);
-            }
+            deleteCapturedQuestion(idx);
           };
           rect.appendChild(delBtn);
 
@@ -2777,8 +2781,9 @@
               const isIgnored = ignoredVisualBlocks.some(
                 (ib) =>
                   ib.page === pageNum &&
-                  Math.abs(ib.x - block.x) < 2 &&
-                  Math.abs(ib.y - block.y) < 2,
+                  ((Math.abs(ib.x - block.x) < 5 &&
+                    Math.abs(ib.y - block.y) < 5) ||
+                    normalizeForMatch(ib.str) === cleanStr),
               );
               return !isIgnored;
             },
@@ -2836,6 +2841,33 @@
           });
         }
 
+        // ──── 임시 확정 대기 중인 수동 캡처 영역 (녹색 박스) 렌더링 ────
+        if (
+          window.pendingManualRect &&
+          window.pendingManualRect.page === pageNum
+        ) {
+          const p = window.pendingManualRect;
+          const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
+            p.x,
+            p.y,
+            p.x + p.w,
+            p.y + p.h,
+          ]);
+          const vx = Math.min(vx1, vx2),
+            vy = Math.min(vy1, vy2);
+          const vw = Math.abs(vx2 - vx1),
+            vh = Math.abs(vy2 - vy1);
+
+          const pendingRect = document.createElement("div");
+          pendingRect.className =
+            "absolute border-[3px] border-green-500 bg-green-500/20 z-40 pointer-events-none rounded";
+          pendingRect.style.left = `${vx}px`;
+          pendingRect.style.top = `${vy}px`;
+          pendingRect.style.width = `${vw}px`;
+          pendingRect.style.height = `${vh}px`;
+          overlay.appendChild(pendingRect);
+        }
+
         // ──── 드래그 선택 라이브러리 (Drag-to-Capture) ────
         initDragSelection(overlay, viewport, pageNum);
       }
@@ -2878,6 +2910,13 @@
 
           // 3. 오버레이 (하이라이트) 처리
           updateReviewerOverlayBoxes(pageNum, viewport);
+
+          // 4. 드래그 캡처 기능 활성화 (사이드 뷰어 누락 픽스)
+          initDragSelection(
+            document.getElementById("revPdfOverlay"),
+            viewport,
+            pageNum,
+          );
 
           document.getElementById("revPageLabel").textContent =
             `${pageNum} / ${visualPdfDoc.numPages}`;
@@ -2922,8 +2961,9 @@
             const isIgnored = ignoredVisualBlocks.some(
               (ib) =>
                 ib.page === pageNum &&
-                Math.abs(ib.x - block.x) < 2 &&
-                Math.abs(ib.y - block.y) < 2,
+                ((Math.abs(ib.x - block.x) < 5 &&
+                  Math.abs(ib.y - block.y) < 5) ||
+                  normalize(ib.str) === cleanStr),
             );
             return !isIgnored;
           });
@@ -2962,6 +3002,33 @@
 
             overlay.appendChild(rect);
           });
+
+          // ──── 임시 확정 대기 중인 수동 캡처 영역 (녹색 박스) 렌더링 ────
+          if (
+            window.pendingManualRect &&
+            window.pendingManualRect.page === pageNum
+          ) {
+            const p = window.pendingManualRect;
+            const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
+              p.x,
+              p.y,
+              p.x + p.w,
+              p.y + p.h,
+            ]);
+            const vx = Math.min(vx1, vx2),
+              vy = Math.min(vy1, vy2);
+            const vw = Math.abs(vx2 - vx1),
+              vh = Math.abs(vy2 - vy1);
+
+            const pendingRect = document.createElement("div");
+            pendingRect.className =
+              "absolute border-[3px] border-green-500 bg-green-500/20 z-40 pointer-events-none rounded";
+            pendingRect.style.left = `${vx}px`;
+            pendingRect.style.top = `${vy}px`;
+            pendingRect.style.width = `${vw}px`;
+            pendingRect.style.height = `${vh}px`;
+            overlay.appendChild(pendingRect);
+          }
         }
       }
 
@@ -3023,76 +3090,89 @@
         const qs = window.currentReviewingQuestions;
         const isPending = (idx) => window.pendingAssignIndex === idx;
 
+        const isModalOpen = !document
+          .getElementById("pdfVisualModal")
+          .classList.contains("hidden");
+        const targetPage = isModalOpen ? visualCurrentPage : revCurrentPage;
+
         if (!qs.length) {
           container.innerHTML = `<p class="text-xs text-slate-400 text-center mt-10">인식된 문항이 없습니다.<br>PDF의 파란 박스를 클릭하여 직접 추가하세요.</p>`;
           if (countLabel) countLabel.textContent = "표시할 문항 0개";
           if (modalCount)
             modalCount.textContent = `현재 선택된 문항: 0개 (인식영역: ${displayBlocksCount})`;
         } else {
-          if (countLabel) countLabel.textContent = `표시 중: ${qs.length}개`;
+          // Calculate how many belong to current page
+          const pageCount = qs.filter(
+            (q) => q.rect && q.rect.page === targetPage,
+          ).length;
+          if (countLabel) countLabel.textContent = `표시 중: ${pageCount}개`;
           if (modalCount)
-            modalCount.textContent = `현재 선택된 문항: ${qs.length}개 (인식영역: ${displayBlocksCount})`;
+            modalCount.textContent = `현재 페이지 문항: ${pageCount}개 (전체: ${qs.length}개 / 인식후보: ${displayBlocksCount})`;
         }
 
         const listHtml = window.currentReviewingQuestions
           .map((q, i) => {
+            if (q.rect && q.rect.page !== targetPage) return "";
             const pending = isPending(i);
             return `
-          <div 
-            draggable="true"
-            data-q-id="${q.id}"
-            onmouseenter="setHoverHighlight('${q.id}', true)"
-            onmouseleave="setHoverHighlight('${q.id}', false)"
-            ondragstart="handleDragStart(event, ${i})"
-            ondragover="handleDragOver(event)"
-            ondrop="handleDrop(event, ${i})"
-            onclick="highlightQuestionOnPdf(${i})"
-            ondblclick="highlightQuestionOnPdf(${i})"
-            class="p-3 border rounded-lg bg-white transition-all cursor-pointer group mb-2 relative reviewer-list-item item-${q.id} ${
-              pending
-                ? "border-blue-500 ring-2 ring-blue-200 animate-pulse shadow-md"
-                : "border-slate-200 hover:border-blue-400 hover:shadow-md cursor-grab active:cursor-grabbing"
-            }"
-          >
-            <div class="pr-8">
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">${q.examRound || "미지정"}</span>
-                <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
-              </div>
-              <h5 class="text-sm font-bold text-slate-800 line-clamp-2 mb-1 group-hover:text-blue-700">${escapeHtml(q.title)}</h5>
-              ${
-                pending
-                  ? '<div class="text-[9px] text-blue-600 font-bold mt-1 animate-bounce"><i class="fas fa-crosshairs mr-1"></i>PDF에서 영역을 클릭하세요</div>'
-                  : ""
-              }
-            </div>
-            
-            <!-- 할당 취소 또는 삭제 버튼 -->
-            <div class="absolute top-2 right-2 flex gap-1">
-              ${
-                pending
-                  ? `
-                <button 
-                  onclick="event.stopPropagation(); window.pendingAssignIndex = null; renderReviewerList(window.currentReviewingQuestions);"
-                  class="w-6 h-6 flex items-center justify-center text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
-                  title="할당 취소"
+                <div
+                  draggable="true"
+                  data-q-id="${q.id}"
+                  onmouseenter="setHoverHighlight('${q.id}', true)"
+                  onmouseleave="setHoverHighlight('${q.id}', false)"
+                  ondragstart="handleDragStart(event, ${i})"
+                  ondragover="handleDragOver(event)"
+                  ondrop="handleDrop(event, ${i})"
+                  onclick="highlightQuestionOnPdf(${i})"
+                  ondblclick="highlightQuestionOnPdf(${i})"
+                  class="p-3 border rounded-lg transition-all cursor-pointer group mb-2 relative reviewer-list-item item-${q.id} ${
+                    pending
+                      ? "bg-white border-blue-500 ring-2 ring-blue-200 animate-pulse shadow-md"
+                      : q.tags && q.tags.includes("수동지정")
+                        ? "bg-green-50/70 border-green-400 hover:border-green-600 hover:shadow-md cursor-grab active:cursor-grabbing"
+                        : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-md cursor-grab active:cursor-grabbing"
+                  }"
+          >  }"
                 >
-                  <i class="fas fa-undo text-[10px]"></i>
-                </button>
-              `
-                  : `
-                <button 
-                  onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
-                  class="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
-                  title="삭제"
-                >
-                  <i class="fas fa-trash-alt text-[10px]"></i>
-                </button>
-              `
-              }
-            </div>
-          </div>
-        `;
+                  <div class="pr-8">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">${q.examRound || "미지정"}</span>
+                      <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
+                    </div>
+                    <h5 class="text-sm font-bold text-slate-800 line-clamp-2 mb-1 group-hover:text-blue-700">${escapeHtml(q.title)}</h5>
+                    ${
+                      pending
+                        ? '<div class="text-[9px] text-blue-600 font-bold mt-1 animate-bounce"><i class="fas fa-crosshairs mr-1"></i>PDF에서 영역을 클릭하세요</div>'
+                        : ""
+                    }
+                  </div>
+
+                  <!-- 할당 취소 또는 삭제 버튼 -->
+                  <div class="absolute top-2 right-2 flex gap-1">
+                    ${
+                      pending
+                        ? `
+                      <button
+                        onclick="event.stopPropagation(); window.pendingAssignIndex = null; renderReviewerList(window.currentReviewingQuestions);"
+                        class="w-6 h-6 flex items-center justify-center text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
+                        title="할당 취소"
+                      >
+                        <i class="fas fa-undo text-[10px]"></i>
+                      </button>
+                    `
+                        : `
+                      <button
+                        onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
+                        class="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                        title="삭제"
+                      >
+                        <i class="fas fa-trash-alt text-[10px]"></i>
+                      </button>
+                    `
+                    }
+                  </div>
+                </div>
+              `;
           })
           .join("");
 
@@ -3104,41 +3184,60 @@
         // 모달 내 리스트 동기화 (수동 추가 입력 폼 포함)
         if (modalList) {
           const manualInputArea = `
-            <div class="mb-4 sticky top-0 z-10 bg-white border-b pb-3 shadow-sm">
-              <div class="flex items-center justify-between mb-2 px-1">
-                <span class="text-[10px] font-bold text-slate-500"><i class="fas fa-keyboard mr-1"></i>문항 직접 타이핑 추가</span>
-                <!-- 일괄 숨기기 토글 버튼 (v18.1) -->
-                <button 
-                  onclick="hideAllVisualCandidates = !hideAllVisualCandidates; renderReviewerList(window.currentReviewingQuestions); renderVisualPage(visualCurrentPage);"
-                  class="text-[9px] px-2 py-0.5 rounded border transition-colors ${hideAllVisualCandidates ? "bg-blue-600 text-white border-blue-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}"
-                  title="모든 페이지의 후보 영역을 모두 숨기거나 보입니다."
-                >
-                  <i class="fas ${hideAllVisualCandidates ? "fa-eye" : "fa-eye-slash"} mr-1"></i>후보<sup>ALL</sup> ${hideAllVisualCandidates ? "보이기" : "숨기기"}
-                </button>
-                <button 
-                  onclick="ignoreAllCandidatesOnPage()"
-                  class="text-[9px] px-2 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors ml-1"
-                  title="현재 페이지의 모든 후보 영역을 무시(삭제) 처리합니다."
-                >
-                  <i class="fas fa-trash-alt mr-1"></i>현재 페이지 비우기
-                </button>
-              </div>
-              <textarea 
-                id="manualInputText"
-                class="w-full h-20 p-2 text-[11px] border border-slate-200 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none mb-2"
-                placeholder="추가할 문항 내용을 입력하세요..."
-              ></textarea>
-              <button 
-                onclick="const el=document.getElementById('manualInputText'); if(el.value.trim()){ captureManualQuestion(el.value.trim()); el.value=''; }"
-                class="w-full py-1.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
-              >
-                리스트에 추가
-              </button>
-            </div>
-            <div class="mb-2 text-[9px] text-slate-400 px-1">
-              <i class="fas fa-info-circle mr-1 text-emerald-500"></i> 초록색: 이미 캡처됨 / 파란색: 인식 후보
-            </div>
-          `;
+                  <div class="mb-4 sticky top-0 z-10 bg-white border-b pb-3 shadow-sm">
+                    <div class="flex items-center justify-between mb-2 px-1">
+                      <span class="text-[10px] font-bold text-slate-500"><i class="fas fa-edit mr-1"></i>선택 영역 저장 / 명칭 부여</span>
+                      <div class="flex items-center">
+                        <button
+                          id="toggleAddAreaBtn"
+                          onclick="toggleAddAreaMode()"
+                          class="text-[9px] px-2 py-0.5 rounded border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 transition-colors mr-1 shadow-sm font-bold flex items-center"
+                          title="클릭 시 추가 모드가 활성화되어 드래그로 영역을 캡처할 수 있습니다."
+                        >
+                          <i class="fas fa-plus mr-1"></i>영역 추가
+                        </button>
+                        <button
+                          onclick="hideAllVisualCandidates = !hideAllVisualCandidates; renderReviewerList(window.currentReviewingQuestions); renderVisualPage(visualCurrentPage);"
+                          class="text-[9px] px-2 py-0.5 rounded border transition-colors ${hideAllVisualCandidates ? "bg-blue-600 text-white border-blue-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}"
+                          title="모든 페이지의 후보 영역을 모두 숨기거나 보입니다."
+                        >
+                          <i class="fas ${hideAllVisualCandidates ? "fa-eye" : "fa-eye-slash"} mr-1"></i>후보<sup>ALL</sup> ${hideAllVisualCandidates ? "보이기" : "숨기기"}
+                        </button>
+                        <button
+                          onclick="ignoreAllCandidatesOnPage()"
+                          class="text-[9px] px-2 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors ml-1"
+                          title="현재 페이지의 모든 후보 영역을 무시(삭제) 처리합니다."
+                        >
+                          <i class="fas fa-trash-alt mr-1"></i>이 페이지 모두 삭제
+                        </button>
+                      </div>
+                    </div>
+                    <div class="flex gap-1 mb-2 px-1 text-[11px]">
+                      <select id="manualRound" class="p-1 border border-slate-300 text-[11px] rounded w-20 bg-slate-50">
+                        <option value="1교시">1교시</option>
+                        <option value="2교시">2교시</option>
+                        <option value="3교시">3교시</option>
+                        <option value="4교시">4교시</option>
+                        <option selected value="미지정">미지정</option>
+                      </select>
+                      <input type="text" id="manualQNum" placeholder="문제 번호 (예: 1번)" class="flex-1 p-1 border border-slate-300 text-[11px] rounded bg-slate-50 focus:ring-1 focus:ring-blue-400 focus:outline-none" />
+                    </div>
+                    <textarea
+                      id="manualInputText"
+                      class="w-full h-16 p-2 text-[11px] border border-slate-200 bg-slate-50 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none mb-2"
+                      placeholder="PDF에서 영역을 드래그하거나 파란 박스를 클릭하면 추출된 텍스트가 표시됩니다."
+                    ></textarea>
+                    <button
+                      onclick="saveManualArea()"
+                      class="w-full py-1.5 text-[11px] font-bold text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center"
+                    >
+                      <i class="fas fa-save mr-1"></i>현재 영역 확정 및 저장
+                    </button>
+                  </div>
+                  <div class="mb-2 text-[9px] text-slate-400 px-1">
+                    <i class="fas fa-info-circle mr-1 text-emerald-500"></i> 초록색/주황색: 설정됨 / 파란색: 후보 / 박스를 직접 생성 가능
+                  </div>
+                `;
 
           if (!window.currentReviewingQuestions.length) {
             modalList.innerHTML =
@@ -3148,27 +3247,28 @@
             modalList.innerHTML =
               manualInputArea +
               window.currentReviewingQuestions
-                .map(
-                  (q, i) => `
-              <div 
-                onclick="highlightQuestionOnPdf(${i})"
-                ondblclick="highlightQuestionOnPdf(${i})"
-                onmouseenter="setHoverHighlight('${q.id}', true)"
-                onmouseleave="setHoverHighlight('${q.id}', false)"
-                class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors item-${q.id}"
-                title="클릭하여 PDF 위치 확인"
-              >
-                <div class="text-[11px] font-bold text-slate-700 truncate pr-5">${escapeHtml(q.title)}</div>
-                <button 
-                  onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
-                  class="absolute right-1 top-1 w-4 h-4 text-slate-300 hover:text-rose-500"
-                  title="삭제"
-                >
-                  <i class="fas fa-times text-[10px]"></i>
-                </button>
-              </div>
-            `,
-                )
+                .map((q, i) => {
+                  if (q.rect && q.rect.page !== targetPage) return "";
+                  return `
+                    <div
+                      onclick="highlightQuestionOnPdf(${i})"
+                      ondblclick="highlightQuestionOnPdf(${i})"
+                      onmouseenter="setHoverHighlight('${q.id}', true)"
+                      onmouseleave="setHoverHighlight('${q.id}', false)"
+                      class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors item-${q.id}"
+                      title="클릭하여 PDF 위치 확인"
+                    >
+                      <div class="text-[11px] font-bold text-slate-700 truncate pr-5">${escapeHtml(q.title)}</div>
+                      <button
+                        onclick="event.stopPropagation(); deleteCapturedQuestion(${i})"
+                        class="absolute right-1 top-1 w-4 h-4 text-slate-300 hover:text-rose-500"
+                        title="삭제"
+                      >
+                        <i class="fas fa-times text-[10px]"></i>
+                      </button>
+                    </div>
+                  `;
+                })
                 .join("");
           }
         }
@@ -3184,7 +3284,7 @@
         let deleteArea = false;
         if (hasRect) {
           deleteArea = confirm(
-            `"${removed.title}" 문항을 리스트에서 삭제합니다.\n\n해당 인식 영역도 다시 나타나지 않도록 함께 제거하시겠습니까?`,
+            `"${removed.title}" 문항을 리스트에서 삭제하시겠습니까?\n\n(확인 클릭 시 인식 영역도 함께 숨겨집니다.)`,
           );
         } else {
           if (
@@ -3307,7 +3407,78 @@
           }
         }
 
-        // 중복 체크 (좌표가 있는 경우 좌표 기준, 없는 경우 텍스트 기준)
+        // ──── 수동 캡처 / 영역 확정 모드 (폼 채우기) ────
+        const inputEl = document.getElementById("manualInputText");
+        const roundEl = document.getElementById("manualRound");
+        const numEl = document.getElementById("manualQNum");
+
+        if (inputEl) inputEl.value = text;
+
+        if (roundEl) {
+          if (/1\s*교시/.test(text)) roundEl.value = "1교시";
+          else if (/2\s*교시/.test(text)) roundEl.value = "2교시";
+          else if (/3\s*교시/.test(text)) roundEl.value = "3교시";
+          else if (/4\s*교시/.test(text)) roundEl.value = "4교시";
+        }
+
+        if (numEl) {
+          const numMatch = text.match(/^\s*(?:\[\s*\d+\s*\]|\d+)[가-힣-\.]*/);
+          if (numMatch) {
+            numEl.value = numMatch[0].replace(/\[|\]/g, "").trim() + "번";
+          } else {
+            numEl.value = "";
+          }
+        }
+
+        window.pendingManualRect = rectData;
+        setPdfStatus(
+          "영역 텍스트 추출됨. 우측 폼에서 명칭 부여 후 '확정 및 저장' 하세요.",
+          "info",
+        );
+
+        if (inputEl) {
+          inputEl.classList.add("bg-blue-100", "border-blue-400");
+          setTimeout(
+            () => inputEl.classList.remove("bg-blue-100", "border-blue-400"),
+            800,
+          );
+        }
+
+        // 렌더링을 즉시 다시 수행하여 방금 추가된 녹색(대기) 영역이 그려지도록 함
+        const isModalOpen = !document
+          .getElementById("pdfVisualModal")
+          .classList.contains("hidden");
+        if (isModalOpen) {
+          renderVisualPage(visualCurrentPage);
+        } else {
+          renderReviewerPdf(revCurrentPage);
+        }
+      }
+
+      function saveManualArea() {
+        const textEl = document.getElementById("manualInputText");
+        const text = textEl ? textEl.value.trim() : "";
+        if (!text) {
+          setPdfStatus(
+            "저장할 내용이 없습니다. 영역을 먼저 클릭하거나 드래그하세요.",
+            "error",
+          );
+          return;
+        }
+
+        const roundEl = document.getElementById("manualRound");
+        const examRound = roundEl ? roundEl.value : "미지정";
+        const numEl = document.getElementById("manualQNum");
+        let title = numEl && numEl.value.trim() ? numEl.value.trim() : "";
+        if (!title) {
+          title =
+            text.length > 50 ? text.slice(0, 50).trim() + "..." : text.trim();
+        }
+
+        const rectData = window.pendingManualRect || null;
+        const questions = window.currentReviewingQuestions || [];
+
+        // 좌표 기반 중복 체크
         if (rectData) {
           if (
             questions.some(
@@ -3318,25 +3489,25 @@
                 Math.abs(q.rect.y - rectData.y) < 2,
             )
           ) {
-            setPdfStatus("이미 해당 영역에 등록된 문항이 있습니다.", "info");
-            return;
+            if (
+              !confirm(
+                "이미 비슷한 위치에 등록된 문항이 있습니다. 그래도 저장하시겠습니까?",
+              )
+            ) {
+              return;
+            }
           }
-        } else if (questions.some((q) => q.rawQuestion === text)) {
-          setPdfStatus("이미 동일한 텍스트로 캡처된 내용입니다.", "info");
-          return;
         }
 
         const newQ = {
           id: "MANUAL-" + Date.now(),
-          title:
-            text.length > 50 ? text.slice(0, 50).trim() + "..." : text.trim(),
-          examRound: "미지정",
+          title: title,
+          examRound: examRound,
           rawQuestion: text,
-          tags: ["수동추출"],
-          rect: rectData, // 좌표 정보 저장
+          tags: ["수동지정"],
+          rect: rectData,
         };
 
-        // 동기화
         try {
           const data = getCurrentAnswerData();
           const payload = {
@@ -3345,13 +3516,23 @@
             source: "Manual Capture",
             reviewed: false,
           };
-          data.questions.push(payload);
-          syncJsonAndRender(data, "문항을 캡처했습니다.", true);
-        } catch (e) {}
+          if (!data.questions.some((dbQ) => dbQ.id === payload.id)) {
+            data.questions.push(payload);
+          }
+          syncJsonAndRender(
+            data,
+            "새 문항 영역을 확정하여 저장했습니다.",
+            true,
+          );
+        } catch (e) {
+          console.error(e);
+        }
 
-        renderReviewerList(window.currentReviewingQuestions.concat(newQ));
+        window.pendingManualRect = null;
 
-        // v13.0: 추가된 문항 자동 선택 (하이라이트 및 핸들 노출)
+        if (textEl) textEl.value = "";
+        if (numEl) numEl.value = "";
+
         const newIndex = (window.currentReviewingQuestions || []).length - 1;
         if (newIndex >= 0) {
           window.currentHighlightedBoxIndex = newIndex;
@@ -3360,14 +3541,65 @@
             : visualCurrentPage;
         }
 
-        renderVisualPage(visualCurrentPage); // PDF 하이라이트 즉시 갱신
-        renderReviewerPdf(visualCurrentPage); // v18.4: 사이드 리뷰어 오버레이 동기화
-        refreshAutoExtractSummary(); // 상단 대시보드 갱신
-        setPdfStatus("문항 캡처 완료 및 자동 선택됨", "success");
+        renderVisualPage(visualCurrentPage);
+        renderReviewerPdf(visualCurrentPage);
+        refreshAutoExtractSummary();
+        setPdfStatus(`"${title}" 문항 영역 확정!`, "success");
+
+        // 저장 성공 시 사용자에게 확실한 피드백 제공
+        alert(
+          `"${title}" 영역이 확정되었습니다.\n우측 인식된 문항 리스트에 강조된 색상으로 추가되었습니다.`,
+        );
+      }
+
+      function toggleAddAreaMode() {
+        isAddAreaMode = !isAddAreaMode;
+        const btn = document.getElementById("toggleAddAreaBtn");
+        const overlay = document.getElementById("pdfVisualOverlay");
+        if (isAddAreaMode) {
+          btn.classList.add("bg-blue-600", "text-white", "border-blue-700");
+          btn.classList.remove(
+            "bg-white",
+            "text-slate-600",
+            "border-slate-200",
+          );
+          if (overlay) overlay.style.cursor = "crosshair";
+          setPdfStatus(
+            "영역 추가 모드가 활성화되었습니다. 드래그하여 영역을 지정하세요.",
+            "info",
+          );
+        } else {
+          btn.classList.remove("bg-blue-600", "text-white", "border-blue-700");
+          btn.classList.add("bg-white", "text-slate-600", "border-slate-200");
+          if (overlay) overlay.style.cursor = "default";
+          setPdfStatus("영역 추가 모드가 해제되었습니다.", "info");
+        }
+      }
+
+      function deselectAllAreas() {
+        // Reset manual capture form
+        const textEl = document.getElementById("manualInputText");
+        const numEl = document.getElementById("manualQNum");
+        const roundEl = document.getElementById("manualRound");
+        if (textEl) textEl.value = "";
+        if (numEl) numEl.value = "";
+        if (roundEl) roundEl.value = "미지정";
+
+        window.pendingManualRect = null;
+        window.currentHighlightedBoxIndex = null;
+
+        // Unset selection if any active question was in resizing/moving state
+        if (activeQuestionId !== null) endMouseInteraction();
+
+        renderVisualPage(visualCurrentPage);
+        renderReviewerList(window.currentReviewingQuestions);
       }
 
       function ignoreAllCandidatesOnPage() {
-        const pageNum = visualCurrentPage;
+        const isModalOpen = !document
+          .getElementById("pdfVisualModal")
+          .classList.contains("hidden");
+        const pageNum = isModalOpen ? visualCurrentPage : revCurrentPage;
         const pageData = visualTextCache.find((d) => d.page === pageNum);
         if (!pageData) return;
 
@@ -3450,8 +3682,8 @@
 
           if (lastAddedCount !== null) {
             html += `<div class="mb-3 p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-center font-bold text-xs">
-                <i class="fas fa-plus-circle mr-1"></i>방금 ${lastAddedCount}개의 문항이 새롭게 추가되었습니다!
-              </div>`;
+                      <i class="fas fa-plus-circle mr-1"></i>방금 ${lastAddedCount}개의 문항이 새롭게 추가되었습니다!
+                    </div>`;
           }
 
           if (!qs.length) {
@@ -3469,9 +3701,9 @@
               .sort()
               .forEach(([round, count]) => {
                 html += `<div class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-100">
-                  <span class="text-xs font-bold text-slate-700">${escapeHtml(round)}</span>
-                  <span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">${count}</span>
-                </div>`;
+                        <span class="text-xs font-bold text-slate-700">${escapeHtml(round)}</span>
+                        <span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">${count}</span>
+                      </div>`;
               });
             html += `</div>`;
           }
@@ -3767,9 +3999,32 @@
       }
 
       function initDragSelection(overlay, viewport, pageNum) {
+        let dragStart = null;
+        let dragRect = null;
+
         overlay.onmousedown = (e) => {
-          if (e.button !== 0 || e.target !== overlay) return;
-          dragStart = { x: e.offsetX, y: e.offsetY };
+          if (e.button !== 0) return;
+          // 기존 박스 크기 조절/이동 버튼이거나 파란 박스(후보영역), 취소버튼 누를 때는 드래그나 초기화가 발생하지 않도록 방어 (이벤트 버블링 차단 목적)
+          if (
+            e.target.closest(".group-box") ||
+            e.target.closest(".resizer") ||
+            e.target.closest(".group-candidate") ||
+            e.target.closest("button")
+          )
+            return;
+
+          // If not in add area mode, clicking background acts as deselect trigger
+          if (!isAddAreaMode) {
+            deselectAllAreas();
+            return;
+          }
+
+          const rectObj = overlay.getBoundingClientRect();
+          dragStart = {
+            x: e.clientX - rectObj.left,
+            y: e.clientY - rectObj.top,
+          };
+
           dragRect = document.createElement("div");
           dragRect.className =
             "absolute border-2 border-dashed border-blue-500 bg-blue-500/20 z-50 pointer-events-none shadow-lg rounded-sm animate-pulse";
@@ -3778,11 +4033,17 @@
 
         overlay.onmousemove = (e) => {
           if (!dragStart) return;
-          const current = { x: e.offsetX, y: e.offsetY };
+          const rectObj = overlay.getBoundingClientRect();
+          const current = {
+            x: e.clientX - rectObj.left,
+            y: e.clientY - rectObj.top,
+          };
+
           const x = Math.min(dragStart.x, current.x);
           const y = Math.min(dragStart.y, current.y);
           const w = Math.abs(dragStart.x - current.x);
           const h = Math.abs(dragStart.y - current.y);
+
           dragRect.style.left = `${x}px`;
           dragRect.style.top = `${y}px`;
           dragRect.style.width = `${w}px`;
@@ -3791,10 +4052,12 @@
 
         overlay.onmouseup = (e) => {
           if (!dragStart) return;
+          const rectObj = overlay.getBoundingClientRect();
+          const endX = e.clientX - rectObj.left;
+          const endY = e.clientY - rectObj.top;
+
           const selX = dragStart.x;
           const selY = dragStart.y;
-          const endX = e.offsetX;
-          const endY = e.offsetY;
 
           const minX = Math.min(selX, endX);
           const maxX = Math.max(selX, endX);
@@ -3852,12 +4115,14 @@
           if (revCurrentPage > 1) {
             revCurrentPage--;
             renderReviewerPdf(revCurrentPage);
+            renderReviewerList(window.currentReviewingQuestions);
           }
         };
         document.getElementById("revNextBtn").onclick = () => {
           if (visualPdfDoc && revCurrentPage < visualPdfDoc.numPages) {
             revCurrentPage++;
             renderReviewerPdf(revCurrentPage);
+            renderReviewerList(window.currentReviewingQuestions);
           }
         };
       }
@@ -4295,12 +4560,12 @@
             ? `text-${config.color}-700`
             : "text-slate-400";
           html += `
-            <div class="flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
-              <span class="font-bold uppercase text-[9px] ${textColor}">${config.label}</span>
-              <span class="text-[9px] ${enabled ? "text-emerald-600" : "text-slate-400"}">${enabled ? "ON" : "OFF"}</span>
-            </div>
-          `;
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+                    <span class="font-bold uppercase text-[9px] ${textColor}">${config.label}</span>
+                    <span class="text-[9px] ${enabled ? "text-emerald-600" : "text-slate-400"}">${enabled ? "ON" : "OFF"}</span>
+                  </div>
+                `;
         });
         html += "</div>";
 
@@ -4322,10 +4587,10 @@
                   ? "fa-exclamation-triangle"
                   : "fa-circle";
             html += `<div class="${statusColor} flex items-center gap-1">
-              <i class="fas ${icon}"></i>
-              <span class="font-bold">[${row.provider}]</span>
-              <span>${row.status === "valid" ? "검증 성공" : row.status === "invalid" ? `검증 실패: ${row.error || "unknown"}` : "설정 미흡"}</span>
-            </div>`;
+                    <i class="fas ${icon}"></i>
+                    <span class="font-bold">[${row.provider}]</span>
+                    <span>${row.status === "valid" ? "검증 성공" : row.status === "invalid" ? `검증 실패: ${row.error || "unknown"}` : "설정 미흡"}</span>
+                  </div>`;
           });
           html += "</div>";
         }
@@ -4342,11 +4607,11 @@
         try {
           setBackendStatus("API 키 유효성 검사 중...", "info");
           el.innerHTML = `
-            <div class="flex items-center gap-2 text-slate-500 animate-pulse">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>각 클라우드 제공업체(OpenAI, Gemini, Anthropic)에 테스트 요청을 보내는 중입니다...</span>
-            </div>
-          `;
+                  <div class="flex items-center gap-2 text-slate-500 animate-pulse">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>각 클라우드 제공업체(OpenAI, Gemini, Anthropic)에 테스트 요청을 보내는 중입니다...</span>
+                  </div>
+                `;
 
           const response = await fetch(`${baseUrl}/api/validate-keys`);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -5329,6 +5594,20 @@
             "자동 배치 완료: 생성/평가까지 반영되었습니다.",
             "success",
           );
+
+          // 자동 배치 완료 시 추출 데이터 정밀 리뷰 우측창(extractReviewer)을 표시하고 스크롤
+          const reviewerSection = document.getElementById("extractReviewer");
+          if (reviewerSection) {
+            reviewerSection.classList.remove("hidden");
+            reviewerSection.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+            try {
+              const currentData = getCurrentAnswerData();
+              renderReviewerList(currentData.questions);
+            } catch (e) {}
+          }
         } finally {
           pipelineRunning = false;
           runBtn.disabled = false;
@@ -5588,16 +5867,16 @@
         document.getElementById("roundStatsBody").innerHTML = roundStats
           .map(
             (row) => `
-                <tr>
-                    <td class="px-3 py-2 font-medium text-slate-800">${escapeHtml(row.round)}</td>
-                    <td class="px-3 py-2 text-slate-700">${row.count}</td>
-                    <td class="px-3 py-2 text-slate-700">${row.avg}</td>
-                    <td class="px-3 py-2 text-slate-700">${row.low}</td>
-                    <td class="px-3 py-2">
-                        <span class="text-xs px-2 py-1 rounded ${row.priority === "높음" ? "bg-rose-100 text-rose-700" : row.priority === "중간" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}">${row.priority}</span>
-                    </td>
-                </tr>
-            `,
+                      <tr>
+                          <td class="px-3 py-2 font-medium text-slate-800">${escapeHtml(row.round)}</td>
+                          <td class="px-3 py-2 text-slate-700">${row.count}</td>
+                          <td class="px-3 py-2 text-slate-700">${row.avg}</td>
+                          <td class="px-3 py-2 text-slate-700">${row.low}</td>
+                          <td class="px-3 py-2">
+                              <span class="text-xs px-2 py-1 rounded ${row.priority === "높음" ? "bg-rose-100 text-rose-700" : row.priority === "중간" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}">${row.priority}</span>
+                          </td>
+                      </tr>
+                  `,
           )
           .join("");
 
@@ -5686,25 +5965,25 @@
               "<br>",
             );
             return `
-                    <article class="border border-slate-200 rounded-lg p-4 bg-white">
-                        <div class="flex items-center justify-between gap-3">
-                            <h4 class="font-bold text-slate-800">${escapeHtml(item.id || `Q${index + 1}`)}. ${escapeHtml(item.title || "제목 없음")}</h4>
-                            <span class="text-xs px-2 py-1 rounded ${item.reviewed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}">${item.reviewed ? "검토완료" : "검토필요"}</span>
-                        </div>
-                        <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(item.examRound || "미지정")}</div>
-                        <div class="mt-2 flex flex-wrap gap-1">
-                            ${tags.map((tag) => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join("")}
-                        </div>
-                        <p class="mt-3 text-sm text-slate-700 leading-relaxed">${safeAnswer}</p>
-                        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <div class="text-xs text-slate-500">source: ${escapeHtml(item.source || "-")}</div>
-                            <div class="flex gap-2">
-                                <button type="button" onclick="editModelAnswerEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
-                                <button type="button" onclick="openDeleteConfirmModal(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
-                            </div>
-                        </div>
-                    </article>
-                `;
+                          <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                              <div class="flex items-center justify-between gap-3">
+                                  <h4 class="font-bold text-slate-800">${escapeHtml(item.id || `Q${index + 1}`)}. ${escapeHtml(item.title || "제목 없음")}</h4>
+                                  <span class="text-xs px-2 py-1 rounded ${item.reviewed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}">${item.reviewed ? "검토완료" : "검토필요"}</span>
+                              </div>
+                              <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(item.examRound || "미지정")}</div>
+                              <div class="mt-2 flex flex-wrap gap-1">
+                                  ${tags.map((tag) => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join("")}
+                              </div>
+                              <p class="mt-3 text-sm text-slate-700 leading-relaxed">${safeAnswer}</p>
+                              <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                  <div class="text-xs text-slate-500">source: ${escapeHtml(item.source || "-")}</div>
+                                  <div class="flex gap-2">
+                                      <button type="button" onclick="editModelAnswerEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                      <button type="button" onclick="openDeleteConfirmModal(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                                  </div>
+                              </div>
+                          </article>
+                      `;
           })
           .join("");
 
@@ -5727,20 +6006,20 @@
           .map((theory, index) => {
             const tags = Array.isArray(theory.tags) ? theory.tags : [];
             return `
-                    <article class="border border-slate-200 rounded-lg p-4 bg-white">
-                        <div class="flex items-center justify-between gap-2">
-                            <h4 class="font-bold text-slate-800">${escapeHtml(theory.id)}. ${escapeHtml(theory.title)}</h4>
-                            <div class="flex gap-2">
-                                <button type="button" onclick="editTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
-                                <button type="button" onclick="deleteTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
-                            </div>
-                        </div>
-                        <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(theory.examRound || "미지정")} · 분류: ${escapeHtml(theory.category || "일반")}</div>
-                        <div class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join("")}</div>
-                        <p class="mt-2 text-sm text-slate-700 leading-relaxed">${escapeHtml(theory.content || "").replaceAll("\n", "<br>")}</p>
-                        <div class="mt-2 text-xs text-slate-500">source: ${escapeHtml(theory.source || "-")}</div>
-                    </article>
-                `;
+                          <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                              <div class="flex items-center justify-between gap-2">
+                                  <h4 class="font-bold text-slate-800">${escapeHtml(theory.id)}. ${escapeHtml(theory.title)}</h4>
+                                  <div class="flex gap-2">
+                                      <button type="button" onclick="editTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">수정</button>
+                                      <button type="button" onclick="deleteTheoryEntry(${index})" class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 hover:bg-rose-200">삭제</button>
+                                  </div>
+                              </div>
+                              <div class="mt-1 text-xs text-indigo-700">회차: ${escapeHtml(theory.examRound || "미지정")} · 분류: ${escapeHtml(theory.category || "일반")}</div>
+                              <div class="mt-2 flex flex-wrap gap-1">${tags.map((tag) => `<span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">${escapeHtml(tag)}</span>`).join("")}</div>
+                              <p class="mt-2 text-sm text-slate-700 leading-relaxed">${escapeHtml(theory.content || "").replaceAll("\n", "<br>")}</p>
+                              <div class="mt-2 text-xs text-slate-500">source: ${escapeHtml(theory.source || "-")}</div>
+                          </article>
+                      `;
           })
           .join("");
       }
@@ -5905,19 +6184,19 @@
                 item.suppTheoryId === draft.suppTheoryId,
             );
             return `
-                <article class="border border-slate-200 rounded-lg p-3 bg-white">
-                    <div class="flex items-center justify-between gap-2">
-                        <h4 class="font-bold text-slate-800">${escapeHtml(draft.id)}. ${escapeHtml(draft.title)}</h4>
-                        <button type="button" onclick="adoptMergedTheoryDraft(${cacheIndex})" class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">초안 추가</button>
-                    </div>
-                    <div class="text-xs text-slate-500 mt-1">기반: ${escapeHtml(draft.baseTheoryId)} + ${escapeHtml(draft.suppTheoryId)} · 회차: ${escapeHtml(draft.examRound)}</div>
-                    <div class="mt-1 text-xs">
-                        <span class="px-2 py-1 rounded ${draft.quality.score >= 85 ? "bg-emerald-100 text-emerald-700" : draft.quality.score >= 70 ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}">품질 ${draft.quality.score}점 (${draft.quality.grade})</span>
-                    </div>
-                    <div class="mt-1 text-[11px] text-slate-500">길이 ${draft.quality.detail.lengthScore}/40 · KDS ${draft.quality.detail.kdsScore}/20 · 시각화 ${draft.quality.detail.visualScore}/15 · 구조화 ${draft.quality.detail.structureScore}/15 · 영어병기 ${draft.quality.detail.bilingualScore}/10</div>
-                    <p class="text-sm text-slate-700 mt-2 leading-relaxed">${escapeHtml(draft.content).replaceAll("\n", "<br>")}</p>
-                </article>
-            `;
+                      <article class="border border-slate-200 rounded-lg p-3 bg-white">
+                          <div class="flex items-center justify-between gap-2">
+                              <h4 class="font-bold text-slate-800">${escapeHtml(draft.id)}. ${escapeHtml(draft.title)}</h4>
+                              <button type="button" onclick="adoptMergedTheoryDraft(${cacheIndex})" class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">초안 추가</button>
+                          </div>
+                          <div class="text-xs text-slate-500 mt-1">기반: ${escapeHtml(draft.baseTheoryId)} + ${escapeHtml(draft.suppTheoryId)} · 회차: ${escapeHtml(draft.examRound)}</div>
+                          <div class="mt-1 text-xs">
+                              <span class="px-2 py-1 rounded ${draft.quality.score >= 85 ? "bg-emerald-100 text-emerald-700" : draft.quality.score >= 70 ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}">품질 ${draft.quality.score}점 (${draft.quality.grade})</span>
+                          </div>
+                          <div class="mt-1 text-[11px] text-slate-500">길이 ${draft.quality.detail.lengthScore}/40 · KDS ${draft.quality.detail.kdsScore}/20 · 시각화 ${draft.quality.detail.visualScore}/15 · 구조화 ${draft.quality.detail.structureScore}/15 · 영어병기 ${draft.quality.detail.bilingualScore}/10</div>
+                          <p class="text-sm text-slate-700 mt-2 leading-relaxed">${escapeHtml(draft.content).replaceAll("\n", "<br>")}</p>
+                      </article>
+                  `;
           })
           .join("");
       }
@@ -6036,10 +6315,10 @@
         theoryAnalysisCache = { duplicates, reinforcements, mergedDrafts };
 
         summaryEl.innerHTML = `
-                <div class="p-3 rounded border border-slate-200 bg-slate-50">
-                    <strong>분석 결과:</strong> 중복 후보 ${duplicates.length}쌍 · 보강 후보 ${reinforcements.length}쌍
-                </div>
-            `;
+                      <div class="p-3 rounded border border-slate-200 bg-slate-50">
+                          <strong>분석 결과:</strong> 중복 후보 ${duplicates.length}쌍 · 보강 후보 ${reinforcements.length}쌍
+                      </div>
+                  `;
 
         const items = [
           ...duplicates.map((item) => ({
@@ -6064,15 +6343,15 @@
         listEl.innerHTML = items
           .map(
             (item) => `
-                <article class="border border-slate-200 rounded-lg p-3 bg-white">
-                    <div class="flex items-center justify-between gap-2">
-                        <div class="font-medium ${item.tone === "rose" ? "text-rose-700" : "text-emerald-700"}">${item.kind}</div>
-                        <span class="text-xs text-slate-500">유사도 ${(item.similarity * 100).toFixed(1)}%</span>
-                    </div>
-                    <div class="text-sm text-slate-700 mt-1">${escapeHtml(item.aTitle)} ↔ ${escapeHtml(item.bTitle)}</div>
-                    <div class="text-xs text-slate-600 mt-1">${escapeHtml(item.recommendation)}</div>
-                </article>
-            `,
+                      <article class="border border-slate-200 rounded-lg p-3 bg-white">
+                          <div class="flex items-center justify-between gap-2">
+                              <div class="font-medium ${item.tone === "rose" ? "text-rose-700" : "text-emerald-700"}">${item.kind}</div>
+                              <span class="text-xs text-slate-500">유사도 ${(item.similarity * 100).toFixed(1)}%</span>
+                          </div>
+                          <div class="text-sm text-slate-700 mt-1">${escapeHtml(item.aTitle)} ↔ ${escapeHtml(item.bTitle)}</div>
+                          <div class="text-xs text-slate-600 mt-1">${escapeHtml(item.recommendation)}</div>
+                      </article>
+                  `,
           )
           .join("");
 
@@ -6439,25 +6718,25 @@
         else if (avg >= 70) grade = "합격권";
 
         document.getElementById("evaluationSummary").innerHTML = `
-                <div class="p-3 rounded border ${avg >= 85 ? "border-emerald-200 bg-emerald-50" : avg >= 70 ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}">
-                    <strong>종합평가:</strong> 평균 ${avg}점 / 100 (${grade}) · 총 ${results.length}문항
-                </div>
-            `;
+                      <div class="p-3 rounded border ${avg >= 85 ? "border-emerald-200 bg-emerald-50" : avg >= 70 ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}">
+                          <strong>종합평가:</strong> 평균 ${avg}점 / 100 (${grade}) · 총 ${results.length}문항
+                      </div>
+                  `;
 
         document.getElementById("evaluationList").innerHTML = results
           .map(
             (item) => `
-                <article class="border border-slate-200 rounded-lg p-4 bg-white">
-                    <div class="flex items-center justify-between gap-2">
-                        <h4 class="font-bold text-slate-800">${escapeHtml(item.id)}. ${escapeHtml(item.title)}</h4>
-                        <span class="text-xs px-2 py-1 rounded ${item.score >= 85 ? "bg-emerald-100 text-emerald-700" : item.score >= 70 ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}">${item.score}점</span>
-                    </div>
-                    <div class="mt-2 text-xs text-slate-500">판정 기준: ${item.type === "short" ? "1교시/단답형" : item.type === "long" ? "2~4교시/서술형" : "일반형(자동 추정)"}</div>
-                    <ul class="mt-3 list-disc list-inside text-sm text-slate-700 space-y-1">
-                        ${item.feedback.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}
-                    </ul>
-                </article>
-            `,
+                      <article class="border border-slate-200 rounded-lg p-4 bg-white">
+                          <div class="flex items-center justify-between gap-2">
+                              <h4 class="font-bold text-slate-800">${escapeHtml(item.id)}. ${escapeHtml(item.title)}</h4>
+                              <span class="text-xs px-2 py-1 rounded ${item.score >= 85 ? "bg-emerald-100 text-emerald-700" : item.score >= 70 ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}">${item.score}점</span>
+                          </div>
+                          <div class="mt-2 text-xs text-slate-500">판정 기준: ${item.type === "short" ? "1교시/단답형" : item.type === "long" ? "2~4교시/서술형" : "일반형(자동 추정)"}</div>
+                          <ul class="mt-3 list-disc list-inside text-sm text-slate-700 space-y-1">
+                              ${item.feedback.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}
+                          </ul>
+                      </article>
+                  `,
           )
           .join("");
 
