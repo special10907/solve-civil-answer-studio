@@ -77,7 +77,7 @@ async function discoverAnalyzeBackendBaseUrl() {
         continue;
       }
       const payload = await response.json().catch(() => null);
-      if (payload && payload.ok) {
+      if (payload?.ok) {
         window.__analyzeBackendDiscoveredBase = base;
         return base;
       }
@@ -388,7 +388,10 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
       buildModelToken("lmstudio", manualModel),
     );
     if (!silent) {
-      setBackendStatus("LM Studio 오프라인(재시도 대기). 잠시 후 다시 시도하세요.", "info");
+      setBackendStatus(
+        "백엔드 연결됨 / LM Studio 오프라인(재시도 대기). 외부 API 또는 로컬 규칙 모드를 사용할 수 있습니다.",
+        "info",
+      );
     }
     return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
   }
@@ -408,7 +411,10 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
         buildModelToken("lmstudio", manualModel),
       );
       if (!silent) {
-        setBackendStatus(`모델 목록 조회 실패: ${error.message}`, "error");
+        setBackendStatus(
+          `백엔드 연결됨 / LM Studio 모델 조회 실패: ${error.message}`,
+          "info",
+        );
       }
       return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
     }
@@ -480,7 +486,10 @@ async function detectLmStudioModelId(silent = false) {
 
   if (shouldSkipLmStudioProbe()) {
     if (!silent) {
-      setBackendStatus("LM Studio 오프라인(재시도 대기). 잠시 후 다시 시도하세요.", "info");
+      setBackendStatus(
+        "백엔드 연결됨 / LM Studio 오프라인(재시도 대기). 외부 API 또는 로컬 규칙 모드를 사용할 수 있습니다.",
+        "info",
+      );
     }
     return "";
   }
@@ -520,15 +529,120 @@ async function detectFoundryModelId(silent = false) {
   return detectLmStudioModelId(silent);
 }
 
+function applyStatusChip(el, label, message, type = "info") {
+  if (!el) {
+    return;
+  }
+
+  const palette = {
+    info: "bg-slate-100 text-slate-600",
+    success: "bg-emerald-100 text-emerald-700",
+    error: "bg-rose-100 text-rose-700",
+  };
+
+  el.className = `text-[11px] px-2 py-1 rounded-full self-center ${palette[type] || palette.info}`;
+  el.textContent = `${label}: ${String(message || "확인 대기")}`;
+}
+
+function setLmActionButtonsVisible(visible) {
+  const actionWrap = document.getElementById("lmActionButtons");
+  if (!actionWrap) {
+    return;
+  }
+  actionWrap.classList.toggle("hidden", !visible);
+  actionWrap.classList.toggle("flex", Boolean(visible));
+}
+
+function switchToExternalApiMode() {
+  const endpointInput = document.getElementById("aiEndpointUrl");
+  const providerEl = document.getElementById("aiProvider");
+
+  if (endpointInput && isLikelyLmStudioEndpoint()) {
+    endpointInput.value = `${getAnalyzeBackendUrl()}/api/generate-answer`;
+    getSafeStorage().setItem(AI_ENDPOINT_STORAGE_KEY, endpointInput.value);
+  }
+
+  if (providerEl && !providerEl.value) {
+    providerEl.value = "openai";
+  }
+
+  updateAiModeUx();
+  refreshAvailableModels(true);
+  checkBackendConnection(true);
+  setPdfStatus(
+    "외부 API 모드로 전환했습니다. Provider/API Key 설정 후 '선택 모델로 초안 작성'을 실행하세요.",
+    "info",
+  );
+}
+
 function setBackendStatus(message, type = "info") {
   const statusEl = document.getElementById("backendStatus");
+  const coreEl = document.getElementById("backendCoreStatus");
+  const lmEl = document.getElementById("lmStudioStatus");
   const colorMap = {
     info: "text-slate-500",
     success: "text-emerald-700",
     error: "text-rose-700",
   };
-  statusEl.className = `text-xs self-center ${colorMap[type] || colorMap.info}`;
-  statusEl.textContent = message;
+
+  if (statusEl) {
+    statusEl.className = `hidden text-xs self-center ${colorMap[type] || colorMap.info}`;
+    statusEl.textContent = message;
+  }
+
+  const text = String(message || "").trim();
+  const lower = text.toLowerCase();
+  const lmMentioned = lower.includes("lm studio");
+
+  if (lmMentioned) {
+    const coreConnected =
+      text.includes("백엔드 연결됨") || text.includes("연결됨: LM Studio Local");
+    applyStatusChip(
+      coreEl,
+      "백엔드",
+      coreConnected ? "연결됨" : text,
+      coreConnected ? "success" : type,
+    );
+
+    let lmType = type;
+    if (/모델 감지|로드 모델|목록 갱신 완료/.test(text)) {
+      lmType = "success";
+    } else if (/미연결|오프라인|실패|대기/.test(text)) {
+      lmType = "info";
+    }
+
+    let lmMsg = text;
+    const slashSplit = text.split("/").map((part) => part.trim()).filter(Boolean);
+    if (slashSplit.length >= 2) {
+      lmMsg = slashSplit[1];
+    } else {
+      const lmIndex = text.indexOf("LM Studio");
+      lmMsg = lmIndex >= 0 ? text.slice(lmIndex) : text;
+    }
+    lmMsg = lmMsg
+      .replace(/^LM\s*Studio\s*/i, "")
+      .replace(/^모델\s*/, "모델 ")
+      .replace(/^미연결\s*:\s*/i, "미연결 (")
+      .replace(/\)$/g, "")
+      .trim();
+    if (lmMsg.startsWith("미연결 (") && !lmMsg.endsWith(")")) {
+      lmMsg = `${lmMsg})`;
+    }
+    lmMsg = lmMsg || "상태 확인 중";
+    applyStatusChip(lmEl, "LM Studio", lmMsg, lmType);
+
+    const needsAction = /미연결|오프라인|실패|대기/.test(text);
+    setLmActionButtonsVisible(needsAction);
+    return;
+  }
+
+  applyStatusChip(coreEl, "백엔드", text || "확인 대기", type);
+  if (isLikelyLmStudioEndpoint()) {
+    applyStatusChip(lmEl, "LM Studio", "상태 확인 중", "info");
+  } else {
+    applyStatusChip(lmEl, "LM Studio", "외부 API 모드", "info");
+  }
+  setLmActionButtonsVisible(false);
 }
 
 function renderBackendDiagnostics(diagnostics = [], providers = null) {
@@ -807,7 +921,10 @@ async function checkBackendConnection(silent = false) {
     if (isLikelyLmStudioEndpoint()) {
       if (shouldSkipLmStudioProbe()) {
         if (!silent) {
-          setBackendStatus("LM Studio 오프라인(재시도 대기). 잠시 후 다시 시도하세요.", "info");
+          setBackendStatus(
+            "백엔드 연결됨 / LM Studio 오프라인(재시도 대기). 외부 API 또는 로컬 규칙 모드를 사용할 수 있습니다.",
+            "info",
+          );
         }
         renderBackendDiagnostics([], null);
         window.isBackendAvailable = false;
@@ -859,10 +976,17 @@ async function checkBackendConnection(silent = false) {
     renderBackendDiagnostics([], providers);
     return true;
   } catch (err) {
-    setBackendStatus(
-      `연결 실패: ${err.message || "로컬 규칙 모드 사용"}`,
-      "error",
-    );
+    if (isLikelyLmStudioEndpoint()) {
+      setBackendStatus(
+        `백엔드 연결됨 / LM Studio 미연결: ${err.message || "로컬 규칙 모드 사용"}`,
+        "info",
+      );
+    } else {
+      setBackendStatus(
+        `연결 실패: ${err.message || "로컬 규칙 모드 사용"}`,
+        "error",
+      );
+    }
     renderBackendDiagnostics([], null);
     return false;
   }
@@ -873,6 +997,142 @@ function getSelectedQuestionIdSetForAi() {
     ? window.selectedQuestionIdsForAi
     : [];
   return new Set(selected.map((id) => String(id)));
+}
+
+function sanitizeExtractedSourceText(rawText) {
+  const text = String(rawText || "");
+  if (!text.trim()) {
+    return "";
+  }
+
+  return text
+    .replace(/\0/g, "")
+    .replace(/^\s*=+\s*[^\n]*\s*=+\s*$/gm, "") // ===== file ===== 헤더 제거
+    .replace(/^[ \t]*[|¦]{2,}.*$/gm, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function tokenizeForSimilarity(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 2);
+}
+
+function calculateTokenOverlapScore(sourceTokens, targetTokens) {
+  if (!sourceTokens.length || !targetTokens.length) {
+    return 0;
+  }
+  const sourceSet = new Set(sourceTokens);
+  let hit = 0;
+  targetTokens.forEach((token) => {
+    if (sourceSet.has(token)) {
+      hit += 1;
+    }
+  });
+  return hit / Math.max(1, targetTokens.length);
+}
+
+function buildTheoryContextForQuestion(question, theories, maxItems = 3) {
+  const questionText = [question?.title, question?.rawQuestion, ...(question?.tags || [])]
+    .filter(Boolean)
+    .join(" ");
+  const questionTokens = tokenizeForSimilarity(questionText);
+
+  if (!Array.isArray(theories) || !theories.length || !questionTokens.length) {
+    return [];
+  }
+
+  return theories
+    .map((theory) => {
+      const theoryText = [
+        theory?.title,
+        theory?.category,
+        ...(Array.isArray(theory?.tags) ? theory.tags : []),
+        theory?.content,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const theoryTokens = tokenizeForSimilarity(theoryText);
+      return {
+        theory,
+        score: calculateTokenOverlapScore(theoryTokens, questionTokens),
+      };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxItems)
+    .map((row) => row.theory);
+}
+
+function inferAnswerWritingSpec(question) {
+  const text = `${question?.title || ""} ${question?.rawQuestion || ""}`;
+  const isShort = /1\s*교시|10\s*점|용어|단답/.test(text);
+  if (isShort) {
+    return {
+      type: "short",
+      pageTarget: "1.0~1.2페이지",
+      minChars: 900,
+      sectionGuide: [
+        "1) 정의/배경 (핵심 용어 영문 병기 포함)",
+        "2) 메커니즘 도해 지시 (단면+선도/응력블록/힘의 흐름 중 최소 1개)",
+        "3) 특징·핵심 검토항목 (개조식 넘버링)",
+        "4) 기준·수치(KDS 코드/계수/단위) + 결론",
+      ],
+    };
+  }
+
+  return {
+    type: "long",
+    pageTarget: "최소 2.5페이지, 권장 3페이지",
+    minChars: 2200,
+    sectionGuide: [
+      "[1 page] 1) 개요 2) 기본 원리/메커니즘 (핵심 도해 1/3 비중)",
+      "[2 page] 3) 상세 해석/설계 검토 (비교표 + 수식/단위 + KDS 근거)",
+      "[3 page] 4) 시공/유지관리 유의사항 5) 결론/기술사 제언(본인 견해 3~4줄)",
+    ],
+  };
+}
+
+function buildHighQualityAnswerInstruction(question, relatedTheories = []) {
+  const spec = inferAnswerWritingSpec(question);
+  const theoryBlock = relatedTheories.length
+    ? relatedTheories
+        .map((theory, idx) => {
+          const tags = Array.isArray(theory.tags) ? theory.tags.join(", ") : "";
+          return [
+            `- 참조이론 ${idx + 1}: ${theory.title || "이론"}`,
+            `  분류/태그: ${theory.category || "일반"}${tags ? ` / ${tags}` : ""}`,
+            `  핵심: ${String(theory.content || "").slice(0, 320)}`,
+          ].join("\n");
+        })
+        .join("\n")
+    : "- 참조이론 없음(문제 본문 중심으로 작성)";
+
+  return [
+    "당신은 토목구조기술사 채점위원 관점의 답안 코치다.",
+    "채점관은 읽기보다 '보기'를 우선하므로, 글자 밀도 + 시각화 지시를 반드시 포함하라.",
+    `답안 목표 분량: ${spec.pageTarget} (최소 ${spec.minChars}자 이상)`,
+    "아래 형식을 정확히 지켜 고득점형 개조식 답안을 작성하라:",
+    ...spec.sectionGuide,
+    "필수 요소:",
+    "- 메커니즘 도해 지시 2개 이상(예: 변형률 선도, 응력블록, 하중흐름 화살표, P-M 상관도, S-N 곡선)",
+    "- 비교표 1개 이상(예: 허용응력설계법 vs 한계상태설계법)",
+    "- 핵심 용어 영어 병기 3개 이상(예: Ductility, Redundancy, Arch Action)",
+    "- KDS/KCS 코드 1개 이상 명시(예: KDS 14 20 00)",
+    "- 문장 종결은 개조식/명사형 위주, 넘버링(1.,2.,3.) 유지",
+    "금지: 장황한 서론, 중복 문장, 근거 없는 단정.",
+    "출력 형식: 바로 답안지에 옮겨 적을 수 있도록 구조화된 초안으로 출력.",
+    "",
+    `[문제 제목] ${question?.title || ""}`,
+    `[문제 원문] ${question?.rawQuestion || ""}`,
+    "",
+    "[연관 이론 컨텍스트]",
+    theoryBlock,
+  ].join("\n");
 }
 
 async function generateDraftAnswersByLmStudioLocal() {
@@ -943,6 +1203,16 @@ async function generateDraftAnswersByLmStudioLocal() {
       continue;
     }
 
+    const relatedTheories = buildTheoryContextForQuestion(
+      question,
+      data.theories || [],
+      3,
+    );
+    const qualityInstruction = buildHighQualityAnswerInstruction(
+      question,
+      relatedTheories,
+    );
+
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -952,16 +1222,16 @@ async function generateDraftAnswersByLmStudioLocal() {
         },
         body: JSON.stringify({
           model: modelId,
-          temperature: 0.2,
+          temperature: 0.15,
           messages: [
             {
               role: "system",
               content:
-                "토목구조기술사 고득점 답안 스타일로 개조식 답안을 작성하고, KDS 코드/도해 포인트/결론 제언을 포함하세요.",
+                "토목구조기술사 고득점 답안 스타일로 작성하되, 번호형 구조와 기준 근거(KDS) 및 도해 포인트를 반드시 포함하세요.",
             },
             {
               role: "user",
-              content: `문제 ID: ${question.id || "-"}\n문제 제목: ${question.title || ""}`,
+              content: qualityInstruction,
             },
           ],
         }),
@@ -1064,7 +1334,7 @@ async function extractQuestionsFromPdfText() {
         parts.push(`===== ${f.name} =====\n(텍스트 추출 실패: ${err.message})`);
       }
     }
-    extracted = parts.join("\n\n");
+    extracted = sanitizeExtractedSourceText(parts.join("\n\n"));
     setAttachmentStatus("첨부파일 텍스트 준비 완료.", "success");
   }
 
@@ -1413,10 +1683,19 @@ async function generateDraftAnswersByApi() {
       const providerSelect = document.getElementById("aiProvider");
       const providerValue = providerSelect ? providerSelect.value : null;
 
+      const relatedTheories = buildTheoryContextForQuestion(
+        question,
+        data.theories || [],
+        3,
+      );
+      const qualityInstruction = buildHighQualityAnswerInstruction(
+        question,
+        relatedTheories,
+      );
+
       const requestBody = {
         question,
-        instruction:
-          "토목구조기술사 고득점 답안 스타일로 개조식 답안을 작성하고, KDS 코드/도해 포인트/결론 제언을 포함하세요.",
+        instruction: qualityInstruction,
       };
       if (providerValue) {
         requestBody.provider = providerValue;

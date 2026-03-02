@@ -347,7 +347,10 @@ if (window.pdfjsLib) {
 }
 
 function parseQuestionsFromText(text) {
-  const cleaned = String(text || "").replace(/\r/g, "\n");
+  const cleaned = String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/^\s*=+\s*[^\n]*\s*=+\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
   if (!cleaned.trim()) return [];
 
   const sessionRegex =
@@ -387,7 +390,7 @@ function parseQuestionsFromText(text) {
     // Enhanced marker detection for technical exams (v16.0)
     const questionMarkers = [
       ...content.matchAll(
-        /(?:\n|^|\s{2,})\s*(?:Q\s*[.:]?\s*\d+|\d+\s*[.\-:)]\s*|문제\s*\d+|\d+\s*번|\[\d+\]|【\d+】)/gi,
+        /(?:\n|^)\s*(?:Q\s*[.:]?\s*\d+|제\s*\d+\s*문|문제\s*\d+|\d+\s*[.\-:)]\s*|\d+\s*번|\[\s*\d+\s*\]|【\s*\d+\s*】|[①②③④⑤⑥⑦⑧⑨⑩])\s*/gim,
       ),
     ];
 
@@ -406,11 +409,19 @@ function parseQuestionsFromText(text) {
         if (compact.includes("시험시간: 100분") && compact.length < 100) return;
 
         const idMatch = compact.match(
-          /^(?:Q\s*[.:]?\s*(\d+)|(\d+)\s*[.\-:)]\s*|문제\s*(\d+)|(\d+)\s*번)/i,
+          /^(?:Q\s*[.:]?\s*(\d+)|제\s*(\d+)\s*문|문제\s*(\d+)|(\d+)\s*[.\-:)]\s*|(\d+)\s*번|\[\s*(\d+)\s*\]|【\s*(\d+)\s*】|([①②③④⑤⑥⑦⑧⑨⑩]))/i,
         );
         let rawNum = "0";
         if (idMatch) {
-          rawNum = idMatch[1] || idMatch[2] || idMatch[3] || idMatch[4];
+          rawNum =
+            idMatch[1] ||
+            idMatch[2] ||
+            idMatch[3] ||
+            idMatch[4] ||
+            idMatch[5] ||
+            idMatch[6] ||
+            idMatch[7] ||
+            idMatch[8];
         } else {
           rawNum = idx + 1;
         }

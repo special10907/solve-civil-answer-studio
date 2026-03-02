@@ -531,6 +531,41 @@
         return intersectionCount / union.size;
       }
 
+      function calculateTheorySimilarity(left, right) {
+        const leftTitleTokens = tokenizeTheory(left.title || "");
+        const rightTitleTokens = tokenizeTheory(right.title || "");
+        const leftContentTokens = tokenizeTheory(left.content || "");
+        const rightContentTokens = tokenizeTheory(right.content || "");
+
+        const titleSim = jaccardSimilarity(leftTitleTokens, rightTitleTokens);
+        const contentSim = jaccardSimilarity(
+          leftContentTokens,
+          rightContentTokens,
+        );
+
+        const leftTags = new Set(Array.isArray(left.tags) ? left.tags : []);
+        const rightTags = new Set(Array.isArray(right.tags) ? right.tags : []);
+        const tagSim = jaccardSimilarity(leftTags, rightTags);
+
+        const sameCategory =
+          String(left.category || "").trim() &&
+          String(left.category || "").trim() ===
+            String(right.category || "").trim();
+        const sameRound =
+          extractRoundOnly(left.examRound) &&
+          extractRoundOnly(left.examRound) === extractRoundOnly(right.examRound);
+
+        let score = titleSim * 0.35 + contentSim * 0.45 + tagSim * 0.2;
+        if (sameCategory) {
+          score += 0.06;
+        }
+        if (sameRound) {
+          score += 0.04;
+        }
+
+        return Math.min(1, score);
+      }
+
       function splitTheoryLines(content) {
         return String(content || "")
           .split(/\n+/)
@@ -747,22 +782,18 @@
           for (let j = i + 1; j < theories.length; j += 1) {
             const left = theories[i];
             const right = theories[j];
-            const leftTokens = tokenizeTheory(`${left.title} ${left.content}`);
-            const rightTokens = tokenizeTheory(
-              `${right.title} ${right.content}`,
-            );
-            const sim = jaccardSimilarity(leftTokens, rightTokens);
+            const sim = calculateTheorySimilarity(left, right);
 
-            if (sim >= 0.62) {
+            if (sim >= 0.58) {
               duplicates.push({
                 aIndex: i,
                 bIndex: j,
                 aTitle: left.title,
                 bTitle: right.title,
                 similarity: sim,
-                recommendation: `${left.id} 또는 ${right.id} 중 품질이 낮은 항목을 통합 정리 권장`,
+                recommendation: `${left.id}와 ${right.id}는 내용 중복도가 높습니다. 품질점수 낮은 항목을 병합/정리 권장`,
               });
-            } else if (sim >= 0.35) {
+            } else if (sim >= 0.3) {
               const longer =
                 (left.content || "").length >= (right.content || "").length
                   ? left
@@ -774,7 +805,7 @@
                 aTitle: left.title,
                 bTitle: right.title,
                 similarity: sim,
-                recommendation: `${shorter.id}의 보완 내용을 ${longer.id} 본문에 통합하여 강화 권장`,
+                recommendation: `${shorter.id}의 차별 포인트(태그/기준/사례)를 ${longer.id} 본문에 통합하여 강화 권장`,
               });
             }
           }
@@ -1064,10 +1095,10 @@
 
       function inferQuestionType(question) {
         const fullText = `${question.id || ""} ${question.title || ""} ${question.modelAnswer || ""}`;
-        if (/1\s*교시|용어|단답/.test(fullText)) {
+        if (/1\s*교시|10\s*점|용어|단답/.test(fullText)) {
           return "short";
         }
-        if (/2\s*교시|3\s*교시|4\s*교시|서술/.test(fullText)) {
+        if (/2\s*교시|3\s*교시|4\s*교시|25\s*점|서술/.test(fullText)) {
           return "long";
         }
         return "unknown";
@@ -1077,22 +1108,28 @@
         const answer = String(question.modelAnswer || "");
         const type = inferQuestionType(question);
         const length = answer.replace(/\s+/g, "").length;
-        const minLength = type === "short" ? 550 : type === "long" ? 1400 : 900;
+        const minLength = type === "short" ? 900 : type === "long" ? 2200 : 1300;
 
         const hasVisual =
           /(도해|모식도|그림|선도|그래프|표|상관도|메커니즘)/.test(answer);
+        const hasComparisonTable = /(비교표|vs\b|대비\s*[:：]|허용응력설계법|한계상태설계법)/i.test(
+          answer,
+        );
         const hasBilingual = /[가-힣][^\n]{0,12}\([A-Za-z][^)]+\)/.test(answer);
         const hasKds =
           /KDS\s*\d{2}\s*\d{2}\s*\d{2}|KDS\s*\d{2}\s*\d{2}\s*\d{2}\s*\d{2}/.test(
             answer,
           );
         const hasNumbered = /(^|\n)\s*\d+\./.test(answer);
+        const hasOpinion = /(결론|제언|본인(?:의)?\s*견해|실무\s*제안|유지관리\s*유의사항)/.test(
+          answer,
+        );
 
         let score = 0;
         const feedback = [];
 
         const lengthRatio = Math.min(1, length / minLength);
-        score += Math.round(lengthRatio * 35);
+        score += Math.round(lengthRatio * 30);
         if (length < minLength) {
           feedback.push(
             `분량 보강 필요: 현재 ${length}자, 권장 ${minLength}자 이상`,
@@ -1108,7 +1145,14 @@
           );
         }
 
-        score += hasBilingual ? 15 : 0;
+        score += hasComparisonTable ? 10 : 0;
+        if (!hasComparisonTable) {
+          feedback.push(
+            "본론에 비교표(예: 허용응력설계법 vs 한계상태설계법)를 추가하세요.",
+          );
+        }
+
+        score += hasBilingual ? 10 : 0;
         if (!hasBilingual) {
           feedback.push(
             "핵심 용어에 영어 병기(예: 연성(Ductility))를 추가하세요.",
@@ -1124,6 +1168,13 @@
         if (!hasNumbered) {
           feedback.push(
             "개조식 넘버링(1., 2., 3.) 구조로 논리 흐름을 강화하세요.",
+          );
+        }
+
+        score += hasOpinion ? 10 : 0;
+        if (!hasOpinion) {
+          feedback.push(
+            "결론부에 기술사 제언/본인 견해(3~4줄)를 명시해 차별화를 만드세요.",
           );
         }
 

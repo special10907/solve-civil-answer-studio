@@ -259,6 +259,72 @@ function refreshAttachmentTargetOptions(questions) {
   }
 }
 
+let attachmentOcrBootstrapPromise = null;
+
+async function ensureAttachmentOcrEngine() {
+  if (window.Tesseract && typeof window.Tesseract.recognize === "function") {
+    return true;
+  }
+
+  if (attachmentOcrBootstrapPromise) {
+    return attachmentOcrBootstrapPromise;
+  }
+
+  attachmentOcrBootstrapPromise = new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "vendor/js/tesseract.min.js";
+    script.async = true;
+    script.onload = () => {
+      resolve(
+        !!(window.Tesseract && typeof window.Tesseract.recognize === "function"),
+      );
+    };
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+
+  return attachmentOcrBootstrapPromise;
+}
+
+function normalizeOcrText(text, maxLength = 50000) {
+  return String(text || "")
+    .replace(/\0/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+async function runAttachmentOcr(source) {
+  const ready = await ensureAttachmentOcrEngine();
+  if (!ready) {
+    return "";
+  }
+
+  try {
+    const langPath = `${window.location.origin}/`;
+    const result = await window.Tesseract.recognize(source, "kor+eng", {
+      langPath,
+    });
+    return normalizeOcrText(result?.data?.text || "", 50000);
+  } catch {
+    return "";
+  }
+}
+
+async function extractPdfPageTextWithOcr(page) {
+  try {
+    const viewport = page.getViewport({ scale: 2.2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    await page.render({ canvasContext: context, viewport }).promise;
+    return runAttachmentOcr(canvas);
+  } catch {
+    return "";
+  }
+}
+
 async function readAttachmentTextExcerpt(file) {
   const ext = (file.name || "").toLowerCase().split(".").pop() || "";
   const type = file.type || "";
@@ -295,7 +361,18 @@ async function readAttachmentTextExcerpt(file) {
 
       window.visualTextCache.push({ page: pageNum, texts: pageTexts });
       const pageText = content.items.map((item) => item.str).join(" ");
-      parts.push(pageText + "\n");
+
+      const compactPageText = normalizeOcrText(pageText, 20000);
+      if (compactPageText.length >= 60) {
+        parts.push(compactPageText + "\n");
+      } else {
+        const ocrText = await extractPdfPageTextWithOcr(page);
+        if (ocrText.length >= 20) {
+          parts.push(`[OCR:${pageNum}p] ${ocrText}\n`);
+        } else {
+          parts.push(pageText + "\n");
+        }
+      }
     }
 
     let fullText = parts.join("\n");
@@ -307,7 +384,16 @@ async function readAttachmentTextExcerpt(file) {
   }
 
   if (type.startsWith("image/")) {
-    return `이미지 파일 메타정보: ${file.name}, ${Math.round(file.size / 1024)}KB`;
+    const imageUrl = URL.createObjectURL(file);
+    try {
+      const ocrText = await runAttachmentOcr(imageUrl);
+      if (ocrText.length >= 20) {
+        return `[이미지 OCR] ${ocrText}`;
+      }
+      return `이미지 파일 메타정보: ${file.name}, ${Math.round(file.size / 1024)}KB (OCR 텍스트 미검출)`;
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+    }
   }
 
   if (type.startsWith("video/")) {
@@ -370,6 +456,140 @@ function buildLocalAttachmentInsight(items, focus, title = "첨부자료") {
       "- 수치·도해·비교표 제시 시 채점 가독성이 향상됨.",
     ].join("\n"),
   };
+}
+
+function shouldAutoAttachTheoryKnowledge(focusText) {
+  const focus = String(focusText || "").toLowerCase();
+  return /(이론|지식|개념|서브노트|theory|knowledge|concept)/.test(focus);
+}
+
+function makeTheoryTitleFromFileName(name, fallbackIndex = 1) {
+  const base = String(name || "")
+    .replace(/\.[^./\\]+$/, "")
+    .replace(/[._-]+/g, " ")
+    .trim();
+  return base || `첨부 이론 ${fallbackIndex}`;
+}
+
+function extractTopTheoryTags(text, maxCount = 5) {
+  const stop = new Set([
+    "그리고",
+    "또한",
+    "대한",
+    "기준",
+    "설계",
+    "검토",
+    "적용",
+    "구조",
+    "문제",
+    "정리",
+  ]);
+
+  const words = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !stop.has(token));
+
+  const freq = new Map();
+  words.forEach((word) => {
+    freq.set(word, (freq.get(word) || 0) + 1);
+  });
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxCount)
+    .map(([word]) => word);
+}
+
+function buildTheoryEntriesFromAnalyzedFiles(items, insight, focus) {
+  const keyPoints = Array.isArray(insight?.keyPoints) ? insight.keyPoints : [];
+  const entries = [];
+
+  (Array.isArray(items) ? items : []).forEach((item, idx) => {
+    const excerpt = String(item?.textExcerpt || "").replace(/\s+/g, " ").trim();
+    if (excerpt.length < 50) {
+      return;
+    }
+
+    const title = makeTheoryTitleFromFileName(item?.name, idx + 1);
+    const tags = extractTopTheoryTags(excerpt);
+    const roundRaw =
+      typeof inferExamRoundFromText === "function"
+        ? inferExamRoundFromText(excerpt)
+        : "미지정";
+    const round =
+      typeof normalizeExamRound === "function"
+        ? normalizeExamRound(roundRaw || "미지정", "미지정")
+        : roundRaw || "미지정";
+
+    const content = [
+      `[첨부 원문 요약] ${excerpt.slice(0, 1200)}${excerpt.length > 1200 ? "..." : ""}`,
+      keyPoints.length ? `[핵심 포인트] ${keyPoints.slice(0, 3).join(" / ")}` : "",
+      `[분석 초점] ${focus || "일반"}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    entries.push({
+      title,
+      category: "첨부이론",
+      examRound: round || "미지정",
+      tags: [...new Set(["첨부자동", ...tags])],
+      source: `AttachmentAuto:${item?.name || "unknown"}`,
+      content,
+    });
+  });
+
+  return entries;
+}
+
+function appendTheoryEntriesToKnowledgeBase(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) {
+    return 0;
+  }
+
+  let data;
+  try {
+    data = getCurrentAnswerData();
+  } catch {
+    return 0;
+  }
+
+  const exists = new Set(
+    (data.theories || []).map(
+      (row) => `${String(row.title || "").trim()}|${String(row.source || "").trim()}`,
+    ),
+  );
+
+  let added = 0;
+  list.forEach((entry) => {
+    const key = `${String(entry.title || "").trim()}|${String(entry.source || "").trim()}`;
+    if (exists.has(key)) {
+      return;
+    }
+    const nextId = `TH-${String((data.theories || []).length + 1).padStart(3, "0")}`;
+    data.theories.push({
+      id: nextId,
+      title: entry.title || "첨부 이론",
+      category: entry.category || "첨부이론",
+      examRound: entry.examRound || "미지정",
+      tags: Array.isArray(entry.tags) ? entry.tags : ["첨부자동"],
+      source: entry.source || "AttachmentAuto",
+      content: entry.content || "",
+    });
+    exists.add(key);
+    added += 1;
+  });
+
+  if (added > 0) {
+    syncJsonAndRender(
+      data,
+      `첨부 이론 자동 등록 완료: ${added}개 (이론 지식베이스 반영)`,
+    );
+  }
+
+  return added;
 }
 
 async function analyzeAttachedFiles() {
@@ -466,6 +686,15 @@ async function analyzeAttachedFiles() {
     const insight = await response.json();
     latestAttachmentInsight = insight;
     renderAttachmentInsight(insight);
+
+    if (shouldAutoAttachTheoryKnowledge(focus)) {
+      const autoEntries = buildTheoryEntriesFromAnalyzedFiles(items, insight, focus);
+      const added = appendTheoryEntriesToKnowledgeBase(autoEntries);
+      if (added > 0) {
+        setTheoryStatus(`이론 파일 자동 첨부 완료: ${added}개`, "success");
+      }
+    }
+
     setAttachmentStatus(
       `첨부 파일 분석 완료 (${insight.mode || "backend"} 모드)`,
       "success",
@@ -479,6 +708,19 @@ async function analyzeAttachedFiles() {
     );
     latestAttachmentInsight = { ...localInsight, mode: "local" };
     renderAttachmentInsight(latestAttachmentInsight);
+
+    if (shouldAutoAttachTheoryKnowledge(focus)) {
+      const autoEntries = buildTheoryEntriesFromAnalyzedFiles(
+        items,
+        latestAttachmentInsight,
+        focus,
+      );
+      const added = appendTheoryEntriesToKnowledgeBase(autoEntries);
+      if (added > 0) {
+        setTheoryStatus(`이론 파일 자동 첨부 완료(로컬 분석): ${added}개`, "success");
+      }
+    }
+
     setAttachmentStatus(
       "백엔드 연결 실패로 로컬 분석 결과를 표시했습니다.",
       "info",

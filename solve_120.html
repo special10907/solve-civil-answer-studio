@@ -1591,10 +1591,34 @@
                   <i class="fas fa-sync-alt mr-1"></i>재연결
                 </button>
                 <span
-                  id="backendStatus"
-                  class="text-xs text-slate-500 self-center"
-                  >연결 대기 중...</span
+                  id="backendCoreStatus"
+                  class="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 self-center"
+                  >백엔드: 확인 대기</span
                 >
+                <span
+                  id="lmStudioStatus"
+                  class="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 self-center"
+                  >LM Studio: 확인 대기</span
+                >
+                <div id="lmActionButtons" class="hidden items-center gap-1.5">
+                  <button
+                    type="button"
+                    onclick="switchToExternalApiMode()"
+                    class="px-2 py-1 text-[10px] rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                    title="외부 API 모드로 전환"
+                  >
+                    외부 API 모드
+                  </button>
+                  <button
+                    type="button"
+                    onclick="generateDraftAnswersLocal()"
+                    class="px-2 py-1 text-[10px] rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                    title="AI 연결 없이 로컬 규칙으로 답안 작성"
+                  >
+                    로컬 규칙으로 계속
+                  </button>
+                </div>
+                <span id="backendStatus" class="hidden">연결 대기 중...</span>
               </div>
 
               <div
