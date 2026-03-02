@@ -274,6 +274,19 @@ async function generateTextWithProviders({ systemPrompt = '', userPrompt = '', t
         userPrompt: `${systemPrompt}\n\n${userPrompt}`,
         temperature
       })
+    },
+    {
+      provider: 'lmstudio',
+      enabled: isValidKey(process.env.LMSTUDIO_BASE_URL),
+      run: async () => callOpenAICompatible({
+        provider: 'lmstudio',
+        baseUrl: process.env.LMSTUDIO_BASE_URL,
+        apiKey: 'lm-studio', // LM Studio usually doesn't require a real key
+        model: process.env.LMSTUDIO_MODEL || 'local-model',
+        systemPrompt,
+        userPrompt,
+        temperature
+      })
     }
   ];
 
@@ -306,7 +319,8 @@ function getProviderConfigStatus() {
   return {
     openai: isValidKey(process.env.OPENAI_API_KEY),
     gemini: isValidKey(process.env.GEMINI_API_KEY),
-    anthropic: isValidKey(process.env.ANTHROPIC_API_KEY)
+    anthropic: isValidKey(process.env.ANTHROPIC_API_KEY),
+    lmstudio: isValidKey(process.env.LMSTUDIO_BASE_URL)
   };
 }
 

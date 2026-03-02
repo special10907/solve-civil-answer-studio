@@ -215,6 +215,41 @@ function groupTextItems(items, thresholdY = 8) {
   }));
 }
 
+// v21.6.21: 자동 좌표 매칭용 문자열 유사도 계산(Levenshtein Distance)
+function calculateLevenshteinDistance(a = "", b = "") {
+  const s = String(a);
+  const t = String(b);
+
+  if (s === t) return 0;
+  if (!s.length) return t.length;
+  if (!t.length) return s.length;
+
+  const sLen = s.length;
+  const tLen = t.length;
+  const prev = new Array(tLen + 1);
+  const curr = new Array(tLen + 1);
+
+  for (let j = 0; j <= tLen; j++) prev[j] = j;
+
+  for (let i = 1; i <= sLen; i++) {
+    curr[0] = i;
+    const sChar = s.charCodeAt(i - 1);
+
+    for (let j = 1; j <= tLen; j++) {
+      const cost = sChar === t.charCodeAt(j - 1) ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1, // deletion
+        curr[j - 1] + 1, // insertion
+        prev[j - 1] + cost, // substitution
+      );
+    }
+
+    for (let j = 0; j <= tLen; j++) prev[j] = curr[j];
+  }
+
+  return prev[tLen];
+}
+
 // Consolidated at the bottom of the file or kept here if needed.
 // Removing redundant/simple stubs to avoid conflicts.
 
@@ -783,6 +818,15 @@ function renderReviewerList(questions) {
   window.currentReviewingQuestions = Array.isArray(questions)
     ? [...questions]
     : [];
+  if (!Array.isArray(window.selectedQuestionIdsForAi)) {
+    window.selectedQuestionIdsForAi = [];
+  }
+  const currentIdSet = new Set(
+    window.currentReviewingQuestions.map((q) => String(q.id || "")),
+  );
+  window.selectedQuestionIdsForAi = window.selectedQuestionIdsForAi.filter(
+    (id) => currentIdSet.has(String(id)),
+  );
 
   // v21.6.15: 30페이지 전체 전수 조사는 성능에 치명적이므로, 현재 페이지 중심 또는 캐시된 카운트 사용
   const getGlobalCandidateCount = () => {
@@ -834,6 +878,7 @@ function renderReviewerList(questions) {
 
   const qs = window.currentReviewingQuestions;
   const isPending = (idx) => window.pendingAssignIndex === idx;
+  const selectedForAiSet = new Set(window.selectedQuestionIdsForAi || []);
 
   const isModalOpen = !document
     .getElementById("pdfVisualModal")
@@ -852,13 +897,15 @@ function renderReviewerList(questions) {
     ).length;
     if (countLabel) countLabel.textContent = `표시 중: ${pageCount}개`;
     if (modalCount)
-      modalCount.textContent = `현재 페이지 문항: ${pageCount}개 (전체: ${qs.length}개 / 인식후보: ${displayBlocksCount})`;
+      modalCount.textContent = `현재 페이지 문항: ${pageCount}개 (AI 선택: ${selectedForAiSet.size}개 / 전체: ${qs.length}개 / 인식후보: ${displayBlocksCount})`;
   }
 
   const listHtml = window.currentReviewingQuestions
     .map((q, i) => {
       if (q.rect && q.rect.page !== targetPage) return "";
       const pending = isPending(i);
+      const selectedForAi = selectedForAiSet.has(String(q.id || ""));
+      const safeQId = String(q.id || "").replace(/'/g, "\\'");
       return `
                 <div
                   draggable="true"
@@ -871,6 +918,10 @@ function renderReviewerList(questions) {
                   onclick="highlightQuestionOnPdf(${i})"
                   ondblclick="highlightQuestionOnPdf(${i})"
                   class="p-3 border rounded-lg transition-all cursor-pointer group mb-2 relative reviewer-list-item item-${q.id} ${
+                    selectedForAi
+                      ? "ring-2 ring-indigo-300 border-indigo-400 bg-indigo-50/60"
+                      : ""
+                  } ${
                     pending
                       ? "bg-white border-blue-500 ring-2 ring-blue-200 animate-pulse shadow-md"
                       : q.tags && q.tags.includes("수동지정")
@@ -883,6 +934,10 @@ function renderReviewerList(questions) {
                       <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">${q.examRound || "미지정"}</span>
                       <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
                     </div>
+                    <label class="inline-flex items-center gap-1 text-[10px] text-indigo-700 mb-1" onclick="event.stopPropagation()">
+                      <input type="checkbox" ${selectedForAi ? "checked" : ""} onclick="event.stopPropagation(); toggleAiQuestionSelection('${safeQId}', this.checked)" class="accent-indigo-600" />
+                      AI 작성 대상
+                    </label>
                     <h5 class="text-sm font-bold text-slate-800 line-clamp-2 mb-1 group-hover:text-blue-700">${escapeHtml(q.title)}</h5>
                     ${
                       pending
@@ -921,11 +976,49 @@ function renderReviewerList(questions) {
     .join("");
 
   if (window.currentReviewingQuestions.length > 0) {
-    container.innerHTML = `<div class="grid grid-cols-2 gap-2 h-full content-start">${listHtml}</div>`;
+    container.innerHTML = `
+      <div class="mb-2 flex items-center justify-between text-[11px]">
+        <div class="text-slate-500">AI 대상 선택: ${selectedForAiSet.size}개</div>
+        <div class="flex gap-1.5">
+          <button type="button" onclick="event.stopPropagation(); selectAllAiQuestionsOnCurrentPage()" class="px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">현재 페이지 전체선택</button>
+          <button type="button" onclick="event.stopPropagation(); clearAiQuestionSelection()" class="px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">선택해제</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 h-full content-start">${listHtml}</div>
+    `;
   }
 
   // v4.0: 모달 내부 리스트도 함께 업데이트
   updateModalNavigation(targetPage);
+}
+
+function toggleAiQuestionSelection(qId, checked) {
+  if (!Array.isArray(window.selectedQuestionIdsForAi)) {
+    window.selectedQuestionIdsForAi = [];
+  }
+  const key = String(qId || "");
+  const set = new Set(window.selectedQuestionIdsForAi.map((id) => String(id)));
+  if (checked) set.add(key);
+  else set.delete(key);
+  window.selectedQuestionIdsForAi = Array.from(set);
+  renderReviewerList(window.currentReviewingQuestions || []);
+}
+
+function selectAllAiQuestionsOnCurrentPage() {
+  const isModalOpen = !document
+    .getElementById("pdfVisualModal")
+    .classList.contains("hidden");
+  const targetPage = isModalOpen ? visualCurrentPage : revCurrentPage;
+  const questions = (window.currentReviewingQuestions || []).filter(
+    (q) => !q.rect || q.rect.page === targetPage,
+  );
+  window.selectedQuestionIdsForAi = questions.map((q) => String(q.id || ""));
+  renderReviewerList(window.currentReviewingQuestions || []);
+}
+
+function clearAiQuestionSelection() {
+  window.selectedQuestionIdsForAi = [];
+  renderReviewerList(window.currentReviewingQuestions || []);
 }
 
 // v21.6.20: 절대 사용하지 마세요. 신버전은 1626줄 켜지고 실제를 위임하는 실제 신버전에서 제어합니다.
@@ -933,22 +1026,6 @@ function renderReviewerList(questions) {
 function _highlightQuestionOnPdfLegacy(index) {
   // Legacy stub - delegates to new highlightQuestionOnPdf at line 1626
   // DO NOT CALL THIS DIRECTLY
-}
-
-function scrollReviewerListItemIntoView(id) {
-  const list =
-    document.getElementById("modalCaptureList") ||
-    document.getElementById("revQuestionList");
-  if (!list) return;
-
-  const item = list.querySelector(`.item-${id}`);
-  if (item) {
-    item.scrollIntoView({ behavior: "smooth", block: "center" });
-    item.classList.add("ring-4", "ring-indigo-500/50", "bg-indigo-50");
-    setTimeout(() => {
-      item.classList.remove("ring-4", "ring-indigo-500/50", "bg-indigo-50");
-    }, 1500);
-  }
 }
 
 // Redundant version removed. See consolidated version below.

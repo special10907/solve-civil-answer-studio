@@ -2,6 +2,65 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+
+function stripWrappingQuotes(value) {
+  const text = String(value || '').trim();
+  if (
+    (text.startsWith('"') && text.endsWith('"')) ||
+    (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    return text.slice(1, -1);
+  }
+  return text;
+}
+
+function loadEnvFile(envPath) {
+  if (!envPath || !fs.existsSync(envPath)) {
+    return false;
+  }
+
+  try {
+    const raw = fs.readFileSync(envPath, 'utf8');
+    raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .forEach((line) => {
+        const eqIdx = line.indexOf('=');
+        if (eqIdx <= 0) {
+          return;
+        }
+        const key = line.slice(0, eqIdx).trim();
+        const value = stripWrappingQuotes(line.slice(eqIdx + 1));
+        const currentValue = String(process.env[key] || '').trim();
+        if (key && (!currentValue || process.env[key] == null)) {
+          process.env[key] = value;
+        }
+      });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '.env'),
+  path.resolve(__dirname, '..', '.env'),
+  path.resolve(__dirname, '..', 'backend', '.env'),
+];
+[...new Set(envCandidates)].forEach((candidate) => {
+  loadEnvFile(candidate);
+});
+
+function hasAnyEnvKey(keys = []) {
+  return keys.some((key) => {
+    const value = String(process.env[key] || '').trim();
+    return value.length > 0;
+  });
+}
 
 // Multer memory storage so we can forward buffers to external ASR providers
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -78,13 +137,13 @@ app.post('/api/analyze-attachments', (req, res) => {
   }
 
   // Aggregate text excerpts and parse
-  const combined = items.map(it => (it && it.textExcerpt) || '').join('\n\n');
+  const combined = items.map(it => it?.textExcerpt || '').join('\n\n');
   const questions = simpleParseQuestions(combined);
 
   // counts per file (rough)
   const countsByFile = items.map(it => ({
     name: it.name || 'unknown',
-    count: simpleParseQuestions((it && it.textExcerpt) || '').length,
+    count: simpleParseQuestions(it?.textExcerpt || '').length,
   }));
 
   return res.json({
@@ -178,7 +237,7 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
 
     proc.on('close', (code) => {
       // Clean up temp file
-      try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
 
       if (code !== 0) {
         console.error('whispercpp command failed', { code, stderr });
@@ -191,7 +250,7 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
 
     // In case of spawn error
     proc.on('error', (err) => {
-      try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
       console.error('whispercpp spawn error', err);
       return res.status(500).json({ ok: false, error: 'whispercpp-spawn-error', message: String(err) });
     });
@@ -200,8 +259,8 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
   }
 
   // Fallback / mock behaviour: accept either multipart upload or JSON body with name
-  const name = uploaded ? uploaded.originalname : (req.body && req.body.name) || 'unknown';
-  const type = uploaded ? uploaded.mimetype : (req.body && req.body.type) || 'unknown';
+  const name = uploaded ? uploaded.originalname : req.body?.name || 'unknown';
+  const type = uploaded ? uploaded.mimetype : req.body?.type || 'unknown';
 
   // Simulate processing latency for mock
   await new Promise((r) => setTimeout(r, 350));
@@ -210,16 +269,120 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
   return res.json({ ok: true, mode: 'transcribe-mock', name, transcript });
 });
 
-app.get('/api/validate-keys', (req, res) => {
-  // Return fake provider diagnostics for development
+app.get('/api/validate-keys', (_req, res) => {
+  const openaiEnabled = hasAnyEnvKey(['OPENAI_API_KEY']);
+  const geminiEnabled = hasAnyEnvKey(['GEMINI_API_KEY', 'GOOGLE_API_KEY']);
+  const anthropicEnabled = hasAnyEnvKey(['ANTHROPIC_API_KEY']);
+
   return res.json({
-    openai: { status: 'missing' },
-    google: { status: 'missing' },
-    anthropic: { status: 'missing' },
+    openai: { status: openaiEnabled ? 'configured' : 'missing' },
+    gemini: { status: geminiEnabled ? 'configured' : 'missing' },
+    anthropic: { status: anthropicEnabled ? 'configured' : 'missing' },
+  });
+});
+
+app.post('/api/lmstudio-models', async (req, res) => {
+  const rawBaseUrl = String(req.body?.baseUrl || process.env.LM_STUDIO_BASE_URL || 'http://127.0.0.1:1234').trim();
+  const normalizedBaseUrl = rawBaseUrl.replace(/\/$/, '');
+
+  const candidates = [];
+  const pushCandidate = (url) => {
+    const value = String(url || '').trim().replace(/\/$/, '');
+    if (!value) return;
+    if (!candidates.includes(value)) {
+      candidates.push(value);
+    }
+  };
+
+  pushCandidate(normalizedBaseUrl);
+  pushCandidate(process.env.LM_STUDIO_BASE_URL);
+
+  // Common LM Studio local API endpoints (legacy/new)
+  pushCandidate(normalizedBaseUrl
+    .replace(/127\.0\.0\.1:1234/gi, 'localhost:1234')
+    .replace(/127\.0\.0\.1:5619/gi, 'localhost:5619'));
+  pushCandidate(normalizedBaseUrl
+    .replace(/localhost:1234/gi, '127.0.0.1:1234')
+    .replace(/localhost:5619/gi, '127.0.0.1:5619'));
+  pushCandidate('http://127.0.0.1:1234');
+  pushCandidate('http://localhost:1234');
+  pushCandidate('http://127.0.0.1:5619');
+  pushCandidate('http://localhost:5619');
+
+  const attempted = [];
+  const probeResults = [];
+  let reachableButNotOpenAi = false;
+  for (const baseUrl of candidates) {
+    const targetUrl = `${baseUrl}/v1/models`;
+    attempted.push(targetUrl);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const response = await fetch(targetUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        probeResults.push({ targetUrl, status: response.status, ok: false });
+        if (response.status === 404 || response.status === 405) {
+          reachableButNotOpenAi = true;
+        }
+        continue;
+      }
+
+      const payload = await response.json();
+      const models = Array.isArray(payload?.data) ? payload.data : [];
+      return res.json({
+        ok: true,
+        models,
+        targetUrl,
+        resolvedBaseUrl: baseUrl,
+        attempted,
+        probeResults,
+      });
+    } catch (error) {
+      probeResults.push({
+        targetUrl,
+        ok: false,
+        error: String(error?.message || error || 'probe-failed'),
+      });
+      // try next candidate
+    }
+  }
+
+  return res.status(503).json({
+    ok: false,
+    error: reachableButNotOpenAi
+      ? 'LM Studio 프로세스는 응답하지만 OpenAI API(/v1/models)가 비활성입니다. LM Studio에서 Local Server(OpenAI 호환) 기능을 활성화하세요.'
+      : 'LM Studio API unreachable. Check Local Server and port settings in LM Studio.',
+    attempted,
+    probeResults,
+  });
+});
+
+app.get('/health', (_req, res) => {
+  return res.json({
+    ok: true,
+    service: 'analyze-questions-mock',
+    providers: {
+      openai: hasAnyEnvKey(['OPENAI_API_KEY']),
+      gemini: hasAnyEnvKey(['GEMINI_API_KEY', 'GOOGLE_API_KEY']),
+      anthropic: hasAnyEnvKey(['ANTHROPIC_API_KEY']),
+    },
   });
 });
 
 const PORT = process.env.PORT || 8787;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Analyze-questions mock server listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`[server] Port ${PORT} is already in use. Stop the existing process or use a different PORT.`);
+    process.exit(1);
+  }
+
+  console.error('[server] Failed to start:', err);
+  process.exit(1);
 });

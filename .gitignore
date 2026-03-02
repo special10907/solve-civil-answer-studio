@@ -22,3 +22,15 @@ Thumbs.db
 desktop.ini
 .DS_Store
 .vscode/
+
+# Local temporary/debug artifacts
+temp*.js
+temp*.html
+old_render*.txt
+headless_console.log
+headless_screenshot.png
+solve_120_render_check_final.png
+
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc

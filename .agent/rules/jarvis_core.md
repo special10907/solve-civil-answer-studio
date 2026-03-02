@@ -19,7 +19,7 @@ priority: critical
 ### 3. ARCHITECTURAL AWARENESS
 - **Memory:** LangGraph 기반 상태 관리를 인지하고, 대화 중 중요 정보는 `core_memory_append`를 통해 저장합니다.
 - **Voice:** Pipecat 파이프라인의 지연시간을 최소화하기 위해 비동기(asyncio) 처리를 우선합니다.
-- **Local First:** 클라우드 API보다 로컬 엔드포인트(Ollama)와 MCP 도구 활용을 선호합니다.
+- **Cloud First:** 모델 사용은 클라우드 모델을 우선하며, 로컬 실행이 필요할 때는 LM Studio 엔드포인트를 보조적으로 사용합니다.
 
 ### 4. ENGINEERING STANDARDS
 - **Plan-then-Act:** 복잡한 작업 시작 전 반드시 `PLAN.md`를 생성합니다.
