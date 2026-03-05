@@ -1,272 +1,572 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import multer from 'multer';
+import fs from 'fs';
 
-function stripWrappingQuotes(value) {
-  const text = String(value || '').trim();
-  if (
-    (text.startsWith('"') && text.endsWith('"')) ||
-    (text.startsWith("'") && text.endsWith("'"))
-  ) {
-    return text.slice(1, -1);
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 8787;
+
+app.use(cors());
+app.use(express.json({ limit: '5mb' }));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+
+function splitQuestionsFromText(text) {
+  const cleaned = String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!cleaned) {
+    return [];
   }
-  return text;
+
+  const blocks = cleaned
+    .split(/\n(?=\s*(?:Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번))/g)
+    .map((block) => block.trim())
+    .filter((block) => block.length >= 25);
+
+  const resultBlocks = blocks.length
+    ? blocks
+    : cleaned
+        .split(/\n\n+/)
+        .map((block) => block.trim())
+        .filter((block) => block.length >= 40)
+        .slice(0, 20);
+
+  return resultBlocks.map((block, index) => {
+    const compact = block.replace(/\s+/g, ' ').trim();
+    const title = compact.length > 70 ? `${compact.slice(0, 70)}...` : compact;
+    const idMatch = compact.match(/^(Q\s*\d+|\d+\s*[.)]|문제\s*\d+|\d+\s*번)/i);
+    const normalizedId = idMatch ? idMatch[0].replace(/\s+/g, '') : `Q${index + 1}`;
+
+    return {
+      id: normalizedId.startsWith('Q') ? normalizedId : `Q${index + 1}`,
+      title,
+      rawQuestion: compact
+    };
+  });
 }
 
-function loadEnvFile(envPath) {
-  if (!envPath || !fs.existsSync(envPath)) {
-    return false;
+function localDraftTemplate(question, context = '') {
+  const prompt = `${question?.title || ''} ${question?.rawQuestion || ''} ${question?.modelAnswer || ''}`.toLowerCase();
+
+  const base = [
+    '1. 정의 및 핵심 개념',
+    '- 문제의 핵심 개념을 영어 병기와 함께 명확히 정의합니다.',
+    '2. 설계/해석 검토',
+    '- 하중, 저항, 파괴모드를 개조식(1.,2.,3.)으로 전개합니다.',
+    '- KDS 기준 코드와 근거 수치를 명시합니다.',
+    '3. 시각화 전략',
+    '- 도해 1개(메커니즘) + 비교표 1개(대안 비교)를 포함합니다.',
+    '4. 결론 및 기술사 제언',
+    '- 시공성과 유지관리 관점의 보강안을 제시합니다.'
+  ];
+
+  if (/d-region|stm|응력교란|스트럿|타이/.test(prompt)) {
+    base.splice(1, 1, '- D-Region(Discontinuity Region)과 B-Region 구분을 우선 제시합니다.');
+    base.splice(4, 1, '- Strut/Tie/Node 강도와 정착을 기준으로 검토합니다.');
+  }
+
+  if (/psc|긴장재|부식|지연파괴|그라우팅/.test(prompt)) {
+    base.splice(1, 1, '- SCC/수소취성 메커니즘과 발생 조건을 구조적으로 설명합니다.');
+    base.splice(4, 1, '- 설계-시공-유지관리 단계별 대책을 제시합니다.');
+  }
+
+  const contextBlock = context
+    ? `\n[검색 컨텍스트 요약]\n${context.slice(0, 1000)}\n`
+    : '';
+
+  return `${base.join('\n')}${contextBlock}`;
+}
+
+import { execSync } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getRagContext(query) {
+  let context = '';
+  try {
+    const correctionsPath = path.join(__dirname, '..', 'solution', 'memory', 'KNOWLEDGE_CORRECTIONS.md');
+    if (fs.existsSync(correctionsPath)) {
+      const corrections = fs.readFileSync(correctionsPath, 'utf8');
+      if (corrections.trim()) {
+        context += `\n[SYSTEM DIRECTIVE / 사용자 교정 메모리]\n${corrections.trim()}\n`;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load KNOWLEDGE_CORRECTIONS:', e);
   }
 
   try {
-    const raw = fs.readFileSync(envPath, 'utf8');
-    raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
-      .forEach((line) => {
-        const eqIdx = line.indexOf('=');
-        if (eqIdx <= 0) {
-          return;
-        }
-        const key = line.slice(0, eqIdx).trim();
-        const value = stripWrappingQuotes(line.slice(eqIdx + 1));
-        const currentValue = String(process.env[key] || '').trim();
-        if (key && (!currentValue || process.env[key] == null)) {
-          process.env[key] = value;
-        }
-      });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const envCandidates = [
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(__dirname, '.env'),
-  path.resolve(__dirname, '..', '.env'),
-  path.resolve(__dirname, '..', 'backend', '.env'),
-];
-[...new Set(envCandidates)].forEach((candidate) => {
-  loadEnvFile(candidate);
-});
-
-function hasAnyEnvKey(keys = []) {
-  return keys.some((key) => {
-    const value = String(process.env[key] || '').trim();
-    return value.length > 0;
-  });
-}
-
-// Multer memory storage so we can forward buffers to external ASR providers
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
-
-const app = express();
-app.use(cors());
-app.use(bodyParser.json({ limit: '5mb' }));
-
-function simpleParseQuestions(text) {
-  if (!text || !text.trim()) return [];
-  // Normalize separators
-  const normalized = text.replace(/\r\n/g, "\n").replace(/\n{2,}/g, "\n\n");
-
-  // Split by double newlines first to get likely blocks
-  const blocks = normalized.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
-  const results = [];
-  const qHeadRe = /^(?:Q\s*\d+|문제\s*\d+|\d+\s*[.)]|\d+\s*번)/i;
-
-  blocks.forEach((blk, idx) => {
-    // try to find a line that looks like a question header
-    const lines = blk.split('\n').map(l => l.trim()).filter(Boolean);
-    let id = null;
-    let title = null;
-    for (const ln of lines) {
-      const m = ln.match(qHeadRe);
-      if (m) {
-        id = m[0].replace(/\s+/g, '');
-        title = ln.replace(qHeadRe, '').trim() || blk.slice(0, 80);
-        break;
+    const indexPath = path.join(__dirname, '..', 'solution', 'master_knowledge_index.json');
+    if (fs.existsSync(indexPath)) {
+      const raw = fs.readFileSync(indexPath, 'utf8');
+      const idx = JSON.parse(raw);
+      
+      const qTokens = query.toLowerCase().replace(/[^a-z0-9가-힣]/g, ' ').split(/\s+/).filter(t => t.length > 1);
+      
+      let matchedDocs = [];
+      if (Array.isArray(idx)) {
+         for (const doc of idx) {
+            let score = 0;
+            const docText = `${doc.title || ''} ${doc.content || ''}`.toLowerCase();
+            for (const t of qTokens) {
+               if (docText.includes(t)) score++;
+            }
+            if (score > 0) matchedDocs.push({doc, score});
+         }
+         matchedDocs.sort((a, b) => b.score - a.score);
+         const topDocs = matchedDocs.slice(0, 3).map(x => `[${x.doc.title || x.doc.source || '첨부문서'}] ${String(x.doc.content || '').substring(0, 1000)}...`);
+         if (topDocs.length > 0) {
+           context += `\n[Universal Knowledge DB 검색 결과]\n${topDocs.join('\n\n')}\n`;
+         }
       }
     }
+  } catch (e) {
+    console.error('Failed to load master_knowledge_index:', e);
+  }
 
-    // fallback: if block contains a question mark or ends with ? or starts with 숫자.
-    if (!id && /\?/m.test(blk)) {
-      id = `Q${idx+1}`;
-      title = blk.split('\n')[0].slice(0,80);
-    }
-
-    // final fallback - create an entry if block length is reasonable
-    if (!id && blk.length > 30) {
-      id = `Q${idx+1}`;
-      title = blk.slice(0, 80);
-    }
-
-    if (id) {
-      results.push({ id, title, rawQuestion: blk });
-    }
-  });
-
-  return results;
+  return context.trim();
 }
 
-app.post('/api/analyze-questions', (req, res) => {
-  const { text, source } = req.body || {};
-  if (!text || typeof text !== 'string') {
-    return res.status(400).json({ error: 'text (string) required' });
+async function fetchWebContext(query) {
+  if (!query || String(query).trim().length < 2) {
+    return '';
   }
 
-  // In a production setup, replace this with an actual LLM call.
-  const questions = simpleParseQuestions(text);
+  try {
+    const pythonScript = path.join(__dirname, '..', 'solution', 'skills', 'research', 'web_research.py');
+    const stdout = execSync(`python "${pythonScript}" "${query}"`, { encoding: 'utf-8' });
+    return stdout || '';
+  } catch (error) {
+    console.error('Python Web Research Error:', error);
+    return '';
+  }
+}
 
-  return res.json({
-    ok: true,
-    source: source || 'local-mock',
-    questions,
-    count: questions.length
-  });
-});
-
-app.post('/api/analyze-attachments', (req, res) => {
-  const { items, focus } = req.body || {};
-  if (!Array.isArray(items)) {
-    return res.status(400).json({ error: 'items (array) required' });
+function parseJsonObjectFromText(content = '') {
+  const raw = String(content || '').trim();
+  if (!raw) {
+    return null;
   }
 
-  // Aggregate text excerpts and parse
-  const combined = items.map(it => it?.textExcerpt || '').join('\n\n');
-  const questions = simpleParseQuestions(combined);
+  try {
+    return JSON.parse(raw);
+  } catch {
+  }
 
-  // counts per file (rough)
-  const countsByFile = items.map(it => ({
-    name: it.name || 'unknown',
-    count: simpleParseQuestions(it?.textExcerpt || '').length,
-  }));
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(raw.slice(start, end + 1));
+    } catch {
+    }
+  }
 
-  return res.json({
-    ok: true,
-    mode: 'local-mock',
-    files: items.length,
-    focus: focus || null,
-    countsByFile,
-    questions,
-    count: questions.length,
+  return null;
+}
+
+async function callOpenAICompatible({ provider, baseUrl, apiKey, model, systemPrompt, userPrompt, temperature = 0.3 }) {
+  if (!apiKey) {
+    return null;
+  }
+
+  const response = await fetch(`${String(baseUrl || '').replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ]
+    })
   });
-});
 
-app.post('/api/analyze-webpage', (req, res) => {
-  const { url, focus } = req.body || {};
-  if (!url) return res.status(400).json({ error: 'url required' });
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 240);
+    throw new Error(`${provider} API failed: ${response.status}${body ? ` ${body}` : ''}`);
+  }
 
-  // placeholder: return a minimal insight
-  const summary = `간단 요약: ${url}`;
-  return res.json({ ok: true, mode: 'local-mock', url, focus: focus || null, summary });
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (!content) {
+    return null;
+  }
+
+  return { text: String(content), provider, model };
+}
+
+async function callGemini({ apiKey, model, userPrompt, temperature = 0.3 }) {
+  if (!apiKey) {
+    return null;
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      generationConfig: {
+        temperature
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userPrompt }]
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 240);
+    throw new Error(`gemini API failed: ${response.status}${body ? ` ${body}` : ''}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('\n').trim();
+  if (!content) {
+    return null;
+  }
+
+  return { text: content, provider: 'gemini', model };
+}
+
+async function callAnthropic({ apiKey, model, userPrompt, temperature = 0.3 }) {
+  if (!apiKey) {
+    return null;
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model || 'claude-3-5-sonnet-20240620',
+      max_tokens: 4000,
+      temperature,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 240);
+    throw new Error(`anthropic API failed: ${response.status}${body ? ` ${body}` : ''}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.content?.[0]?.text;
+  if (!content) {
+    return null;
+  }
+
+  return { text: String(content), provider: 'anthropic', model };
+}
+
+const isValidKey = (key) => Boolean(key && !String(key).includes('your_'));
+
+/**
+ * AI Provider 우선순위 정책 (Sir의 요청에 따름):
+ * 1. Gemini (유효한 키가 있는 경우 최우선 시도)
+ * 2. OpenAI
+ * 3. Anthropic
+ * 4. 모든 클라우드 AI가 실패하거나 키가 없는 경우에만 '로컬 규칙 템플릿' 적용
+ */
+async function generateTextWithProviders({ systemPrompt = '', userPrompt = '', temperature = 0.3 }) {
+  const diagnostics = [];
+  const attempts = [
+    {
+      provider: 'gemini',
+      enabled: isValidKey(process.env.GEMINI_API_KEY),
+      run: async () => callGemini({
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+        userPrompt: `${systemPrompt}\n\n${userPrompt}`,
+        temperature
+      })
+    },
+    {
+      provider: 'openai',
+      enabled: isValidKey(process.env.OPENAI_API_KEY),
+      run: async () => callOpenAICompatible({
+        provider: 'openai',
+        baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        systemPrompt,
+        userPrompt,
+        temperature
+      })
+    },
+    {
+      provider: 'anthropic',
+      enabled: isValidKey(process.env.ANTHROPIC_API_KEY),
+      run: async () => callAnthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620',
+        userPrompt: `${systemPrompt}\n\n${userPrompt}`,
+        temperature
+      })
+    },
+    {
+      provider: 'lmstudio',
+      enabled: isValidKey(process.env.LMSTUDIO_BASE_URL),
+      run: async () => callOpenAICompatible({
+        provider: 'lmstudio',
+        baseUrl: process.env.LMSTUDIO_BASE_URL,
+        apiKey: 'lm-studio', // LM Studio usually doesn't require a real key
+        model: process.env.LMSTUDIO_MODEL || 'local-model',
+        systemPrompt,
+        userPrompt,
+        temperature
+      })
+    }
+  ];
+
+  for (const attempt of attempts) {
+    if (!attempt.enabled) {
+      diagnostics.push({ provider: attempt.provider, status: 'skipped', reason: 'missing_api_key' });
+      continue;
+    }
+
+    try {
+      const generated = await attempt.run();
+      if (generated?.text) {
+        diagnostics.push({ provider: attempt.provider, status: 'success' });
+        return { ...generated, diagnostics };
+      }
+      diagnostics.push({ provider: attempt.provider, status: 'empty' });
+    } catch (error) {
+      diagnostics.push({
+        provider: attempt.provider,
+        status: 'failed',
+        reason: String(error?.message || 'provider_call_failed').slice(0, 280)
+      });
+    }
+  }
+
+  return { text: null, provider: null, model: null, diagnostics };
+}
+
+function getProviderConfigStatus() {
+  return {
+    openai: isValidKey(process.env.OPENAI_API_KEY),
+    gemini: isValidKey(process.env.GEMINI_API_KEY),
+    anthropic: isValidKey(process.env.ANTHROPIC_API_KEY),
+    lmstudio: isValidKey(process.env.LMSTUDIO_BASE_URL)
+  };
+}
+
+async function generateWithLLM({ question, instruction, context }) {
+
+  const userPrompt = [
+    `문제: ${question?.title || ''}`,
+    `원문: ${question?.rawQuestion || ''}`,
+    `요청: ${instruction || '토목구조기술사 고득점형 모범답안을 개조식으로 작성'}`,
+    `검색컨텍스트: ${context || '없음'}`,
+    '형식: 1)정의 2)핵심이론 3)설계/검토 4)도해/표 포인트 5)결론/제언'
+  ].join('\n');
+
+  return generateTextWithProviders({
+    systemPrompt: '당신은 토목구조기술사 답안 코치입니다. 정확하고 구조화된 답안을 작성하세요.',
+    userPrompt,
+    temperature: 0.3
+  });
+}
+
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function extractPrimaryWebText(html = '') {
+  const source = String(html || '');
+  const mainMatch = source.match(/<main[\s\S]*?<\/main>/i);
+  const articleMatch = source.match(/<article[\s\S]*?<\/article>/i);
+  const bodyMatch = source.match(/<body[\s\S]*?<\/body>/i);
+  const chosen = mainMatch?.[0] || articleMatch?.[0] || bodyMatch?.[0] || source;
+
+  const text = stripHtml(chosen)
+    .replace(/\b(skip to main content|download microsoft edge|this browser is no longer supported)\b/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return text;
+}
+
+function extractTopKeywords(text, max = 8) {
+  const stopwords = new Set(['그리고', '또한', '대한', '에서', '으로', '하는', '있는', '있다', '한다', '통해', '기준', '검토', '적용']);
+  const freq = new Map();
+  String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !stopwords.has(token))
+    .forEach((token) => {
+      freq.set(token, (freq.get(token) || 0) + 1);
+    });
+
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([token]) => token);
+}
+
+function localInsightFromText({ title = '', text = '', focus = '' }) {
+  const clean = String(text || '').trim();
+  const summary = clean
+    ? clean.slice(0, 500)
+    : `${title || '자료'}에서 추출 가능한 텍스트가 부족합니다. 파일명/메타데이터 기반 분석을 제공합니다.`;
+
+  const keywords = extractTopKeywords(`${title} ${clean} ${focus}`);
+  const keyPoints = [
+    '핵심 메커니즘을 정의-검토-결론 구조로 재정리',
+    'KDS 코드와 수치 근거(하중계수, 허용값) 명시',
+    '도해/비교표/그래프를 통해 채점 가독성 강화'
+  ];
+
+  const answerBoost = [
+    '1. 문제 정의 및 배경(영어 병기 포함)',
+    '2. 기준/식/검토 항목을 번호화해 전개',
+    '3. 실무 제언(시공성·유지관리·리스크)으로 결론 강화'
+  ].join('\n');
+
+  return {
+    summary,
+    keywords,
+    keyPoints,
+    answerBoost,
+    source: 'local-insight'
+  };
+}
+
+async function generateInsightWithLLM({ title = '', text = '', focus = '' }) {
+
+  const userPrompt = [
+    `자료 제목: ${title}`,
+    `분석 초점: ${focus || '토목구조기술사 답안 보강'}`,
+    `자료 본문(일부): ${String(text || '').slice(0, 4000)}`,
+    '출력 형식(JSON only):',
+    '{"summary":"...","keywords":["..."],"keyPoints":["..."],"answerBoost":"..."}'
+  ].join('\n');
+
+  const generated = await generateTextWithProviders({
+    systemPrompt: '당신은 토목구조기술사 학습 코치입니다. 반드시 JSON만 출력하세요.',
+    userPrompt,
+    temperature: 0.2
+  });
+
+  if (!generated?.text) {
+    return {
+      ok: false,
+      diagnostics: Array.isArray(generated?.diagnostics) ? generated.diagnostics : []
+    };
+  }
+
+  const parsed = parseJsonObjectFromText(generated.text);
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      ok: false,
+      diagnostics: [
+        ...(Array.isArray(generated?.diagnostics) ? generated.diagnostics : []),
+        { provider: generated.provider || 'llm', status: 'invalid_json' }
+      ]
+    };
+  }
+
+  return {
+    ok: true,
+    summary: parsed.summary || '',
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+    keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [],
+    answerBoost: parsed.answerBoost || '',
+    source: `${generated.provider || 'llm'}-insight`,
+    provider: generated.provider || 'llm',
+    model: generated.model || '',
+    diagnostics: Array.isArray(generated?.diagnostics) ? generated.diagnostics : []
+  };
+}
+
+app.get('/health', (_, res) => {
+  res.json({ ok: true, service: 'civil-answer-backend', providers: getProviderConfigStatus() });
 });
 
 app.post('/api/transcribe', upload.single('file'), async (req, res) => {
-  // Support multiple modes: 'openai' (server-side whisper), 'whispercpp' (not-implemented here), 'mock'
-  const provider = (process.env.TRANSCRIBE_PROVIDER || 'mock').toLowerCase();
-
-  // If client uploaded a file via multipart/form-data, multer placed it in req.file
   const uploaded = req.file;
-
-  if (provider === 'openai' && process.env.OPENAI_API_KEY && uploaded) {
-    try {
-      // Forward the audio file to OpenAI's transcription endpoint
-      const form = new FormData();
-      form.append('file', uploaded.buffer, { filename: uploaded.originalname, contentType: uploaded.mimetype });
-      // Use a stable whisper model name; change if your OpenAI account expects a different model id
-      form.append('model', 'whisper-1');
-
-      const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-        body: form,
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        return res.status(502).json({ ok: false, error: 'openai-transcribe-failed', detail: text });
-      }
-
-      const json = await resp.json();
-      const transcript = json.text || json.transcript || '';
-      return res.json({ ok: true, mode: 'openai', name: uploaded.originalname, transcript, raw: json });
-    } catch (err) {
-      console.error('OpenAI transcribe error', err);
-      return res.status(500).json({ ok: false, error: 'openai-error', message: String(err) });
-    }
+  if (!uploaded) {
+    return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  if (provider === 'whispercpp') {
-    // Whisper.cpp/local models require an external binary and are environment-specific.
-    // To enable, set env WHISPERCPP_COMMAND to the command or script that accepts an input file path
-    // and writes transcript to stdout. Example: WHISPERCPP_COMMAND="/usr/local/bin/whisper_cpp_runner"
-    const cmd = process.env.WHISPERCPP_COMMAND;
-    if (!cmd || !uploaded) {
-      return res.status(501).json({ ok: false, error: 'whispercpp-not-configured', message: 'WHISPERCPP_COMMAND not configured or no file uploaded. See server README.' });
+  try {
+    const dropzone = path.resolve(__dirname, '..', 'solution', 'knowledge_dropzone', 'private');
+    if (!fs.existsSync(dropzone)) {
+      fs.mkdirSync(dropzone, { recursive: true });
     }
+    const safeName = `${Date.now()}_${uploaded.originalname}`;
+    const filePath = path.join(dropzone, safeName);
+    fs.writeFileSync(filePath, uploaded.buffer);
 
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
-    const { spawn } = require('child_process');
-
-    // Write uploaded buffer to a temp file
-    const tmpDir = os.tmpdir();
-    const tmpName = `transcribe_${Date.now()}_${Math.random().toString(36).slice(2,8)}_${uploaded.originalname}`;
-    const tmpPath = path.join(tmpDir, tmpName);
-    try {
-      fs.writeFileSync(tmpPath, uploaded.buffer);
-    } catch (err) {
-      console.error('Failed to write temp file for whispercpp', err);
-      return res.status(500).json({ ok: false, error: 'whispercpp-tempfile-failed', message: String(err) });
-    }
-
-    // Spawn the configured command with the temp file path as final argument
-    const parts = Array.isArray(cmd) ? cmd : cmd.split(' ');
-    const proc = spawn(parts[0], parts.slice(1).concat([tmpPath]), { stdio: ['ignore', 'pipe', 'pipe'] });
-
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-
-    proc.on('close', (code) => {
-      // Clean up temp file
-      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-
-      if (code !== 0) {
-        console.error('whispercpp command failed', { code, stderr });
-        return res.status(502).json({ ok: false, error: 'whispercpp-failed', code, stderr });
-      }
-
-      const transcript = stdout.trim();
-      return res.json({ ok: true, mode: 'whispercpp', name: uploaded.originalname, transcript, raw: { stderr } });
+    return res.json({
+      ok: true,
+      mode: 'solution_daemon',
+      name: uploaded.originalname,
+      transcript: `[시스템] 파일 '${uploaded.originalname}'이(가) Python Universal Ingestion 엔진(Dropzone)으로 전송되었습니다.\n백그라운드에서 지식화가 진행됩니다.`
     });
-
-    // In case of spawn error
-    proc.on('error', (err) => {
-      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-      console.error('whispercpp spawn error', err);
-      return res.status(500).json({ ok: false, error: 'whispercpp-spawn-error', message: String(err) });
-    });
-
-    return; // response will be sent from event handlers
+  } catch (error) {
+    console.error('Dropzone Forward Error:', error);
+    return res.status(500).json({ ok: false, error: 'dropzone_forward_failed', message: String(error) });
   }
+});
 
-  // Fallback / mock behaviour: accept either multipart upload or JSON body with name
-  const name = uploaded ? uploaded.originalname : req.body?.name || 'unknown';
-  const type = uploaded ? uploaded.mimetype : req.body?.type || 'unknown';
+app.get('/api/dropzone-status', (req, res) => {
+  try {
+    const rootDir = path.resolve(__dirname, '..', 'solution');
+    const privateDir = path.join(rootDir, 'knowledge_dropzone', 'private');
+    const processedDir = path.join(rootDir, 'knowledge_dropzone', 'processed');
+    const jsonDir = path.join(rootDir, 'json_subnotes');
 
-  // Simulate processing latency for mock
-  await new Promise((r) => setTimeout(r, 350));
+    const getFiles = (dir) => {
+      if (!fs.existsSync(dir)) return [];
+      return fs.readdirSync(dir).filter(f => fs.statSync(path.join(dir, f)).isFile());
+    };
 
-  const transcript = `자동 전사(모의): 파일 ${name} (${type})의 요약/전사 결과입니다.`;
-  return res.json({ ok: true, mode: 'transcribe-mock', name, transcript });
+    const privateFiles = getFiles(privateDir);
+    const processedFiles = getFiles(processedDir);
+    const jsonFiles = getFiles(jsonDir);
+
+    res.json({
+      ok: true,
+      pending: privateFiles.length,
+      processed: processedFiles.length,
+      knowledgeItems: jsonFiles.length,
+      pendingFiles: privateFiles,
+      processedFiles: processedFiles
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.get('/api/validate-keys', (_req, res) => {
@@ -360,29 +660,198 @@ app.post('/api/lmstudio-models', async (req, res) => {
   });
 });
 
-app.get('/health', (_req, res) => {
+
+app.get('/api/validate-keys', async (req, res) => {
+  const providers = getProviderConfigStatus();
+  const results = {};
+
+  const testPrompt = 'Hi, please reply with "OK".';
+
+  if (providers.openai) {
+    try {
+      await callOpenAICompatible({
+        provider: 'openai',
+        baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        systemPrompt: 'System',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.openai = { status: 'valid' };
+    } catch (e) {
+      results.openai = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.openai = { status: 'missing' };
+  }
+
+  if (providers.gemini) {
+    try {
+      await callGemini({
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.gemini = { status: 'valid' };
+    } catch (e) {
+      results.gemini = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.gemini = { status: 'missing' };
+  }
+
+  if (providers.anthropic) {
+    try {
+      await callAnthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20240620',
+        userPrompt: testPrompt,
+        temperature: 0
+      });
+      results.anthropic = { status: 'valid' };
+    } catch (e) {
+      results.anthropic = { status: 'invalid', error: e.message };
+    }
+  } else {
+    results.anthropic = { status: 'missing' };
+  }
+
+  res.json({ ok: true, results });
+});
+
+app.post('/api/analyze-questions', (req, res) => {
+  const { text } = req.body || {};
+  const questions = splitQuestionsFromText(text || '');
+  res.json({ count: questions.length, questions });
+});
+
+app.post('/api/search-context', async (req, res) => {
+  const { query } = req.body || {};
+  const context = await fetchWebContext(query || '');
+  res.json({ query: query || '', context });
+});
+
+app.post('/api/generate-answer', async (req, res) => {
+  const { question, instruction } = req.body || {};
+  const query = `${question?.title || ''} ${question?.rawQuestion || ''}`.trim();
+  const webContext = await fetchWebContext(query);
+  const ragContext = getRagContext(query);
+  const context = [ragContext, webContext].filter(Boolean).join('\n\n');
+
+  try {
+    const aiAnswer = await generateWithLLM({ question, instruction, context });
+    if (aiAnswer?.text) {
+      return res.json({
+        answer: aiAnswer.text,
+        source: `${aiAnswer.provider || 'llm'}+web-context`,
+        model: aiAnswer.model || '',
+        llmDiagnostics: Array.isArray(aiAnswer.diagnostics) ? aiAnswer.diagnostics : [],
+        context
+      });
+    }
+
+    const fallback = localDraftTemplate(question, context);
+    return res.json({
+      answer: fallback,
+      source: 'local-fallback',
+      context,
+      providers: getProviderConfigStatus(),
+      llmDiagnostics: Array.isArray(aiAnswer?.diagnostics) ? aiAnswer.diagnostics : []
+    });
+  } catch {
+  }
+
+  const fallback = localDraftTemplate(question, context);
   return res.json({
-    ok: true,
-    service: 'analyze-questions-mock',
-    providers: {
-      openai: hasAnyEnvKey(['OPENAI_API_KEY']),
-      gemini: hasAnyEnvKey(['GEMINI_API_KEY', 'GOOGLE_API_KEY']),
-      anthropic: hasAnyEnvKey(['ANTHROPIC_API_KEY']),
-    },
+    answer: fallback,
+    source: 'local-fallback',
+    context,
+    providers: getProviderConfigStatus()
   });
 });
 
-const PORT = process.env.PORT || 8787;
-const server = app.listen(PORT, () => {
-  console.log(`Analyze-questions mock server listening on http://localhost:${PORT}`);
-});
-
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.error(`[server] Port ${PORT} is already in use. Stop the existing process or use a different PORT.`);
-    process.exit(1);
+app.post('/api/analyze-webpage', async (req, res) => {
+  const { url, focus } = req.body || {};
+  if (!url) {
+    return res.status(400).json({ error: 'url is required' });
   }
 
-  console.error('[server] Failed to start:', err);
-  process.exit(1);
+  let text = '';
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const html = await response.text();
+    text = extractPrimaryWebText(html).slice(0, 12000);
+  } catch (error) {
+    return res.status(400).json({ error: `failed to fetch url: ${error.message}` });
+  }
+
+  try {
+    const ai = await generateInsightWithLLM({ title: url, text, focus });
+    if (ai?.ok) {
+      return res.json({ ...ai, url, mode: ai.provider || 'llm' });
+    }
+
+    const local = localInsightFromText({ title: url, text, focus });
+    return res.json({
+      ...local,
+      url,
+      mode: 'local',
+      providers: getProviderConfigStatus(),
+      llmDiagnostics: Array.isArray(ai?.diagnostics) ? ai.diagnostics : []
+    });
+  } catch {
+  }
+
+  const local = localInsightFromText({ title: url, text, focus });
+  return res.json({ ...local, url, mode: 'local' });
+});
+
+app.post('/api/analyze-attachments', async (req, res) => {
+  const { items, focus } = req.body || {};
+  const files = Array.isArray(items) ? items : [];
+  if (!files.length) {
+    return res.status(400).json({ error: 'items is required' });
+  }
+
+  const textBody = files
+    .map((item) => {
+      const name = item?.name || 'unknown';
+      const type = item?.type || 'unknown';
+      const size = item?.size || 0;
+      const extracted = item?.textExcerpt || '';
+      return `[${name}] type=${type} size=${size}\n${extracted}`;
+    })
+    .join('\n\n')
+    .slice(0, 16000);
+
+  const title = `${files.length} files`;
+
+  try {
+    const ai = await generateInsightWithLLM({ title, text: textBody, focus });
+    if (ai?.ok) {
+      return res.json({ ...ai, mode: ai.provider || 'llm', fileCount: files.length });
+    }
+
+    const local = localInsightFromText({ title, text: textBody, focus });
+    return res.json({
+      ...local,
+      mode: 'local',
+      fileCount: files.length,
+      providers: getProviderConfigStatus(),
+      llmDiagnostics: Array.isArray(ai?.diagnostics) ? ai.diagnostics : []
+    });
+  } catch {
+  }
+
+  const local = localInsightFromText({ title, text: textBody, focus });
+  return res.json({ ...local, mode: 'local', fileCount: files.length });
+});
+
+app.listen(port, () => {
+  console.log(`Backend listening on http://localhost:${port}`);
 });

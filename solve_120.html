@@ -264,8 +264,38 @@
         </button>
       </div>
 
-      <div class="p-4 bg-slate-900 text-xs text-center text-slate-500">
-        Multi-Round Exam Knowledge Base
+      </div>
+
+      <!-- Dropzone Status Component -->
+      <div class="mx-4 mb-4 bg-slate-900/50 rounded-lg p-3 border border-slate-700 font-sans shadow-inner">
+        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex justify-between items-center">
+          <span><i class="fas fa-brain text-emerald-400 mr-2"></i>AI Dropzone</span>
+          <button onclick="refreshDropzoneStatus()" class="hover:text-white transition-colors p-1" title="새로고침">
+            <i class="fas fa-sync-alt" id="dropzoneSpinIcon"></i>
+          </button>
+        </h3>
+        <div class="grid grid-cols-2 gap-2 text-center mb-3">
+          <div class="bg-slate-800 rounded p-2 border border-slate-700">
+            <span class="block text-[9px] text-slate-500 mb-0.5">대기 (Pending)</span>
+            <span id="dzQueueCount" class="text-xs font-bold text-amber-400 animate-pulse">0</span>
+          </div>
+          <div class="bg-slate-800 rounded p-2 border border-slate-700">
+            <span class="block text-[9px] text-slate-500 mb-0.5">지식화 완료</span>
+            <span id="dzStoredCount" class="text-xs font-bold text-emerald-400">0</span>
+          </div>
+        </div>
+        <button
+          onclick="document.getElementById('dropzoneFileInput').click()"
+          class="w-full py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-medium text-slate-300 hover:text-white transition-colors flex items-center justify-center border border-slate-600 border-dashed"
+        >
+          <i class="fas fa-file-import mr-2"></i> 자료 주입 (Feed PDF/Media)
+        </button>
+        <input type="file" id="dropzoneFileInput" class="hidden" multiple onchange="uploadToDropzone(event)" />
+        <div id="dzUploadResult" class="mt-2 text-[10px] text-emerald-400 hidden text-center truncate"></div>
+      </div>
+
+      <div class="p-3 bg-slate-900 text-[10px] text-center text-slate-600 border-t border-slate-800">
+        Universal Knowledge Engine
       </div>
     </nav>
 

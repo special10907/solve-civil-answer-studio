@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "mood": {
+    "tension": 0.3,
+    "updatedAt": 1772450684648
+  },
+  "wants": [],
+  "counters": {
+    "wantsCreated": 0,
+    "wantsResolved": 0,
+    "reflectionRuns": 0,
+    "reflectionSkippedByGate": 1516,
+    "proactiveHardBlocked": 0
+  },
+  "updatedAt": 1772541550004
+}

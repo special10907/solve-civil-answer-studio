@@ -902,7 +902,7 @@ function deleteSelectedGlobalRound() {
     `${selectedRound} 회차 삭제 완료: 문제 ${questionCount}개, 이론 ${theoryCount}개`,
   );
 
-  // 삭제 후 UI 레이블 초기화 (v20.1)
+// 삭제 후 UI 레이블 초기화 (v20.1)
   updateGlobalRoundLabels("");
   const filterRound = document.getElementById("filterRound");
   if (filterRound) filterRound.value = "";
@@ -912,3 +912,85 @@ function deleteSelectedGlobalRound() {
     "success",
   );
 }
+
+// ==========================================
+// DROPZONE UI INTEGRATION (Python Daemon)
+// ==========================================
+
+async function refreshDropzoneStatus() {
+  const icon = document.getElementById("dropzoneSpinIcon");
+  if (icon) icon.classList.add("fa-spin");
+  try {
+    const baseUrl = typeof getBackendBaseUrl === "function" ? getBackendBaseUrl() : "http://localhost:8787";
+    const res = await fetch(`${baseUrl}/api/dropzone-status`);
+    if (res.ok) {
+      const data = await res.json();
+      const qCount = document.getElementById("dzQueueCount");
+      const sCount = document.getElementById("dzStoredCount");
+      if (qCount) {
+        qCount.textContent = data.pending || 0;
+        if (data.pending > 0) {
+          qCount.classList.add("animate-pulse");
+          qCount.classList.replace("text-amber-400", "text-rose-400");
+        } else {
+          qCount.classList.remove("animate-pulse");
+          qCount.classList.replace("text-rose-400", "text-amber-400");
+        }
+      }
+      if (sCount) {
+        sCount.textContent = (data.processed || 0) + (data.knowledgeItems || 0);
+      }
+    }
+  } catch (err) {
+    console.warn("Dropzone connection failed", err);
+  } finally {
+    if (icon) icon.classList.remove("fa-spin");
+  }
+}
+
+async function uploadToDropzone(event) {
+  const files = event.target.files;
+  if (!files || !files.length) return;
+  
+  const resultEl = document.getElementById("dzUploadResult");
+  const baseUrl = typeof getBackendBaseUrl === "function" ? getBackendBaseUrl() : "http://localhost:8787";
+  
+  if (resultEl) {
+    resultEl.textContent = "업로드 중...";
+    resultEl.classList.remove("hidden", "text-rose-400");
+    resultEl.classList.add("text-emerald-400");
+  }
+
+  let successCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const fd = new FormData();
+      fd.append("file", files[i]);
+      const res = await fetch(`${baseUrl}/api/transcribe`, {
+        method: "POST",
+        body: fd,
+      });
+      if (res.ok) successCount++;
+    } catch (err) {
+      console.error("Dropzone upload error", err);
+    }
+  }
+
+  if (resultEl) {
+    if (successCount > 0) {
+      resultEl.textContent = `${successCount}개 파일 Ingestion 큐 진입 완료`;
+    } else {
+      resultEl.textContent = "업로드 통신 실패!";
+      resultEl.classList.replace("text-emerald-400", "text-rose-400");
+    }
+    setTimeout(() => { resultEl.classList.add("hidden"); }, 5000);
+  }
+  
+  event.target.value = "";
+  refreshDropzoneStatus();
+}
+
+// Auto-poll dropzone status every 10 seconds
+setInterval(refreshDropzoneStatus, 10000);
+// Manual initial trigger will be handled by window load or directly
+setTimeout(refreshDropzoneStatus, 1000);
