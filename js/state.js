@@ -1,37 +1,53 @@
-      // 추적 방지(Tracking Prevention) 등으로 localStorage 차단 시 메모리 폴백
-      window.safeLocalStorage = {
-        _mem: {},
-        _checked: false,
-        _enabled: false,
-        _ensure() {
-          if (this._checked) {
-            return this._enabled;
-          }
-          this._checked = true;
-          try {
-            const testKey = "__solve120_storage_test__";
-            localStorage.setItem(testKey, "1");
-            localStorage.removeItem(testKey);
-            this._enabled = true;
-          } catch {
-            this._enabled = false;
-          }
-          return this._enabled;
-        },
-        getItem(k) {
-          if (this._ensure()) {
-            return localStorage.getItem(k);
-          }
-          return this._mem[k] ?? null;
-        },
-        setItem(k, v) {
-          if (this._ensure()) {
-            localStorage.setItem(k, v);
-            return;
-          }
-          this._mem[k] = v;
-        },
-      };
+// SolveCivil Global Application State
+window.App = window.App || {};
+window.App.State = {
+  rawAnswerData: null,
+  questions: [],
+  theories: [],
+  lastEvaluationResults: [],
+  theoryAnalysisCache: {
+    duplicates: [],
+    reinforcements: [],
+    mergedDrafts: []
+  },
+  pdf: {
+    visualDoc: null,
+    textCache: [],
+    currentPage: 1,
+    currentViewport: null,
+    ignoredBlocks: []
+  }
+};
+
+// 추적 방지(Tracking Prevention) 등으로 localStorage 차단 시 메모리 폴백
+window.safeLocalStorage = {
+  _mem: {},
+  _checked: false,
+  _enabled: false,
+  _ensure() {
+    if (this._checked) return this._enabled;
+    this._checked = true;
+    try {
+      const testKey = "__solve120_storage_test__";
+      localStorage.setItem(testKey, "1");
+      localStorage.removeItem(testKey);
+      this._enabled = true;
+    } catch {
+      this._enabled = false;
+    }
+    return this._enabled;
+  },
+  getItem(k) {
+    return this._ensure() ? localStorage.getItem(k) : (this._mem[k] ?? null);
+  },
+  setItem(k, v) {
+    if (this._ensure()) {
+      localStorage.setItem(k, v);
+    } else {
+      this._mem[k] = v;
+    }
+  },
+};
 
       function calculateAverageScore(questions) {
         if (!Array.isArray(questions) || !questions.length) {
@@ -47,11 +63,7 @@
         return match ? `${match[1]}회` : "미지정";
       }
 
-      function extractRoundOnly(value) {
-        const text = String(value || "").trim();
-        const match = text.match(/(\d{2,3})\s*회/);
-        return match ? `${match[1]}회` : "";
-      }
+// utils.js에서 제공하는 공통 함수로 대체 (중복 제거)
 
       function normalizeExamRound(value, fallback = "미지정") {
         const text = String(value || "").trim();
@@ -128,6 +140,11 @@
         const tagSelect = document.getElementById("filterTag");
         const globalRoundSelect = document.getElementById("globalRoundSelect");
 
+        if (!roundSelect || !tagSelect) {
+            console.warn("Filter elements not found in current view. Skipping updateFilterOptions.");
+            return;
+        }
+
         const rounds = [
           ...new Set(
             [
@@ -202,9 +219,12 @@
               `${r}:${questions.filter((q) => extractRoundOnly(q.examRound) === r).length}`,
           )
           .join(" · ");
-        document.getElementById("roundSummary").textContent = roundCount
-          ? `회차별 누적 현황: ${roundCount}`
-          : "회차 데이터가 없습니다.";
+        const summaryEl = document.getElementById("roundSummary");
+        if (summaryEl) {
+          summaryEl.textContent = roundCount
+            ? `회차별 누적 현황: ${roundCount}`
+            : "회차 데이터가 없습니다.";
+        }
       }
 
       function updateGlobalRoundLabels(round) {
@@ -215,13 +235,15 @@
       }
 
       function getFilteredEntries(questions) {
-        const keyword = document
-          .getElementById("filterKeyword")
-          .value.trim()
-          .toLowerCase();
-        const selectedRound = document.getElementById("filterRound").value;
-        const selectedTag = document.getElementById("filterTag").value;
-        const lowScoreOnly = document.getElementById("filterLowScore").checked;
+        const keywordEl = document.getElementById("filterKeyword");
+        const roundEl = document.getElementById("filterRound");
+        const tagEl = document.getElementById("filterTag");
+        const lowScoreEl = document.getElementById("filterLowScore");
+
+        const keyword = keywordEl ? keywordEl.value.trim().toLowerCase() : "";
+        const selectedRound = roundEl ? roundEl.value : "";
+        const selectedTag = tagEl ? tagEl.value : "";
+        const lowScoreOnly = lowScoreEl ? lowScoreEl.checked : false;
 
         const scoreMap = new Map(
           lastEvaluationResults.map((result) => [result.index, result.score]),
@@ -265,12 +287,15 @@
       function updateRoundDashboard(questions) {
         const totalQuestions = questions.length;
         if (!totalQuestions) {
-          document.getElementById("statTotalRounds").textContent = "0";
-          document.getElementById("statTotalQuestions").textContent = "0";
-          document.getElementById("statAvgScore").textContent = "0";
-          document.getElementById("statLowScoreRate").textContent = "0%";
-          document.getElementById("roundStatsBody").innerHTML =
-            '<tr><td colspan="5" class="px-3 py-3 text-slate-500">통계 데이터가 없습니다.</td></tr>';
+          const statsIds = ["statTotalRounds", "statTotalQuestions", "statAvgScore", "statLowScoreRate"];
+          statsIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = id.endsWith("Rate") ? "0%" : "0";
+          });
+          const bodyEl = document.getElementById("roundStatsBody");
+          if (bodyEl) {
+            bodyEl.innerHTML = '<tr><td colspan="5" class="px-3 py-3 text-slate-500">통계 데이터가 없습니다.</td></tr>';
+          }
           if (roundStatsChart) {
             roundStatsChart.destroy();
             roundStatsChart = null;
@@ -326,28 +351,36 @@
         const avgScore = Math.round(totalScore / totalQuestions);
         const lowRate = Math.round((totalLow / totalQuestions) * 100);
 
-        document.getElementById("statTotalRounds").textContent =
-          String(totalRounds);
-        document.getElementById("statTotalQuestions").textContent =
-          String(totalQuestions);
-        document.getElementById("statAvgScore").textContent = String(avgScore);
-        document.getElementById("statLowScoreRate").textContent = `${lowRate}%`;
+        const rEl = document.getElementById("statTotalRounds");
+        if (rEl) rEl.textContent = String(totalRounds);
 
-        document.getElementById("roundStatsBody").innerHTML = roundStats
-          .map(
-            (row) => `
-                      <tr>
-                          <td class="px-3 py-2 font-medium text-slate-800">${escapeHtml(row.round)}</td>
-                          <td class="px-3 py-2 text-slate-700">${row.count}</td>
-                          <td class="px-3 py-2 text-slate-700">${row.avg}</td>
-                          <td class="px-3 py-2 text-slate-700">${row.low}</td>
-                          <td class="px-3 py-2">
-                              <span class="text-xs px-2 py-1 rounded ${row.priority === "높음" ? "bg-rose-100 text-rose-700" : row.priority === "중간" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}">${row.priority}</span>
-                          </td>
-                      </tr>
-                  `,
-          )
-          .join("");
+        const qEl = document.getElementById("statTotalQuestions");
+        if (qEl) qEl.textContent = String(totalQuestions);
+
+        const aEl = document.getElementById("statAvgScore");
+        if (aEl) aEl.textContent = String(avgScore);
+
+        const lEl = document.getElementById("statLowScoreRate");
+        if (lEl) lEl.textContent = `${lowRate}%`;
+
+        const bodyEl = document.getElementById("roundStatsBody");
+        if (bodyEl) {
+          bodyEl.innerHTML = roundStats
+            .map(
+              (row) => `
+                        <tr>
+                            <td class="px-3 py-2 font-medium text-slate-800">${escapeHtml(row.round)}</td>
+                            <td class="px-3 py-2 text-slate-700">${row.count}</td>
+                            <td class="px-3 py-2 text-slate-700">${row.avg}</td>
+                            <td class="px-3 py-2 text-slate-700">${row.low}</td>
+                            <td class="px-3 py-2">
+                                <span class="text-xs px-2 py-1 rounded ${row.priority === "높음" ? "bg-rose-100 text-rose-700" : row.priority === "중간" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}">${row.priority}</span>
+                            </td>
+                        </tr>
+                    `,
+            )
+            .join("");
+        }
 
         const chartCanvas = document.getElementById("roundStatsChart");
         if (chartCanvas) {
@@ -1387,17 +1420,19 @@
       }
 
       function loadSampleData() {
-        document.getElementById("answerJsonInput").value = JSON.stringify(
-          sampleAnswerData,
-          null,
-          2,
-        );
+        const inputEl = document.getElementById("answerJsonInput");
+        if (inputEl) {
+          inputEl.value = JSON.stringify(sampleAnswerData, null, 2);
+        }
         renderAnswerData(sampleAnswerData);
         setDataStatus("샘플 데이터를 로드했습니다.", "success");
       }
 
       function applyAnswerData() {
-        const raw = document.getElementById("answerJsonInput").value.trim();
+        const inputEl = document.getElementById("answerJsonInput");
+        if (!inputEl) return;
+        
+        const raw = inputEl.value.trim();
         if (!raw) {
           setDataStatus("JSON 입력값이 비어 있습니다.", "error");
           return;

@@ -466,9 +466,7 @@ Object.assign(window, {
 
   switchTab,
 
-  analyzeAttachedFiles,
-
-  analyzeAttachedWebsite,
+  // analyzeAttachedFiles, analyzeAttachedWebsite 는 js/ingestion.js의 통합 엔진을 사용합니다.
 
   applyAttachmentInsightToQuestion,
 
@@ -558,53 +556,33 @@ Object.assign(window, {
   deleteCapturedQuestion,
 });
 
-document
+const safeAddListener = (id, event, handler) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+};
 
-  .getElementById("filterKeyword")
+safeAddListener("filterKeyword", "input", applyAnswerFilters);
+safeAddListener("filterRound", "change", applyAnswerFilters);
+safeAddListener("filterTag", "change", applyAnswerFilters);
+safeAddListener("filterLowScore", "change", applyAnswerFilters);
 
-  .addEventListener("input", applyAnswerFilters);
-
-document
-
-  .getElementById("filterRound")
-
-  .addEventListener("change", applyAnswerFilters);
-
-document
-
-  .getElementById("filterTag")
-
-  .addEventListener("change", applyAnswerFilters);
-
-document
-
-  .getElementById("filterLowScore")
-
-  .addEventListener("change", applyAnswerFilters);
-
-document
-
-  .getElementById("mergeQualityThreshold")
-
-  .addEventListener("change", () => {
+safeAddListener("mergeQualityThreshold", "change", () => {
+  if (window.renderTheoryMergeDrafts && window.theoryAnalysisCache) {
     renderTheoryMergeDrafts(theoryAnalysisCache.mergedDrafts || []);
-  });
+  }
+});
 
-document
-
-  .getElementById("globalRoundSelect")
-
-  .addEventListener("change", (event) => {
-    const selected = event.target.value;
-
-    const filterRound = document.getElementById("filterRound");
-
+safeAddListener("globalRoundSelect", "change", (event) => {
+  const selected = event.target.value;
+  const filterRound = document.getElementById("filterRound");
+  if (filterRound) {
     filterRound.value = selected;
-
-    updateGlobalRoundLabels(selected);
-
+    if (typeof updateGlobalRoundLabels === "function") {
+      updateGlobalRoundLabels(selected);
+    }
     applyAnswerFilters();
-  });
+  }
+});
 
 (async function initAiEndpoint() {
   const input = document.getElementById("aiEndpointUrl");
@@ -618,39 +596,46 @@ document
     .replace(/127\.0\.0\.1:5619/gi, "127.0.0.1:1234")
     .replace(/localhost:5619/gi, "localhost:1234");
 
-  input.value = upgradedStored || "http://127.0.0.1:1234/v1/chat/completions";
+  if (input) {
+    input.value = upgradedStored || "http://127.0.0.1:1234/v1/chat/completions";
+  }
   if (upgradedStored && upgradedStored !== stored) {
     storage.setItem(AI_ENDPOINT_STORAGE_KEY, upgradedStored);
   }
 
-  modelInput.value = storage.getItem(AI_FOUNDRY_MODEL_STORAGE_KEY) || "";
+  if (modelInput) {
+    modelInput.value = storage.getItem(AI_FOUNDRY_MODEL_STORAGE_KEY) || "";
+  }
 
   updateAiModeUx();
 
-  input.addEventListener("change", () => {
-    storage.setItem(AI_ENDPOINT_STORAGE_KEY, input.value.trim());
+  if (input) {
+    input.addEventListener("change", () => {
+      storage.setItem(AI_ENDPOINT_STORAGE_KEY, input.value.trim());
 
-    updateAiModeUx();
-    refreshAvailableModels(true);
+      updateAiModeUx();
+      refreshAvailableModels(true);
 
-    if (isLikelyLmStudioEndpoint() && !modelInput.value.trim()) {
-      detectLmStudioModelId();
-    }
-  });
+      if (isLikelyLmStudioEndpoint() && !modelInput?.value.trim()) {
+        detectLmStudioModelId();
+      }
+    });
+  }
 
-  modelInput.addEventListener("change", () => {
-    storage.setItem(
-      AI_FOUNDRY_MODEL_STORAGE_KEY,
-
-      modelInput.value.trim(),
-    );
-    if (typeof renderAvailableModelOptions === "function") {
-      renderAvailableModelOptions(
-        modelInput.value.trim() ? [modelInput.value.trim()] : [],
+  if (modelInput) {
+    modelInput.addEventListener("change", () => {
+      storage.setItem(
+        AI_FOUNDRY_MODEL_STORAGE_KEY,
         modelInput.value.trim(),
       );
-    }
-  });
+      if (typeof renderAvailableModelOptions === "function") {
+        renderAvailableModelOptions(
+          modelInput.value.trim() ? [modelInput.value.trim()] : [],
+          modelInput.value.trim(),
+        );
+      }
+    });
+  }
 
   if (modelSelect) {
     modelSelect.addEventListener("change", () => {
@@ -673,7 +658,9 @@ document
 
   const presetSelect = document.getElementById("aiModelPresets");
 
-  presetSelect.addEventListener("change", (e) => applyAiPreset(e.target.value));
+  if (presetSelect) {
+    presetSelect.addEventListener("change", (e) => applyAiPreset(e.target.value));
+  }
 
   loadAiPresets();
 

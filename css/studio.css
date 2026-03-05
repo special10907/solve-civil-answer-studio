@@ -1,0 +1,96 @@
+/* Knowledge Studio Premium Design System (Glassmorphism) */
+
+:root {
+  --studio-bg: #f8fafc;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --accent-color: #6366f1;
+}
+
+.studio-section {
+  background: var(--studio-bg);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 1.5rem;
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.1);
+}
+
+/* Tabs UI */
+.studio-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 0.4rem;
+  border-radius: 1rem;
+  width: fit-content;
+}
+
+.studio-tab-btn {
+  padding: 0.6rem 1.5rem;
+  border-radius: 0.8rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  color: #64748b;
+}
+
+.studio-tab-btn.active {
+  background: white;
+  color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Intelligence Center (Sidebar-like) */
+.intelligence-panel {
+  position: sticky;
+  top: 2rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Custom Scrollbar for Glass Panels */
+.glass-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.glass-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.glass-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+/* Dashboard Badges */
+.stat-badge {
+  background: var(--primary-gradient);
+  color: white;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}

@@ -845,6 +845,71 @@ app.post('/api/analyze-attachments', async (req, res) => {
   return res.json({ ...local, mode: 'local', fileCount: files.length });
 });
 
+app.post('/api/ingest-intelligence', upload.array('files'), async (req, res) => {
+  const uploadedFiles = req.files || [];
+  const { focus, items: itemsRaw } = req.body || {};
+  
+  let items = [];
+  try {
+    items = typeof itemsRaw === 'string' ? JSON.parse(itemsRaw) : (Array.isArray(itemsRaw) ? itemsRaw : []);
+  } catch (e) {
+    items = [];
+  }
+
+  if (!uploadedFiles.length && !items.length) {
+    return res.status(400).json({ error: 'No files or items provided' });
+  }
+
+  const results = {
+    ok: true,
+    savedToDropzone: 0,
+    intelligence: null,
+    mode: 'backend'
+  };
+
+  try {
+    // 1. Dropzone 저장 (Python RAG 엔진용)
+    const dropzone = path.resolve(__dirname, '..', 'solution', 'knowledge_dropzone', 'private');
+    if (!fs.existsSync(dropzone)) {
+      fs.mkdirSync(dropzone, { recursive: true });
+    }
+
+    for (const file of uploadedFiles) {
+      const safeName = `${Date.now()}_${file.originalname}`;
+      const filePath = path.join(dropzone, safeName);
+      fs.writeFileSync(filePath, file.buffer);
+      results.savedToDropzone++;
+    }
+
+    // 2. Intelligence 분석 (LLM 활용)
+    const textBody = items
+      .map((item) => {
+        const name = item?.name || 'unknown';
+        const extracted = item?.textExcerpt || '';
+        return `[${name}]\n${extracted}`;
+      })
+      .join('\n\n')
+      .slice(0, 16000);
+
+    const title = uploadedFiles.length > 0 
+      ? `${uploadedFiles[0].originalname}${uploadedFiles.length > 1 ? ` 외 ${uploadedFiles.length - 1}건` : ''}`
+      : (items.length > 0 ? items[0].name : '지식 주입');
+
+    const ai = await generateInsightWithLLM({ title, text: textBody, focus });
+    if (ai?.ok) {
+        results.intelligence = { ...ai, mode: ai.provider || 'llm' };
+    } else {
+        const local = localInsightFromText({ title, text: textBody, focus });
+        results.intelligence = { ...local, mode: 'local' };
+    }
+
+    return res.json(results);
+  } catch (error) {
+    console.error('Ingest Intelligence Error:', error);
+    return res.status(500).json({ ok: false, error: 'ingest_failed', message: String(error) });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);
 });

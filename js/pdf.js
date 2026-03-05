@@ -33,21 +33,16 @@ function openPdfVisualModal() {
   window.visualCurrentPage = 1;
 
   // v21.6.18: 저장된 상태가 있으면 복원, 없으면 빈 배열로 시작
+  const state = window.App.State.pdf;
   if (window._savedVisualQuestions && window._savedVisualQuestions.length > 0) {
-    // 저장된 문항 목록을 복원 (깊은 복사)
-    window.currentReviewingQuestions = JSON.parse(
-      JSON.stringify(window._savedVisualQuestions),
-    );
-    window.ignoredVisualBlocks = Array.isArray(window._savedIgnoredBlocks)
+    window.currentReviewingQuestions = JSON.parse(JSON.stringify(window._savedVisualQuestions));
+    state.ignoredBlocks = Array.isArray(window._savedIgnoredBlocks)
       ? JSON.parse(JSON.stringify(window._savedIgnoredBlocks))
       : [];
-    setPdfStatus(
-      `이전 작업 상태 복원: ${window.currentReviewingQuestions.length}개 문항`,
-      "success",
-    );
+    setPdfStatus(`이전 작업 상태 복원: ${window.currentReviewingQuestions.length}개 문항`, "success");
   } else {
     window.currentReviewingQuestions = [];
-    window.ignoredVisualBlocks = [];
+    state.ignoredBlocks = [];
   }
 
   window.selectedBoxIds = [];

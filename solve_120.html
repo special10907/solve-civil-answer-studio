@@ -69,6 +69,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="vendor/tailwind.js"></script>
+    <link rel="stylesheet" href="css/studio.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -248,19 +250,19 @@
         </button>
         <button
           type="button"
-          onclick="showSection('datahub')"
+          onclick="showSection('studio'); Studio.switchTab('answers');"
           class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center"
-          data-target="datahub"
+          data-target="studio"
         >
-          <i class="fas fa-database w-6"></i> 문제/답안 데이터
+          <i class="fas fa-database w-6"></i> Knowledge Studio
         </button>
         <button
           type="button"
-          onclick="showSection('theory')"
+          onclick="showSection('studio'); Studio.switchTab('theory');"
           class="nav-btn w-full text-left px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors flex items-center"
-          data-target="theory"
+          data-target="studio"
         >
-          <i class="fas fa-book w-6"></i> 이론 지식베이스
+          <i class="fas fa-book w-6"></i> Theory Archive
         </button>
       </div>
 
@@ -285,12 +287,11 @@
           </div>
         </div>
         <button
-          onclick="document.getElementById('dropzoneFileInput').click()"
+          onclick="handleSidebarIngestion()"
           class="w-full py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-medium text-slate-300 hover:text-white transition-colors flex items-center justify-center border border-slate-600 border-dashed"
         >
-          <i class="fas fa-file-import mr-2"></i> 자료 주입 (Feed PDF/Media)
+          <i class="fas fa-file-import mr-2"></i> 자료 주입 (Unified Ingestion)
         </button>
-        <input type="file" id="dropzoneFileInput" class="hidden" multiple onchange="uploadToDropzone(event)" />
         <div id="dzUploadResult" class="mt-2 text-[10px] text-emerald-400 hidden text-center truncate"></div>
       </div>
 
@@ -933,974 +934,203 @@
         </div>
       </section>
 
-      <section id="datahub" class="content-section max-w-7xl mx-auto">
-        <div class="mb-8">
-          <h2 class="text-3xl font-bold text-slate-800 mb-2">
-            문제/모범답안 데이터 허브
-          </h2>
-          <p
-            class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-emerald-500"
-          >
-            <strong>Context:</strong> NotebookLM/Flowith에서 만든 결과를
-            JSON으로 붙여넣고, 즉시 페이지 내에서 문제/모범답안을 렌더링합니다.
-          </p>
+      <!-- SECTION 5: KNOWLEDGE STUDIO (Answers & Theory Integration) -->
+      <section id="studio" class="content-section max-w-7xl mx-auto studio-section hidden">
+        <!-- Studio Header -->
+        <div class="flex flex-col md:flex-row items-center justify-between mb-10 animate-fade-in gap-6">
+          <div>
+            <h2 class="text-4xl font-extrabold text-slate-900 tracking-tight mb-2">Knowledge Studio</h2>
+            <p class="text-slate-500 text-lg">지식을 구조화하고 데이터 지능을 설계하는 중앙 허브</p>
+          </div>
+          <div class="studio-tabs glass-card p-1">
+            <button class="studio-tab-btn active transition-all" data-tab="answers" onclick="Studio.switchTab('answers')">
+              <i class="fas fa-edit mr-2"></i>Answers (답안)
+            </button>
+            <button class="studio-tab-btn transition-all" data-tab="theory" onclick="Studio.switchTab('theory')">
+              <i class="fas fa-book-open mr-2"></i>Theory (이론)
+            </button>
+          </div>
         </div>
 
-        <!-- PDF 시각화 모달 (Modal) -->
-        <div
-          id="pdfVisualModal"
-          class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4"
-        >
-          <div
-            class="bg-white rounded-xl shadow-2xl w-[98vw] h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
-          >
-            <div
-              class="p-4 border-b flex items-center justify-between bg-slate-50 shrink-0"
-            >
-              <h4 class="font-bold text-slate-800">
-                <i class="fas fa-eye mr-2 text-indigo-600"></i>문제 인식 영역
-                시각화
+        <!-- PDF Visual Modal (Improved Persistent Global) -->
+        <div id="pdfVisualModal" class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4 backdrop-blur-sm">
+          <div class="bg-white rounded-2xl shadow-2xl w-[98vw] h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div class="p-5 border-b flex items-center justify-between bg-slate-50/50 shrink-0">
+              <h4 class="text-xl font-bold text-slate-800 flex items-center gap-3">
+                <i class="fas fa-eye text-indigo-600"></i> 지형 지물 인식 (PDF 시각화)
               </h4>
-              <div class="flex items-center gap-4">
-                <div
-                  class="flex flex-col items-end gap-0.5 px-4 border-r border-slate-200"
-                >
-                  <div
-                    class="flex items-center gap-2 text-[10px] text-slate-500"
-                  >
-                    <span
-                      class="w-3 h-3 bg-blue-400/30 border border-blue-600 rounded-sm"
-                    ></span>
-                    <span>파란 박스: 클릭 인식 / 드래그: 자유 영역 캡처</span>
-                  </div>
-                  <div
-                    class="flex items-center gap-2 text-[10px] text-slate-500"
-                  >
-                    <span
-                      class="w-3 h-3 border-2 border-orange-600 bg-orange-400/40 rounded-sm"
-                    ></span>
-                    <span>핸들: 박스 크기 조절 및 위치 이동 가능</span>
-                  </div>
-                </div>
-                <div class="flex gap-2">
-                  <button
-                    type="button"
-                    id="toggleAddAreaBtn"
-                    onclick="toggleAddAreaMode()"
-                    class="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 text-sm font-bold rounded shadow-sm hover:bg-slate-50 transition"
-                    title="박스가 인식되지 않은 구간을 직접 드래그하여 추가할 수 있는 모드를 켭니다."
-                  >
-                    <i class="fas fa-plus-square mr-1"></i>영역 추가
-                  </button>
-                  <button
-                    type="button"
-                    onclick="ignoreAllCandidatesOnPage()"
-                    class="px-4 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 text-sm font-bold rounded shadow-sm hover:bg-rose-100 transition"
-                    title="현재 페이지에서 리스트에 등록되지 않은 모든 후보 영역을 일괄 숨김 처리합니다."
-                  >
-                    <i class="fas fa-trash-alt mr-1"></i>이 페이지 모두삭제
-                  </button>
-                  <button
-                    type="button"
-                    onclick="applyAndClosePdfModal()"
-                    class="px-4 py-1.5 bg-emerald-600 text-white text-sm font-bold rounded shadow-sm hover:bg-emerald-700 transition"
-                    title="현재까지 등록된 목록을 메인 데이터베이스에 저장합니다. 창은 닫히지 않고 계속 작업할 수 있습니다."
-                  >
-                    <i class="fas fa-save mr-1"></i>적용 (창 유지)
-                  </button>
-                  <button
-                    type="button"
-                    onclick="applyAndClosePdfModalWithClose()"
-                    class="px-4 py-1.5 bg-slate-700 text-white text-sm font-bold rounded shadow-sm hover:bg-slate-800 transition"
-                    title="현재 목록을 저장하고 창을 닫습니다. 다음에 창을 열면 저장된 상태로 복원됩니다."
-                  >
-                    <i class="fas fa-check mr-1"></i>적용 후 닫기
-                  </button>
-                  <button
-                    type="button"
-                    onclick="closePdfVisualModal()"
-                    class="px-4 py-1.5 bg-slate-100 text-slate-600 text-sm font-bold rounded shadow-sm hover:bg-slate-200 transition"
-                    title="저장하지 않고 창을 닫습니다."
-                  >
-                    <i class="fas fa-times mr-1"></i>닫기
-                  </button>
-                </div>
+              <div class="flex gap-3">
+                <button type="button" onclick="applyAndClosePdfModalWithClose()" class="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition-all">적용 및 종료</button>
+                <button type="button" onclick="closePdfVisualModal()" class="px-6 py-2 bg-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-300 transition-all">취소</button>
               </div>
             </div>
-            <div class="flex-1 flex overflow-hidden bg-slate-100">
-              <!-- 좌측: PDF 뷰어 -->
-              <div
-                class="flex-1 bg-slate-200 overflow-auto border-r border-slate-200 relative"
-              >
-                <!-- Wrapper for centering -->
-                <div class="min-h-full flex p-8">
-                  <div
-                    id="pdfVisualWorkspace"
-                    class="relative m-auto shadow-2xl bg-white"
-                  >
-                    <canvas id="pdfVisualCanvas" class="block"></canvas>
-                    <div
-                      id="pdfVisualOverlay"
-                      class="absolute inset-0 z-10"
-                    ></div>
-                  </div>
-                </div>
+            <div class="flex-1 flex overflow-hidden">
+              <div class="flex-1 bg-slate-100 overflow-auto relative p-10 flex justify-center items-start">
+                 <div id="pdfVisualWorkspace" class="relative shadow-2xl bg-white border border-slate-200">
+                   <canvas id="pdfVisualCanvas"></canvas>
+                   <div id="pdfVisualOverlay" class="absolute inset-0 z-10"></div>
+                 </div>
               </div>
+              <div class="w-[450px] bg-slate-50 border-l border-slate-200 flex flex-col p-6 space-y-6">
+                <h5 class="font-bold text-slate-700 border-b pb-2 uppercase tracking-widest text-xs">문항 리스트</h5>
+                <div id="modalCaptureList" class="flex-1 overflow-auto space-y-3"></div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-              <!-- 우측: 실시간 캡처 리스트 -->
-              <div class="w-[450px] bg-white flex flex-col shrink-0">
-                <div
-                  class="p-3 border-b bg-slate-50 flex items-center justify-between"
-                >
-                  <span class="text-xs font-bold text-slate-700"
-                    >추출 목록</span
-                  >
-                  <span
-                    id="modalCaptureCount"
-                    class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full"
-                    >0개</span
-                  >
-                </div>
-
-                <!-- 현재 선택 영역 상세 정보 및 조작 -->
-                <div
-                  id="selectionInfoPanel"
-                  class="p-4 border-b bg-slate-50/50 space-y-3"
-                >
-                  <div class="flex gap-2">
-                    <div class="flex-[1.2]">
-                      <label
-                        class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                        >회차</label
-                      >
-                      <input
-                        type="text"
-                        id="manualExamRound"
-                        placeholder="예: 120회"
-                        class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-indigo-400 outline-none"
-                      />
-                    </div>
-                    <div class="flex-1">
-                      <label
-                        class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                        >교시</label
-                      >
-                      <select
-                        id="manualSession"
-                        class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-indigo-400 outline-none"
-                      >
-                        <option value="미지정">선택</option>
-                        <option value="1교시">1교시</option>
-                        <option value="2교시">2교시</option>
-                        <option value="3교시">3교시</option>
-                        <option value="4교시">4교시</option>
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
+          <!-- Left: Intelligence Center (Control & AI Settings) -->
+          <div class="xl:col-span-1 space-y-6">
+            <div class="intelligence-panel glass-card p-6 space-y-6">
+              <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-brain text-indigo-500"></i> Intelligence Center
+              </h3>
+              
+              <!-- AI Configuration (Accordion-style) -->
+              <details open class="border-b border-slate-100 pb-4">
+                <summary class="text-sm font-bold text-slate-700 cursor-pointer mb-3">AI Engine Setup</summary>
+                <div class="space-y-4 pt-2">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Model Selection</label>
+                    <div class="flex gap-1">
+                      <select id="aiAvailableModelSelect" class="flex-1 px-2 py-2 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-indigo-400 outline-none">
+                        <option value="">모델 선택...</option>
                       </select>
-                    </div>
-                    <div class="flex-[3]">
-                      <label
-                        class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                        >문제 번호/제목</label
-                      >
-                      <input
-                        type="text"
-                        id="manualQNum"
-                        placeholder="예: Q1"
-                        class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-indigo-400 outline-none"
-                      />
+                      <button type="button" onclick="refreshAvailableModels()" class="p-2 text-xs rounded bg-slate-50 border border-slate-200 hover:bg-indigo-50"><i class="fas fa-rotate"></i></button>
                     </div>
                   </div>
                   <div>
-                    <label
-                      class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                      >인식된 텍스트/내용</label
-                    >
-                    <textarea
-                      id="manualInputText"
-                      placeholder="PDF 영역을 선택하거나 드래그하면 텍스트가 추출됩니다."
-                      class="w-full h-24 p-2 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-indigo-400 outline-none resize-none"
-                    ></textarea>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Endpoint</label>
+                    <input type="text" id="aiEndpointUrl" placeholder="http://..." class="w-full px-2 py-2 text-xs rounded border border-slate-200 bg-white outline-none">
                   </div>
+                  <div id="backendCoreStatus" class="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-block">백엔드 확인 중...</div>
+                </div>
+              </details>
+
+              <!-- Ingestion Studio Controls -->
+              <div class="space-y-4">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ingestion Studio</h4>
+                <div class="flex flex-col gap-2">
+                  <button type="button" onclick="document.getElementById('studio-files-input').click()" class="w-full p-3 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-md transition-all">
+                    <i class="fas fa-cloud-upload-alt mr-2"></i>자료 주입 (Batch)
+                  </button>
+                  <input id="studio-files-input" type="file" multiple class="hidden" onchange="runUnifiedIngestion(this.files, '');" />
+                  <button type="button" onclick="loadAnswerData()" class="w-full p-3 text-sm font-semibold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all">
+                    <i class="fas fa-history mr-2"></i>세션 복구
+                  </button>
+                  <button type="button" onclick="saveAnswerData()" class="w-full p-3 text-sm font-semibold rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 transition-all">
+                    <i class="fas fa-save mr-2"></i>즉시 저장
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick Statistics -->
+              <div class="pt-4 border-t border-slate-100">
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/50">
+                    <div class="text-[9px] text-indigo-400 uppercase font-bold">Total Ans</div>
+                    <div id="statTotalQuestions" class="text-lg font-bold text-indigo-700">0</div>
+                  </div>
+                  <div class="bg-purple-50/50 p-2 rounded-lg border border-purple-100/50">
+                    <div class="text-[9px] text-purple-400 uppercase font-bold">Total Thr</div>
+                    <div id="statTotalTheories" class="text-lg font-bold text-purple-700">0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Main Editor Area -->
+          <div class="xl:col-span-3 space-y-8">
+            
+            <!-- VIEW: Answers (답안 작성 및 관리) -->
+            <div id="studio-answers-view" class="animate-fade-in space-y-8">
+              <!-- Answer Entry Card -->
+              <div class="glass-card p-8">
+                <div class="flex items-center justify-between mb-6">
+                  <h3 class="text-2xl font-bold text-slate-800">답안 에디터</h3>
+                  <div id="lastSavedStatus" class="text-[11px] text-slate-400 font-mono italic"></div>
+                </div>
+                
+                <form id="answerForm" class="space-y-6">
+                  <input id="editing-questions-index" type="hidden" value="" />
+                  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="md:col-span-1">
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Round (회차)</label>
+                      <input id="studio-q-examRound" name="examRound" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="125회" />
+                    </div>
+                    <div class="md:col-span-1">
+                      <label class="block text-xs font-bold text-slate-500 mb-2">ID (문제번호)</label>
+                      <input id="studio-q-id" name="id" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Q1" />
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Title (문제 제목)</label>
+                      <input id="studio-q-title" name="title" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="문제 제목을 입력하세요" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2">Model Answer (모범답안)</label>
+                    <textarea id="studio-q-modelAnswer" name="modelAnswer" class="w-full h-80 p-5 rounded-2xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-sans leading-relaxed" placeholder="답안 본문을 작성하세요. 마크다운 형식을 권장합니다."></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Tags (태그)</label>
+                      <input id="studio-q-tags" name="tags" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="구조역학, Matrix" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Source (출처)</label>
+                      <input id="studio-q-source" name="source" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="기술사 수험서" />
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-4">
+                    <label class="inline-flex items-center cursor-pointer group">
+                      <div class="relative">
+                        <input id="studio-q-reviewed" name="reviewed" type="checkbox" class="sr-only" />
+                        <div class="w-10 h-6 bg-slate-200 rounded-full shadow-inner transition-colors group-hover:bg-slate-300"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform"></div>
+                      </div>
+                      <span class="ml-3 text-sm font-semibold text-slate-600">검토 완료</span>
+                    </label>
+                    <div class="flex gap-3">
+                      <button type="button" onclick="Studio.resetForm('questions')" class="px-6 py-3 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 transition-all">초기화</button>
+                      <button type="button" id="studio-questions-submit-btn" onclick="Studio.saveEntry('questions')" class="px-10 py-3 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">답안 추가</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              <!-- List & Filter Area -->
+              <div class="space-y-6">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xl font-bold text-slate-800">답안 라이브러리</h4>
                   <div class="flex gap-2">
-                    <button
-                      type="button"
-                      onclick="analyzeCurrentArea()"
-                      class="flex-1 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded border border-indigo-100 hover:bg-indigo-100 transition shadow-sm"
-                    >
-                      <i class="fas fa-magic mr-1"></i>현재영역 확정(AI)
-                    </button>
-                    <button
-                      type="button"
-                      onclick="commitAreaToList()"
-                      class="flex-1 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded shadow-md hover:bg-indigo-700 transition"
-                    >
-                      <i class="fas fa-plus mr-1"></i>추가(저장)
-                    </button>
+                    <select id="filterRound" class="px-4 py-2 text-xs rounded-xl border border-slate-200 bg-white shadow-sm outline-none"><option value="">모든 회차</option></select>
+                    <input id="filterKeyword" type="text" placeholder="검색..." class="px-4 py-2 text-xs rounded-xl border border-slate-200 bg-white shadow-sm outline-none w-48" />
                   </div>
                 </div>
-
-                <div
-                  id="modalCaptureList"
-                  class="flex-1 overflow-auto p-3 space-y-2"
-                >
-                  <p class="text-center text-[11px] text-slate-400 mt-10">
-                    캡처된 문항이 없습니다.<br />PDF 박스를 클릭하세요.
-                  </p>
+                <div id="answerList" class="grid grid-cols-1 gap-6"></div>
+              </div>
+              
+              <!-- Evaluation Sidebar (Simplified) -->
+              <div class="glass-card p-6 border-l-4 border-rose-500">
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="font-bold text-slate-800">AI 품질 자가진단</h4>
+                  <button onclick="evaluateRenderedAnswers()" class="text-xs font-bold text-rose-600 hover:text-rose-700 uppercase tracking-tighter">분석 실행</button>
                 </div>
+                <div id="evaluationSummary" class="text-sm"></div>
+                <div id="evaluationList" class="mt-4 space-y-2"></div>
               </div>
             </div>
-            <div
-              class="p-4 border-t bg-slate-50 flex items-center justify-between shrink-0"
-            >
-              <p id="pdfVisualStatus" class="text-xs text-slate-600 italic">
-                PDF 페이지 로딩 중...
-              </p>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  id="prevPdfPageBtn"
-                  class="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
-                >
-                  이전
-                </button>
-                <span id="pdfPageLabel" class="text-xs font-bold self-center"
-                  >1 / 1</span
-                >
-                <button
-                  type="button"
-                  id="nextPdfPageBtn"
-                  class="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
-                >
-                  다음
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div class="glass-panel p-6 rounded-xl shadow-sm">
-            <h3 class="text-lg font-bold mb-3">JSON 입력</h3>
-            <p class="text-sm text-slate-600 mb-3">
-              필수 구조: <strong>questions</strong> 배열 (각 항목: id, title,
-              modelAnswer)
-            </p>
-            <textarea
-              id="answerJsonInput"
-              class="w-full h-80 p-3 text-sm border border-slate-300 rounded-lg bg-slate-50 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              placeholder='{"questions":[{"id":"Q1","title":"문제 제목","modelAnswer":"모범답안"}]}'
-            ></textarea>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onclick="loadSampleData()"
-                class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300"
-              >
-                샘플 로드
-              </button>
-              <button
-                type="button"
-                onclick="applyAnswerData()"
-                class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-              >
-                JSON 적용
-              </button>
-              <button
-                type="button"
-                onclick="saveAnswerData()"
-                class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-              >
-                브라우저 저장
-              </button>
-              <button
-                type="button"
-                onclick="loadAnswerData()"
-                class="px-3 py-2 text-sm rounded bg-slate-700 text-white hover:bg-slate-800"
-              >
-                저장본 불러오기
-              </button>
-              <button
-                type="button"
-                onclick="exportAnswerDataToFile()"
-                class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-              >
-                JSON 파일 내보내기
-              </button>
-              <button
-                type="button"
-                onclick="openImportFileDialog()"
-                class="px-3 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700"
-              >
-                JSON 파일 가져오기
-              </button>
-            </div>
-            <input
-              id="importJsonFileInput"
-              type="file"
-              accept="application/json,.json"
-              class="hidden"
-              onchange="importAnswerDataFromFile(event)"
-            />
-            <div class="mt-3 flex items-center justify-between">
-              <p id="dataStatus" class="text-sm text-slate-600"></p>
-              <p
-                id="lastSavedStatus"
-                class="text-[10px] text-slate-400 italic font-mono"
-              ></p>
-            </div>
-          </div>
-
-          <div class="glass-panel p-6 rounded-xl shadow-sm">
-            <h3 class="text-lg font-bold mb-3">연계 워크플로우 (권장)</h3>
-            <ol
-              class="list-decimal list-inside text-sm text-slate-700 space-y-2"
-            >
-              <li>NotebookLM/Flowith에서 문제별 모범답안을 생성</li>
-              <li>아래 JSON 스키마에 맞춰 결과를 정리</li>
-              <li>본 페이지에 붙여넣고 <strong>JSON 적용</strong> 클릭</li>
-              <li>필요 시 <strong>브라우저 저장</strong>으로 임시 보관</li>
-            </ol>
-            <div
-              class="mt-4 p-3 rounded border border-slate-200 bg-slate-50 text-xs text-slate-600"
-            >
-              권장 필드:
-              <strong>questions</strong
-              >(id/title/examRound/tags/modelAnswer/source/reviewed),
-              <strong>theories</strong
-              >(id/title/category/content/examRound/tags/source)
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">PDF 업로드 & 자동 작성 (MVP)</h3>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <label
-                for="pdfFileInput"
-                class="block text-xs font-bold text-slate-600 mb-1"
-                >기출 PDF 업로드</label
-              >
-              <input
-                id="pdfFileInput"
-                type="file"
-                accept="application/pdf,.pdf"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              />
-              <div class="mt-2 flex flex-wrap gap-2">
-                <!-- PDF 텍스트 추출 버튼은 MVP에서 제거되어 삭제됨 -->
-                <button
-                  type="button"
-                  onclick="extractQuestionsFromPdfText()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  문제 자동 추출
-                </button>
-                <button
-                  type="button"
-                  id="openPdfVisualBtn"
-                  onclick="openPdfVisualModal()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  인식 영역 확인 (PDF)
-                </button>
-                <button
-                  type="button"
-                  id="runPipelineBtn"
-                  onclick="runAutoPipeline()"
-                  class="px-3 py-2 text-sm rounded bg-emerald-700 text-white hover:bg-emerald-800"
-                >
-                  자동 배치 실행
-                </button>
-              </div>
-              <div
-                id="pipelineReport"
-                class="mt-3 hidden text-xs rounded border border-emerald-200 bg-emerald-50 p-3 text-emerald-800"
-              ></div>
-              <p id="pdfStatus" class="mt-2 text-xs text-slate-500"></p>
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >자동 추출 결과</label
-              >
-              <div
-                id="autoExtractReport"
-                class="w-full h-40 p-3 text-xs border border-slate-300 rounded bg-slate-50 overflow-auto"
-              >
-                첨부파일을 추가한 뒤 "문제 자동 추출"을 누르면 교시별 인식
-                개수가 표시됩니다.
-              </div>
-            </div>
-          </div>
-
-          <!-- 사이드-바이-사이드 리뷰어 섹션 (추출 후 노출) -->
-          <div
-            id="extractReviewer"
-            class="mt-6 hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
-          >
-            <div class="flex items-center justify-between mb-3 border-b pb-2">
-              <h4 class="text-sm font-bold text-slate-700">
-                <i class="fas fa-columns mr-2 text-indigo-500"></i>추출 데이터
-                정밀 리뷰 (Side-by-Side)
-              </h4>
-              <button
-                type="button"
-                onclick="
-                  document
-                    .getElementById('extractReviewer')
-                    .classList.add('hidden')
-                "
-                class="text-slate-400 hover:text-slate-600"
-              >
-                <i class="fas fa-times"></i>
-              </button>
-            </div>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[550px]">
-              <!-- 좌측: 원본 PDF (Blue Border) -->
-              <div
-                class="flex flex-col border-2 border-blue-400 rounded-lg bg-white overflow-hidden shadow-md"
-              >
-                <div
-                  class="p-2 bg-blue-50 border-b border-blue-100 flex items-center justify-between"
-                >
-                  <span class="text-xs font-bold text-blue-700"
-                    ><i class="fas fa-file-pdf mr-1"></i>원본 파일
-                    미리보기</span
-                  >
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      id="revPrevBtn"
-                      class="px-2 py-0.5 text-[10px] bg-white border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                    >
-                      이전
-                    </button>
-                    <span
-                      id="revPageLabel"
-                      class="text-[10px] font-mono font-bold text-blue-600"
-                      >1 / 1</span
-                    >
-                    <button
-                      type="button"
-                      id="revNextBtn"
-                      class="px-2 py-0.5 text-[10px] bg-white border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                    >
-                      다음
-                    </button>
-                  </div>
-                </div>
-                <div
-                  id="revPdfContainer"
-                  class="flex-1 overflow-auto bg-slate-200 p-4 flex justify-center items-start"
-                >
-                  <div class="relative shadow-2xl bg-white">
-                    <canvas id="revPdfCanvas"></canvas>
-                    <div id="revPdfOverlay" class="absolute inset-0 z-10"></div>
-                  </div>
-                </div>
-              </div>
-              <!-- 우측: 인식된 문제 (Red Border) -->
-              <div
-                class="flex flex-col border-2 border-red-400 rounded-lg bg-white overflow-hidden shadow-md"
-              >
-                <div
-                  class="p-2 bg-red-50 border-b border-red-100 flex items-center justify-between"
-                >
-                  <span class="text-xs font-bold text-red-700"
-                    ><i class="fas fa-list-check mr-1"></i>인식된 문항
-                    리스트</span
-                  >
-                  <span
-                    id="revCountLabel"
-                    class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold"
-                    >0개 발견</span
-                  >
-                </div>
-                <div
-                  id="revQuestionList"
-                  class="flex-1 overflow-auto p-4 space-y-3 bg-slate-50"
-                >
-                  <p class="text-sm text-slate-400 text-center mt-20 italic">
-                    데이터를 분석 중입니다...
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 border-t border-slate-200 pt-4">
-            <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-3 mb-3">
-              <div class="flex flex-wrap items-end gap-2">
-                <div class="flex-1 min-w-[240px]">
-                  <label
-                    class="block text-[10px] font-bold text-indigo-500 uppercase mb-1"
-                    >현재 사용 가능 모델</label
-                  >
-                  <div class="flex gap-1">
-                    <select
-                      id="aiAvailableModelSelect"
-                      class="flex-1 px-2 py-2 text-xs rounded border border-indigo-200 bg-white focus:ring-1 focus:ring-indigo-400 outline-none"
-                    >
-                      <option value="">모델 목록을 불러오세요</option>
-                    </select>
-                    <button
-                      type="button"
-                      onclick="refreshAvailableModels()"
-                      class="px-2 py-1.5 text-xs rounded bg-white border border-indigo-200 hover:bg-indigo-100"
-                      title="현재 설정 기준으로 모델 목록 갱신"
-                    >
-                      <i class="fas fa-rotate"></i>
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  id="generateByApiBtn"
-                  onclick="generateDraftAnswersByActiveModel()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  선택 모델로 초안 작성
-                </button>
-                <button
-                  type="button"
-                  onclick="generateDraftAnswersLocal()"
-                  class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  초안 자동 작성 (로컬 규칙)
-                </button>
-              </div>
-              <p id="aiModeHint" class="mt-2 text-xs text-slate-600">
-                모델 목록을 선택한 뒤 바로 초안을 작성할 수 있습니다.
-              </p>
-            </div>
-
-            <label class="inline-flex items-center text-sm text-slate-700 mb-3">
-              <input
-                id="overwriteGenerated"
-                type="checkbox"
-                class="mr-2 accent-indigo-600"
-              />
-              기존 모범답안이 있어도 덮어쓰기
-            </label>
-
-            <details class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <summary class="cursor-pointer text-sm font-semibold text-slate-700">
-                AI 설정 (Endpoint / Provider / API Key / 프리셋)
-              </summary>
-
-              <div class="mt-3 flex flex-wrap gap-2 mb-3">
-                <div class="flex-1 min-w-[200px]">
-                  <label
-                    class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                    >AI 모델 프리셋</label
-                  >
-                  <div class="flex gap-1">
-                    <select
-                      id="aiModelPresets"
-                      class="flex-1 px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
-                    >
-                      <option value="">프리셋 선택...</option>
-                    </select>
-                    <button
-                      type="button"
-                      onclick="saveCurrentAiPreset()"
-                      class="px-2 py-1 text-xs rounded bg-slate-100 hover:bg-slate-200 border border-slate-200"
-                      title="현재 설정을 프리셋으로 저장"
-                    >
-                      <i class="fas fa-save"></i>
-                    </button>
-                    <button
-                      type="button"
-                      onclick="deleteCurrentAiPreset()"
-                      class="px-2 py-1 text-xs rounded bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200"
-                      title="현재 프리셋 삭제"
-                    >
-                      <i class="fas fa-trash-alt"></i>
-                    </button>
-                  </div>
-                </div>
-                <div class="flex-1 min-w-[200px]">
-                  <label
-                    class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                    >AI Endpoint URL</label
-                  >
-                  <input
-                    type="text"
-                    id="aiEndpointUrl"
-                    placeholder="http://localhost:8787"
-                    class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label
-                    class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                    >API Key (선택)</label
-                  >
-                  <input
-                    type="password"
-                    id="aiApiKey"
-                    placeholder="Bearer Key..."
-                    class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
-                  />
-                </div>
-                <div>
-                  <label
-                    class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                    >AI Provider (외부API용)</label
-                  >
-                  <select
-                    id="aiProvider"
-                    class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
-                  >
-                    <option value="">Default (Backend)</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="lmstudio">LM Studio (Local)</option>
-                  </select>
-                </div>
-                <div>
-                  <label
-                    class="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                    >LM Studio Model ID</label
-                  >
-                  <input
-                    type="text"
-                    id="aiFoundryModelId"
-                    placeholder="Llama-3-..."
-                    class="w-full px-2 py-1.5 text-xs rounded border border-slate-200 bg-white focus:ring-1 focus:ring-slate-400 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div class="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onclick="generateDraftAnswersByLmStudioLocal()"
-                  class="px-3 py-2 text-sm rounded bg-violet-600 text-white hover:bg-violet-700"
-                >
-                  초안 작성 (LM Studio)
-                </button>
-                <button
-                  type="button"
-                  onclick="detectLmStudioModelId()"
-                  class="px-3 py-2 text-sm rounded bg-violet-200 text-violet-900 hover:bg-violet-300"
-                >
-                  모델 ID 자동 감지
-                </button>
-                <button
-                  type="button"
-                  onclick="refreshAvailableModels()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-100 text-indigo-800 hover:bg-indigo-200"
-                >
-                  모델 목록 새로고침
-                </button>
-                <button
-                  type="button"
-                  onclick="checkBackendConnection()"
-                  class="px-3 py-2 text-sm rounded bg-slate-200 hover:bg-slate-300"
-                >
-                  백엔드 연결 확인
-                </button>
-                <button
-                  type="button"
-                  onclick="validateApiKeys()"
-                  class="px-3 py-2 text-sm rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
-                  title="OpenAI, Gemini, Anthropic API 키 유효성 정밀 검사"
-                >
-                  <i class="fas fa-key mr-1"></i>API 키 유효성 검사
-                </button>
-                <button
-                  type="button"
-                  onclick="checkBackendConnection()"
-                  class="px-2 py-1 text-[10px] rounded bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
-                  title="백엔드 연결 상태 수동 확인"
-                >
-                  <i class="fas fa-sync-alt mr-1"></i>재연결
-                </button>
-                <span
-                  id="backendCoreStatus"
-                  class="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 self-center"
-                  >백엔드: 확인 대기</span
-                >
-                <span
-                  id="lmStudioStatus"
-                  class="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 self-center"
-                  >LM Studio: 확인 대기</span
-                >
-                <div id="lmActionButtons" class="hidden items-center gap-1.5">
-                  <button
-                    type="button"
-                    onclick="switchToExternalApiMode()"
-                    class="px-2 py-1 text-[10px] rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                    title="외부 API 모드로 전환"
-                  >
-                    외부 API 모드
-                  </button>
-                  <button
-                    type="button"
-                    onclick="generateDraftAnswersLocal()"
-                    class="px-2 py-1 text-[10px] rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
-                    title="AI 연결 없이 로컬 규칙으로 답안 작성"
-                  >
-                    로컬 규칙으로 계속
-                  </button>
-                </div>
-                <span id="backendStatus" class="hidden">연결 대기 중...</span>
-              </div>
-
-              <div
-                id="backendDiagnostics"
-                class="mt-2 text-[11px] rounded border border-slate-200 bg-white p-2.5 text-slate-600 space-y-1"
-              >
-                Provider 진단 정보 없음
-              </div>
-            </details>
-          </div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">모범답안 추가</h3>
-          <input id="editingIndex" type="hidden" value="" />
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >회차</label
-              >
-              <input
-                id="newQRound"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="예: 120회"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >문제 ID</label
-              >
-              <input
-                id="newQId"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="예: Q3"
-              />
-            </div>
-            <div>
-              <label
-                for="newQTitle"
-                class="block text-xs font-bold text-slate-600 mb-1"
-                >문제 제목</label
-              >
-              <input
-                id="newQTitle"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="예: 매트릭스 해석 절차 설명"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >태그 (쉼표 구분)</label
-              >
-              <input
-                id="newQTags"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="예: 구조역학, Matrix, KDS"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1"
-                >출처</label
-              >
-              <input
-                id="newQSource"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-                placeholder="예: NotebookLM Draft"
-              />
-            </div>
-          </div>
-          <div class="mt-4">
-            <label class="block text-xs font-bold text-slate-600 mb-1"
-              >모범답안</label
-            >
-            <textarea
-              id="newQAnswer"
-              class="w-full h-36 p-3 text-sm border border-slate-300 rounded bg-white"
-              placeholder="모범답안 본문을 입력하세요."
-            ></textarea>
-          </div>
-          <div class="mt-3 flex items-center gap-3">
-            <label class="inline-flex items-center text-sm text-slate-700">
-              <input
-                id="newQReviewed"
-                type="checkbox"
-                class="mr-2 accent-emerald-600"
-              />
-              검토완료
-            </label>
-            <button
-              type="button"
-              id="entrySubmitBtn"
-              onclick="addModelAnswerEntry()"
-              class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              모범답안 추가
-            </button>
-            <button
-              type="button"
-              onclick="cancelEditMode()"
-              class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
-            >
-              수정 취소
-            </button>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            추가 시 JSON 입력창과 렌더링 결과에 즉시 반영됩니다.
-          </p>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">검색/필터</h3>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <input
-              id="filterKeyword"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="제목/답안 검색"
-            />
-            <select
-              id="filterRound"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-            >
-              <option value="">전체 회차</option>
-            </select>
-            <select
-              id="filterTag"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-            >
-              <option value="">전체 태그</option>
-            </select>
-            <label class="inline-flex items-center text-sm text-slate-700 px-2">
-              <input
-                id="filterLowScore"
-                type="checkbox"
-                class="mr-2 accent-rose-600"
-              />
-              저득점 우선 보기 (&lt;70)
-            </label>
-          </div>
-          <div id="roundSummary" class="mt-3 text-xs text-slate-500"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">회차별 통계 대시보드</h3>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-            <div class="p-3 rounded border border-slate-200 bg-slate-50">
-              <div class="text-xs text-slate-500">누적 회차 수</div>
-              <div
-                id="statTotalRounds"
-                class="text-xl font-bold text-slate-800 mt-1"
-              >
-                0
-              </div>
-            </div>
-            <div class="p-3 rounded border border-slate-200 bg-slate-50">
-              <div class="text-xs text-slate-500">누적 문항 수</div>
-              <div
-                id="statTotalQuestions"
-                class="text-xl font-bold text-slate-800 mt-1"
-              >
-                0
-              </div>
-            </div>
-            <div class="p-3 rounded border border-slate-200 bg-slate-50">
-              <div class="text-xs text-slate-500">전체 평균 점수</div>
-              <div
-                id="statAvgScore"
-                class="text-xl font-bold text-indigo-700 mt-1"
-              >
-                0
-              </div>
-            </div>
-            <div class="p-3 rounded border border-slate-200 bg-slate-50">
-              <div class="text-xs text-slate-500">저득점 비율 (&lt;70)</div>
-              <div
-                id="statLowScoreRate"
-                class="text-xl font-bold text-rose-700 mt-1"
-              >
-                0%
-              </div>
-            </div>
-          </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-3 mb-4">
-            <div class="text-xs text-slate-500 mb-2">
-              회차별 평균점 / 저득점 문항 수
-            </div>
-            <div style="position: relative; width: 100%; height: 260px">
-              <canvas id="roundStatsChart"></canvas>
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table
-              class="min-w-full text-sm border border-slate-200 rounded overflow-hidden"
-            >
-              <thead class="bg-slate-100 text-slate-700">
-                <tr>
-                  <th class="px-3 py-2 text-left">회차</th>
-                  <th class="px-3 py-2 text-left">문항 수</th>
-                  <th class="px-3 py-2 text-left">평균 점수</th>
-                  <th class="px-3 py-2 text-left">저득점 문항 수</th>
-                  <th class="px-3 py-2 text-left">보강 우선도</th>
-                </tr>
-              </thead>
-              <tbody
-                id="roundStatsBody"
-                class="divide-y divide-slate-200 bg-white"
-              >
-                <tr>
-                  <td colspan="5" class="px-3 py-3 text-slate-500">
-                    통계 데이터가 없습니다.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm">
-          <h3 class="text-lg font-bold mb-4">렌더링 결과</h3>
-          <div id="answerList" class="space-y-4"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mt-6">
-          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <h3 class="text-lg font-bold">자동 검토 및 보강 제안</h3>
-            <button
-              type="button"
-              onclick="evaluateRenderedAnswers()"
-              class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"
-            >
-              자동 평가 실행
-            </button>
-          </div>
-          <p class="text-sm text-slate-600 mb-4">
-            평가 기준: 분량 적정성, 도해/표/그래프 활용, 핵심 키워드(영어 병기),
-            KDS 코드 명시, 개조식/넘버링 구조.
-          </p>
-          <div id="evaluationSummary" class="mb-4 text-sm text-slate-700"></div>
-          <div id="evaluationList" class="space-y-3"></div>
-        </div>
-      </section>
 
       <!-- SECTION 6: THEORY KNOWLEDGE BASE -->
       <section id="theory" class="content-section max-w-7xl mx-auto">
         <div class="mb-8">
           <h2 class="text-3xl font-bold text-slate-800 mb-2">
-            이론 지식베이스 & 분석 스튜디오
+            Data Intelligence Hub (데이터 지능 허브)
           </h2>
           <p
             class="text-slate-600 bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500"
@@ -1941,200 +1171,65 @@
                   >오디오/동영상 파일 전사 방식</span
                 >
               </div>
-              <textarea
-                id="attachmentFocus"
-                class="w-full h-24 mt-2 p-2 text-xs border border-slate-300 rounded bg-slate-50"
-                placeholder="분석 초점(예: PSC 긴장재 부식 대책 중심으로 요약)"
-              ></textarea>
-              <div class="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onclick="analyzeAttachedFiles()"
-                  class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  파일 분석 실행
-                </button>
-                <button
-                  type="button"
-                  id="analyzeWebsiteBtn"
-                  onclick="analyzeAttachedWebsite()"
-                  class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  웹사이트 분석 실행
-                </button>
+            <!-- VIEW: Theory (이론 아카이브 및 RAG) -->
+            <div id="studio-theory-view" class="animate-fade-in space-y-8 hidden">
+              <!-- Theory Entry Card -->
+              <div class="glass-card p-8 border-t-4 border-amber-500">
+                <h3 class="text-2xl font-bold text-slate-800 mb-6">이론 아카이브 에디터</h3>
+                <form id="theoryForm" class="space-y-6">
+                  <input id="editing-theories-index" type="hidden" value="" />
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Category (분류)</label>
+                      <input id="studio-t-category" name="category" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="RC / 강구조 / 공법" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 mb-2">ID (관리번호)</label>
+                      <input id="studio-t-id" name="id" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="TH-001" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 mb-2">Tag (키워드)</label>
+                      <input id="studio-t-tags" name="tags" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="Keywords..." />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2">Title (이론 제목)</label>
+                    <input id="studio-t-title" name="title" type="text" class="w-full p-3 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="핵심 이론 명칭을 입력하세요" />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2">Content (상세 내용)</label>
+                    <textarea id="studio-t-content" name="content" class="w-full h-64 p-5 rounded-2xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all font-sans leading-relaxed" placeholder="이론의 핵심 메커니즘, 설계 기준(KDS), 도해 포인트를 상세히 기록하세요."></textarea>
+                  </div>
+
+                  <div class="flex items-center justify-end gap-3 pt-4">
+                    <button type="button" onclick="analyzeTheoryKnowledge()" class="px-6 py-3 rounded-xl text-sm font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-all border border-amber-200">중복 및 보강 분석</button>
+                    <button type="button" onclick="Studio.resetForm('theories')" class="px-6 py-3 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 transition-all">초기화</button>
+                    <button type="button" id="studio-theories-submit-btn" onclick="Studio.saveEntry('theories')" class="px-10 py-3 rounded-xl text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-lg shadow-amber-200 transition-all">이론 저장</button>
+                  </div>
+                </form>
               </div>
-              <div
-                id="attachmentFilesResult"
-                class="mt-3 text-sm text-slate-600"
-              ></div>
-              <input
-                id="attachmentWebsiteUrl"
-                type="text"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mt-2"
-                placeholder="웹사이트 URL 첨부 (예: https://...)"
-              />
-              <p id="attachmentStatus" class="mt-2 text-xs text-slate-500"></p>
-            </div>
-            <div>
-              <div class="text-xs text-slate-600 mb-1">분석 결과 적용</div>
-              <select
-                id="attachmentTargetQuestion"
-                class="w-full p-2 text-sm border border-slate-300 rounded bg-white mb-2"
-              >
-                <option value="">보강 적용할 문제 선택</option>
-              </select>
-              <button
-                type="button"
-                onclick="applyAttachmentInsightToQuestion()"
-                class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-              >
-                선택 문제에 보강 반영
-              </button>
-              <div class="mt-3 p-3 rounded border border-slate-200 bg-slate-50">
-                <div
-                  id="attachmentInsightSummary"
-                  class="text-sm text-slate-700"
-                ></div>
-                <ul
-                  id="attachmentInsightPoints"
-                  class="mt-2 text-xs text-slate-700 list-disc list-inside space-y-1"
-                ></ul>
-                <pre
-                  id="attachmentInsightBoost"
-                  class="mt-2 whitespace-pre-wrap text-xs text-slate-700"
-                ></pre>
+
+              <!-- Theory Evidence (Extraction & Analysis) -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- List area -->
+                <div class="space-y-4">
+                   <h4 class="text-lg font-bold text-slate-800">지능형 이론 목록</h4>
+                   <div id="theoryList" class="space-y-3"></div>
+                </div>
+                <!-- Analysis area -->
+                <div class="space-y-4">
+                   <h4 class="text-lg font-bold text-slate-800">분석 및 병항 제안</h4>
+                   <div id="theoryAnalysisSummary" class="text-xs text-slate-500 italic"></div>
+                   <div id="theoryAnalysisList" class="space-y-3"></div>
+                   <div id="theoryMergeList" class="space-y-3"></div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 지식 베이스 (누적 관리)</h3>
-          <input id="editingTheoryIndex" type="hidden" value="" />
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              id="theoryId"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="이론 ID (예: TH-001)"
-            />
-            <input
-              id="theoryTitle"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="이론 제목"
-            />
-            <input
-              id="theoryCategory"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="카테고리 (예: RC/강구조/동역학)"
-            />
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-            <input
-              id="theoryRound"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="회차 (예: 121회)"
-            />
-            <input
-              id="theoryTags"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="태그 (쉼표 구분)"
-            />
-            <input
-              id="theorySource"
-              type="text"
-              class="w-full p-2 text-sm border border-slate-300 rounded bg-white"
-              placeholder="출처 (예: PDF/메모/경험)"
-            />
-          </div>
-          <textarea
-            id="theoryContent"
-            class="w-full h-32 mt-3 p-3 text-sm border border-slate-300 rounded bg-white"
-            placeholder="이론 내용을 입력하세요. (정의/메커니즘/설계기준/KDS/도해 포인트)"
-          ></textarea>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              id="theorySubmitBtn"
-              onclick="upsertTheoryEntry()"
-              class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              이론 추가
-            </button>
-            <button
-              type="button"
-              onclick="cancelTheoryEditMode()"
-              class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
-            >
-              수정 취소
-            </button>
-            <button
-              type="button"
-              onclick="analyzeTheoryKnowledge()"
-              class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              중복/보강 자동 분석
-            </button>
-            <button
-              type="button"
-              onclick="generateTheoryMergeDrafts()"
-              class="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-            >
-              보강 병합 초안 생성
-            </button>
-            <button
-              type="button"
-              onclick="applyTheoryCleanup()"
-              class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"
-            >
-              중복 정리 적용
-            </button>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            분석 기준: 유사도 기반 중복 판단 + 보완 키워드 기반 보강 판단
-          </p>
-          <div id="theoryStatus" class="mt-2 text-xs text-slate-500"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 목록</h3>
-          <div id="theoryList" class="space-y-3"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">이론 중복/보강 분석 결과</h3>
-          <div
-            id="theoryAnalysisSummary"
-            class="text-sm text-slate-700 mb-3"
-          ></div>
-          <div id="theoryAnalysisList" class="space-y-3"></div>
-        </div>
-
-        <div class="glass-panel p-6 rounded-xl shadow-sm mb-6">
-          <h3 class="text-lg font-bold mb-4">보강 병합 초안</h3>
-          <div class="mb-3 flex items-center gap-2 text-sm">
-            <label class="text-slate-600">최소 품질 점수</label>
-            <select
-              id="mergeQualityThreshold"
-              class="p-2 text-sm border border-slate-300 rounded bg-white"
-            >
-              <option value="0">전체</option>
-              <option value="60">60점 이상</option>
-              <option value="70" selected>70점 이상</option>
-              <option value="80">80점 이상</option>
-              <option value="90">90점 이상</option>
-            </select>
-          </div>
-          <div
-            id="theoryMergeSummary"
-            class="text-sm text-slate-700 mb-3"
-          ></div>
-          <div id="theoryMergeList" class="space-y-3"></div>
-        </div>
+          </div> <!-- End Of Right Spans -->
+        </div> <!-- End Of Grid -->
       </section>
     </main>
 
@@ -2187,11 +1282,14 @@
       // 렌더링 잠금
       window._isRenderingPage = null;
     </script>
-    <script src="js/state.js?v=21.6.12"></script>
-    <script src="js/api.js?v=21.6.12"></script>
-    <script src="js/pdf.js?v=21.6.12"></script>
-    <script src="js/ui.js?v=21.6.12"></script>
-    <script src="js/app.js?v=21.6.12"></script>
+    <script src="js/utils.js?v=21.6.13"></script>
+    <script src="js/state.js?v=21.6.13"></script>
+    <script src="js/api.js?v=21.6.13"></script>
+    <script src="js/pdf.js?v=21.6.13"></script>
+    <script src="js/ingestion.js?v=21.6.13"></script>
+    <script src="js/studio.js?v=21.6.13"></script>
+    <script src="js/ui.js?v=21.6.13"></script>
+    <script src="js/app.js?v=21.6.13"></script>
 
     <script>
       // OCR removed for MVP — provide safe stubs and user-facing messages
@@ -2270,6 +1368,7 @@
       // Update any visible OCR status on load (once is enough)
       window.addEventListener("load", () => {
         _ocrRemovedNotice();
+        if (window.Studio) window.Studio.init();
       });
     </script>
   </body>
