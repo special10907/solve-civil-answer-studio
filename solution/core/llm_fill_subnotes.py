@@ -16,6 +16,7 @@ from pathlib import Path
 from glob import glob
 
 # Add research directory to sys.path to import subnote_framework
+# Current path: solution/core/llm_fill_subnotes.py
 ROOT_DIR = Path(__file__).resolve().parent
 RESEARCH_DIR = ROOT_DIR / "research"
 sys.path.insert(0, str(RESEARCH_DIR))
@@ -272,13 +273,14 @@ def process_exam(exam_no: int):
             print(f"[SKIP] 이미 작성됨: {f.name}")
             continue
 
-        print(f"▶ LLM 질의 중: {period}교시 {q_num}번 - {title_display[:30]}...")
+        msg = f"▶ LLM 질의 중: {period}교시 {q_num}번 - {title_display[:30]}..."
+        print(msg)
         
         llm_json = generate_llm_content(title_display)
         if llm_json:
             try:
                 create_llm_subnote(exam_no, period, q_num, title_display, llm_json, output_dir)
-                print(f"   ✅ 생성 완료")
+                print("   ✅ 생성 완료")
                 count_ok += 1
             except Exception as e:
                 print(f"   ❌ 오류 발생: {e}")

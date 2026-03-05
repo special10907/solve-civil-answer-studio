@@ -93,7 +93,7 @@ const __dirname = path.dirname(__filename);
 function getRagContext(query) {
   let context = '';
   try {
-    const correctionsPath = path.join(__dirname, '..', 'solution', 'memory', 'KNOWLEDGE_CORRECTIONS.md');
+    const correctionsPath = path.resolve(__dirname, '..', 'solution', 'memory', 'KNOWLEDGE_CORRECTIONS.md');
     if (fs.existsSync(correctionsPath)) {
       const corrections = fs.readFileSync(correctionsPath, 'utf8');
       if (corrections.trim()) {
@@ -105,7 +105,7 @@ function getRagContext(query) {
   }
 
   try {
-    const indexPath = path.join(__dirname, '..', 'solution', 'master_knowledge_index.json');
+    const indexPath = path.resolve(__dirname, '..', 'solution', 'master_knowledge_index.json');
     if (fs.existsSync(indexPath)) {
       const raw = fs.readFileSync(indexPath, 'utf8');
       const idx = JSON.parse(raw);
@@ -113,21 +113,23 @@ function getRagContext(query) {
       const qTokens = query.toLowerCase().replace(/[^a-z0-9가-힣]/g, ' ').split(/\s+/).filter(t => t.length > 1);
       
       let matchedDocs = [];
-      if (Array.isArray(idx)) {
-         for (const doc of idx) {
-            let score = 0;
-            const docText = `${doc.title || ''} ${doc.content || ''}`.toLowerCase();
-            for (const t of qTokens) {
-               if (docText.includes(t)) score++;
-            }
-            if (score > 0) matchedDocs.push({doc, score});
+      // Fix: idx가 배열이 아니라 { documents: [...] } 형태임을 반영
+      const docs = Array.isArray(idx) ? idx : (idx.documents || []);
+      
+      for (const doc of docs) {
+         let score = 0;
+         const docText = `${doc.title || ''} ${doc.content || ''}`.toLowerCase();
+         for (const t of qTokens) {
+            if (docText.includes(t)) score++;
          }
-         matchedDocs.sort((a, b) => b.score - a.score);
-         const topDocs = matchedDocs.slice(0, 3).map(x => `[${x.doc.title || x.doc.source || '첨부문서'}] ${String(x.doc.content || '').substring(0, 1000)}...`);
-         if (topDocs.length > 0) {
-           context += `\n[Universal Knowledge DB 검색 결과]\n${topDocs.join('\n\n')}\n`;
-         }
+         if (score > 0) matchedDocs.push({doc, score});
       }
+      matchedDocs.sort((a, b) => b.score - a.score);
+      const topDocs = matchedDocs.slice(0, 3).map(x => `[${x.doc.title || x.doc.source || '첨부문서'}] ${String(x.doc.content || '').substring(0, 1000)}...`);
+      if (topDocs.length > 0) {
+        context += `\n[Universal Knowledge DB 검색 결과]\n${topDocs.join('\n\n')}\n`;
+      }
+
     }
   } catch (e) {
     console.error('Failed to load master_knowledge_index:', e);
@@ -569,17 +571,8 @@ app.get('/api/dropzone-status', (req, res) => {
   }
 });
 
-app.get('/api/validate-keys', (_req, res) => {
-  const openaiEnabled = hasAnyEnvKey(['OPENAI_API_KEY']);
-  const geminiEnabled = hasAnyEnvKey(['GEMINI_API_KEY', 'GOOGLE_API_KEY']);
-  const anthropicEnabled = hasAnyEnvKey(['ANTHROPIC_API_KEY']);
+// [REMOVED] Redundant /api/validate-keys (Merged logic below)
 
-  return res.json({
-    openai: { status: openaiEnabled ? 'configured' : 'missing' },
-    gemini: { status: geminiEnabled ? 'configured' : 'missing' },
-    anthropic: { status: anthropicEnabled ? 'configured' : 'missing' },
-  });
-});
 
 app.post('/api/lmstudio-models', async (req, res) => {
   const rawBaseUrl = String(req.body?.baseUrl || process.env.LM_STUDIO_BASE_URL || 'http://127.0.0.1:1234').trim();

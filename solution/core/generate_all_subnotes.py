@@ -27,7 +27,8 @@ try:
         TABLE_W
     )
 except ImportError as e:
-    print(f"Error importing subnote_framework (Ensure research/subnote_framework.py exists): {e}")
+    msg = "Error importing subnote_framework (Ensure research/subnote_framework.py exists)"
+    print(f"{msg}: {e}")
     sys.exit(1)
 
 OUTPUT_BASE_DIR = ROOT_DIR.parent / "all_subnotes"
@@ -190,7 +191,8 @@ def parse_pdf(pdf_path: str):
     return exam_no, result_qs
 
 def main():
-    pdf_dir = ROOT_DIR
+    # ROOT_DIR (solution/core) 의 부모인 solution/data/raw_exams 로 변경
+    pdf_dir = ROOT_DIR.parent / "data" / "raw_exams"
     pdfs = glob.glob(os.path.join(pdf_dir, "*.pdf"))
     
     if not pdfs:
