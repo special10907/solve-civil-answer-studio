@@ -519,6 +519,7 @@ const Studio = {
     console.log("Knowledge Studio Initializing...");
     this._loadDocxLogPrefs();
     this.bindEvents();
+    this.updatePdfAreaView();
     this.render();
   },
 
@@ -595,7 +596,48 @@ const Studio = {
       .getElementById("studio-theory-view")
       .classList.toggle("hidden", tab !== "theory");
 
+    this.updatePdfAreaView();
+
     this.render();
+  },
+
+  updatePdfAreaView() {
+    const pdfContainer = document.getElementById("pdfVisualWorkspaceContainer");
+    const theoryPanel = document.getElementById("theoryManagerPdfListPanel");
+    const answerPanel = document.getElementById("answerManagerPdfListPanel");
+    if (!pdfContainer || !theoryPanel || !answerPanel) {
+      return;
+    }
+
+    const isTheoryManagerMode = !!window.__theoryManagerMode;
+    const isAnswerManagerMode = !!window.__answerManagerMode;
+    const shouldShowTheoryList =
+      isTheoryManagerMode && this.currentTab === "theory";
+    const shouldShowAnswerList =
+      isAnswerManagerMode && this.currentTab === "answers";
+    const shouldHidePdf = shouldShowTheoryList || shouldShowAnswerList;
+
+    pdfContainer.classList.toggle("hidden", shouldHidePdf);
+    theoryPanel.classList.toggle("hidden", !shouldShowTheoryList);
+    answerPanel.classList.toggle("hidden", !shouldShowAnswerList);
+
+    if (
+      shouldShowTheoryList &&
+      typeof window.getCurrentAnswerData === "function" &&
+      typeof window.renderTheoryDataForPdfPanel === "function"
+    ) {
+      const data = window.getCurrentAnswerData();
+      window.renderTheoryDataForPdfPanel(data.theories || []);
+    }
+
+    if (
+      shouldShowAnswerList &&
+      typeof window.getCurrentAnswerData === "function" &&
+      typeof window.renderAnswerDataForManagerPanel === "function"
+    ) {
+      const data = window.getCurrentAnswerData();
+      window.renderAnswerDataForManagerPanel(data.questions || []);
+    }
   },
 
   /**
