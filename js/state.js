@@ -64,6 +64,7 @@ window.safeLocalStorage = {
 };
 
 const ANSWER_MANAGER_PIN_STORAGE_KEY = "solve_answer_manager_pins_v1";
+const LAST_DOCX_META_STORAGE_KEY = "solve_last_generated_docx_v1";
 let answerManagerPinnedIds = new Set();
 
 function loadAnswerManagerPinnedIds() {
@@ -1103,8 +1104,63 @@ function initAnswerManagerPdfFilters() {
 }
 
 function initDashboardActions() {
+  const openLastDocxBtn = document.getElementById("dashboardOpenLastDocxBtn");
   const exportBtn = document.getElementById("dashboardExportBtn");
   const configBtn = document.getElementById("dashboardConfigBtn");
+
+  const readLastDocxMeta = () => {
+    try {
+      const storage = window.safeLocalStorage || localStorage;
+      const raw = storage.getItem(LAST_DOCX_META_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (!String(parsed.path || "").trim()) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const refreshLastDocxButtonState = () => {
+    if (!openLastDocxBtn) return;
+    const meta = readLastDocxMeta();
+    const enabled = !!meta?.path;
+    openLastDocxBtn.disabled = !enabled;
+    openLastDocxBtn.title = enabled
+      ? `최근 파일 열기: ${meta.filename || "전문 서브노트"}`
+      : "생성된 전문 서브노트가 없습니다";
+  };
+
+  if (openLastDocxBtn && !openLastDocxBtn.dataset.boundAction) {
+    openLastDocxBtn.dataset.boundAction = "1";
+    openLastDocxBtn.addEventListener("click", async () => {
+      const meta = readLastDocxMeta();
+      if (!meta?.path) {
+        if (typeof showToast === "function") {
+          showToast("최근 생성된 전문 서브노트가 없습니다.", "info");
+        }
+        refreshLastDocxButtonState();
+        return;
+      }
+
+      if (typeof window.requestOpenInDefaultApp === "function") {
+        try {
+          await window.requestOpenInDefaultApp(meta.path);
+          if (typeof showToast === "function") {
+            showToast(`파일 열기: ${meta.filename || "DOCX"}`, "success");
+          }
+        } catch (error) {
+          if (typeof showToast === "function") {
+            showToast(
+              `파일 열기 실패: ${error?.message || "unknown"}`,
+              "error",
+            );
+          }
+        }
+      }
+    });
+  }
 
   if (exportBtn && !exportBtn.dataset.boundAction) {
     exportBtn.dataset.boundAction = "1";
@@ -1126,6 +1182,13 @@ function initDashboardActions() {
       }
     });
   }
+
+  if (!window.__dashboardLastDocxEventBound) {
+    window.__dashboardLastDocxEventBound = true;
+    window.addEventListener("solve:last-docx-updated", refreshLastDocxButtonState);
+  }
+
+  refreshLastDocxButtonState();
 }
 
 function tokenizeTheory(text) {
@@ -1555,6 +1618,67 @@ async function analyzeTheoryArchiveFiles() {
   const url = String(urlEl?.value || "").trim();
   const focus = String(focusEl?.value || "").trim() || "이론 지식화 요약";
 
+  const buildMandatoryTheorySummaryFocus = (baseFocusText) => {
+    let data;
+    try {
+      data = getCurrentAnswerData();
+    } catch {
+      data = { theories: [] };
+    }
+
+    const theories = Array.isArray(data?.theories) ? data.theories : [];
+    const pick = (regex, limit = 2) =>
+      theories
+        .filter((item) =>
+          regex.test(
+            `${item?.source || ""} ${item?.title || ""} ${item?.content || ""}`,
+          ),
+        )
+        .slice(0, limit)
+        .map((item, idx) => {
+          const snippet = String(item?.content || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 180);
+          return `- ${idx + 1}) ${item?.title || "(제목없음)"} / ${item?.source || "-"} / ${snippet}`;
+        })
+        .join("\n");
+
+    const stored = theories
+      .slice(0, 3)
+      .map((item, idx) => {
+        const snippet = String(item?.content || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160);
+        return `- ${idx + 1}) ${item?.title || "(제목없음)"} / ${snippet}`;
+      })
+      .join("\n");
+
+    const notebook = pick(/notebook\s*lm|notebooklm/i) || "- NotebookLM 매칭 없음";
+    const flowith = pick(/flowith|지식정원/i) || "- Flowith 매칭 없음";
+    const storedBlock = stored || "- 저장 이론 없음";
+
+    return [
+      baseFocusText,
+      "",
+      "[강제 파이프라인]",
+      "1) 저장 학습/이론 자료 확인 및 첨부",
+      storedBlock,
+      "2) NotebookLM 관련 내용 확인 및 첨부",
+      notebook,
+      "3) Flowith 지식정원 관련 내용 확인 및 첨부",
+      flowith,
+      "4) 인터넷 딥리서치 확인 및 첨부",
+      "5) 1~4를 통합해 이론 요약 작성",
+      "출력 시 1~5 단계 근거를 반드시 명시",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  const effectiveFocus = buildMandatoryTheorySummaryFocus(focus);
+
   if (!files.length && !url) {
     setTheoryArchiveAiStatus("파일 또는 URL을 입력하세요.", "error");
     return;
@@ -1576,7 +1700,7 @@ async function analyzeTheoryArchiveFiles() {
       const response = await fetch(`${baseUrl}/api/analyze-webpage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, focus }),
+        body: JSON.stringify({ url, focus: effectiveFocus }),
       });
 
       if (!response.ok) {
@@ -1615,7 +1739,7 @@ async function analyzeTheoryArchiveFiles() {
       const response = await fetch(`${baseUrl}/api/analyze-attachments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, focus }),
+        body: JSON.stringify({ items, focus: effectiveFocus }),
       });
 
       if (response.ok) {
@@ -1624,7 +1748,7 @@ async function analyzeTheoryArchiveFiles() {
         const fallbackTitle = files.length ? `${files.length}개 파일` : "이론 아카이브";
         insight =
           typeof window.buildLocalAttachmentInsight === "function"
-            ? window.buildLocalAttachmentInsight(items, focus, fallbackTitle)
+            ? window.buildLocalAttachmentInsight(items, effectiveFocus, fallbackTitle)
             : {
                 summary: "로컬 요약 생성",
                 keyPoints: [],
@@ -1637,7 +1761,7 @@ async function analyzeTheoryArchiveFiles() {
 
     const autoEntries =
       typeof window.buildTheoryEntriesFromAnalyzedFiles === "function"
-        ? window.buildTheoryEntriesFromAnalyzedFiles(sourceItems, insight, focus)
+        ? window.buildTheoryEntriesFromAnalyzedFiles(sourceItems, insight, effectiveFocus)
         : [];
     const addedCount =
       typeof window.appendTheoryEntriesToKnowledgeBase === "function"

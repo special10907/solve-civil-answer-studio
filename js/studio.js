@@ -5,6 +5,7 @@
 
 const Studio = {
   currentTab: "answers", // 'answers' or 'theory'
+  LAST_DOCX_META_KEY: "solve_last_generated_docx_v1",
   docxGenerationTrace: [],
   docxGenerationFilter: "all",
   docxPinErrorFirst: false,
@@ -358,10 +359,27 @@ const Studio = {
 
   _buildDocxFallbackFromText(rawText, title = "") {
     const text = String(rawText || "").replace(/\r/g, "\n").trim();
+    const isNoiseLine = (line) => {
+      const src = String(line || "").trim();
+      if (!src) return true;
+      if (/^\[심화\s*보강/i.test(src)) return true;
+      if (/^-\s*요청사항\s*:/i.test(src)) return true;
+      if (/^-\s*탐색소스\s*:/i.test(src)) return true;
+      if (/^근거첨부$/i.test(src)) return true;
+      if (/^\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/i.test(src)) return true;
+      if (/^\|---\|---\|---\|---\|/.test(src)) return true;
+      if (/^\|\s*[1-5]\s*\|/.test(src)) return true;
+      if (/^\d+\)\s*(저장|notebooklm|flowith|인터넷\s*딥리서치|통합정리)/i.test(src)) return true;
+      return false;
+    };
+
     const lines = text
       .split("\n")
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((line) => !isNoiseLine(line));
+
+    const cleanedText = lines.join("\n").trim();
 
     const first =
       lines.find((line) => line.length >= 8) ||
@@ -405,7 +423,7 @@ const Studio = {
       },
     ];
 
-    const keywordSource = `${title || ""} ${text}`
+    const keywordSource = `${title || ""} ${cleanedText || text}`
       .toLowerCase()
       .replace(/[^a-z0-9가-힣\s]/g, " ")
       .split(/\s+/)
@@ -422,10 +440,106 @@ const Studio = {
       diagrams: [
         {
           title: "하중 전달 및 저항 메커니즘",
-          content: "주요 부재/력의 흐름을 블록 다이어그램으로 제시",
+          content:
+            "도해 목적: 하중 작용점→저항 경로를 한눈에 제시\n" +
+            "구성 요소: 작용하중, 지점반력, 주요 부재(압축/인장 경로), 경계조건\n" +
+            "작성 순서: 1) 외곽/경계조건 2) 하중·반력 3) 내부 힘 흐름 화살표\n" +
+            "채점 포인트: 용어 표기 일치, 경로 방향성, 핵심 위험구간 표시",
+        },
+        {
+          title: "설계 대안 비교표",
+          content:
+            "도해 목적: 대안별 장단점/리스크를 표 형태로 비교\n" +
+            "구성 요소: 비교항목(안전성·시공성·경제성·유지관리성), 대안 A/B\n" +
+            "작성 순서: 1) 비교항목 정의 2) 대안별 점검결과 3) 최종 권고안\n" +
+            "채점 포인트: 기준 근거 명시, 결론의 정합성, 실무 제언 연결",
         },
       ],
     };
+  },
+
+  _ensureDocxDiagramRule(content = "") {
+    const source = String(content || "").trim();
+    const lines = source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const base = lines.join("\n");
+
+    const required = [
+      {
+        label: "도해 목적",
+        fallback: "핵심 메커니즘을 빠르게 전달",
+      },
+      {
+        label: "구성 요소",
+        fallback: "하중·저항·경계조건·핵심 부재",
+      },
+      {
+        label: "작성 순서",
+        fallback: "1) 외곽 2) 하중/반력 3) 내부 경로/레이블",
+      },
+      {
+        label: "채점 포인트",
+        fallback: "기준 용어 일치, 수치/근거, 결론 연결",
+      },
+    ];
+
+    const appended = [...lines];
+    for (const item of required) {
+      const hasLabel = new RegExp(`${item.label}\\s*:`, "i").test(base);
+      if (!hasLabel) {
+        appended.push(`${item.label}: ${item.fallback}`);
+      }
+    }
+    return appended.join("\n").trim();
+  },
+
+  _enforceDocxVisualizationRules(llmData, question = {}) {
+    const safe = llmData && typeof llmData === "object" ? { ...llmData } : {};
+    const topicSeed =
+      String(question?.title || "").trim() || "핵심 구조 메커니즘";
+
+    const fallbackDiagrams = [
+      {
+        title: `${topicSeed} 메커니즘 도해`,
+        content:
+          "도해 목적: 문제의 하중-저항 흐름을 시각화\n" +
+          "구성 요소: 작용하중, 지점반력, 주요 부재, 위험 구간\n" +
+          "작성 순서: 1) 형상/경계조건 2) 하중·반력 3) 응력·힘 흐름\n" +
+          "채점 포인트: 핵심 용어 표기, 방향성, 결론과의 연결",
+      },
+      {
+        title: `${topicSeed} 대안 비교표`,
+        content:
+          "도해 목적: 대안별 설계 판단근거를 표로 비교\n" +
+          "구성 요소: 비교항목(안전성·시공성·경제성·유지관리성), 대안 A/B\n" +
+          "작성 순서: 1) 비교항목 설정 2) 대안별 평가 3) 권고안 도출\n" +
+          "채점 포인트: 기준 근거, 트레이드오프 설명, 실무 제언",
+      },
+    ];
+
+    const incoming = Array.isArray(safe.diagrams) ? safe.diagrams : [];
+    const normalized = incoming
+      .map((item, idx) => {
+        const rawTitle = String(item?.title || "").trim();
+        const title = rawTitle || `도해 ${idx + 1}`;
+        const content = this._ensureDocxDiagramRule(item?.content || "");
+        if (!content) return null;
+        return { title, content };
+      })
+      .filter(Boolean);
+
+    while (normalized.length < 2) {
+      const seed = fallbackDiagrams[normalized.length] || fallbackDiagrams[0];
+      normalized.push({
+        title: seed.title,
+        content: this._ensureDocxDiagramRule(seed.content),
+      });
+    }
+
+    safe.diagrams = normalized.slice(0, 4);
+    return safe;
   },
 
   _extractDocxKeyTokens(text = "", max = 16) {
@@ -513,6 +627,32 @@ const Studio = {
     if (overlap.length >= 1 && content.length > 600) return true;
     if (genericCount >= 2) return false;
     return overlap.length >= 1;
+  },
+
+  _isWeakDocxAnswerText(text = "", question = {}) {
+    const source = String(text || "").trim().toLowerCase();
+    if (!source) return true;
+
+    const genericSignals = [
+      "정의 및 핵심 개념",
+      "문제의 핵심 개념을 영어 병기와 함께",
+      "하중, 저항, 파괴모드를 개조식",
+      "도해 1개",
+      "비교표 1개",
+    ];
+
+    const genericCount = genericSignals.filter((s) => source.includes(s)).length;
+    if (genericCount >= 2) {
+      return true;
+    }
+
+    const tokens = this._extractDocxKeyTokens(
+      `${question?.title || ""} ${question?.rawQuestion || ""} ${question?.modelAnswer || ""}`,
+      20,
+    );
+    if (!tokens.length) return false;
+    const overlap = tokens.filter((t) => source.includes(t)).length;
+    return overlap < 1;
   },
 
   init() {
@@ -758,6 +898,45 @@ const Studio = {
       document.getElementById("studio-q-modelAnswer")?.value || "",
     ).trim();
 
+    const currentData =
+      typeof window.getCurrentAnswerData === "function"
+        ? window.getCurrentAnswerData()
+        : { questions: [] };
+    const questions = Array.isArray(currentData?.questions)
+      ? currentData.questions
+      : [];
+    const editingIndex = Number(
+      document.getElementById("editing-questions-index")?.value,
+    );
+
+    let matchedQuestion = null;
+    if (Number.isInteger(editingIndex) && editingIndex >= 0 && questions[editingIndex]) {
+      matchedQuestion = questions[editingIndex];
+    }
+    if (!matchedQuestion && qId) {
+      matchedQuestion =
+        questions.find((item) => String(item?.id || "").trim() === String(qId).trim()) ||
+        null;
+    }
+    if (!matchedQuestion && title) {
+      matchedQuestion =
+        questions.find((item) => String(item?.title || "").trim() === String(title).trim()) ||
+        null;
+    }
+
+    const latestAnswerFromData = String(matchedQuestion?.modelAnswer || "").trim();
+    const effectiveModelAnswer =
+      latestAnswerFromData.length > modelAnswerText.length
+        ? latestAnswerFromData
+        : modelAnswerText;
+    const effectiveRawQuestion = String(matchedQuestion?.rawQuestion || title || "").trim();
+
+    const insightSummary = String(window.latestAttachmentInsight?.summary || "").trim();
+    const insightBoost = String(window.latestAttachmentInsight?.answerBoost || "").trim();
+    const userBoostRequest = String(
+      document.getElementById("attachmentBoostUserRequest")?.value || "",
+    ).trim();
+
     if (!title) {
       window.showToast("문제 제목을 먼저 입력해주세요.", "error");
       return;
@@ -777,11 +956,11 @@ const Studio = {
         title,
         examRound,
         qId,
-        rawQuestion: title,
-        modelAnswer: modelAnswerText,
+        rawQuestion: effectiveRawQuestion || title,
+        modelAnswer: effectiveModelAnswer,
       };
 
-      if (!modelAnswerText || modelAnswerText.length < 20) {
+      if (!effectiveModelAnswer || effectiveModelAnswer.length < 20) {
         window.showToast(
           "모범 답안 본문이 짧아 일반 템플릿 문구가 생성될 수 있습니다. 본문을 먼저 보강하세요.",
           "info",
@@ -792,6 +971,7 @@ const Studio = {
         question,
         [
           "전문 서브노트용 JSON만 반환하십시오. 다른 설명 문장은 금지.",
+          "메타 지시문체(예: 작성합니다/포함합니다/제시합니다)는 금지하고, 문제를 직접 푸는 답안 문장으로 작성할 것",
           "필수 키: overview(string), characteristics(array), insights(array), keywords(string), strategy(string)",
           "권장 키: diagrams(array)",
           "characteristics 원소 키: name, desc1, desc2",
@@ -799,6 +979,9 @@ const Studio = {
           "반드시 문제 제목과 모범답안 본문의 핵심 키워드를 반영할 것",
           "추상적 템플릿 문구(예: 정의 및 핵심 개념, 도해 1개 등)만 반복하지 말고 실제 내용으로 구체화할 것",
           "특성/소견에는 최소 1개 이상 구체 용어(재료/거동/기준/리스크)를 포함할 것",
+          insightSummary ? `[첨부 인사이트 요약]\n${insightSummary}` : "",
+          insightBoost ? `[첨부 인사이트 answerBoost]\n${insightBoost}` : "",
+          userBoostRequest ? `[사용자 보강 요청]\n${userBoostRequest}` : "",
         ].join("\n"),
         "json",
       );
@@ -821,7 +1004,16 @@ const Studio = {
           });
         } catch (e) {
           console.warn("JSON Parsing Error. Fallback to structured text:", e);
-          llmData = this._buildDocxFallbackFromText(llmData, title);
+          const fallbackSeed = [
+            String(question.rawQuestion || "").trim(),
+            String(question.modelAnswer || "").trim(),
+            String(llmData || "").trim(),
+            insightSummary,
+            insightBoost,
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+          llmData = this._buildDocxFallbackFromText(fallbackSeed || llmData, title);
           usedFallback = true;
           this._setDocxGenerationModeBadge("fallback", "JSON 파싱 실패");
           this._pushDocxGenerationTrace({
@@ -833,12 +1025,40 @@ const Studio = {
       }
 
       if (!llmData || typeof llmData !== "object") {
-        llmData = this._buildDocxFallbackFromText(String(aiResult.answer || ""), title);
+        const fallbackSeed = [
+          String(question.rawQuestion || "").trim(),
+          String(question.modelAnswer || "").trim(),
+          String(aiResult.answer || "").trim(),
+          insightSummary,
+          insightBoost,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        llmData = this._buildDocxFallbackFromText(fallbackSeed || String(aiResult.answer || ""), title);
         usedFallback = true;
         this._setDocxGenerationModeBadge("fallback", "응답 비정형");
         this._pushDocxGenerationTrace({
           mode: "fallback",
           detail: "응답 비정형",
+          title,
+        });
+      }
+
+      if (typeof aiResult?.answer === "string" && this._isWeakDocxAnswerText(aiResult.answer, question)) {
+        const fallbackSeed = [
+          String(question.rawQuestion || "").trim(),
+          String(question.modelAnswer || "").trim(),
+          insightSummary,
+          insightBoost,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        llmData = this._buildDocxFallbackFromText(fallbackSeed || String(aiResult.answer || ""), title);
+        usedFallback = true;
+        this._setDocxGenerationModeBadge("fallback", "저품질 응답 보정");
+        this._pushDocxGenerationTrace({
+          mode: "fallback",
+          detail: "저품질/일반 템플릿 응답을 본문 기반으로 보정",
           title,
         });
       }
@@ -858,6 +1078,25 @@ const Studio = {
         });
       }
 
+      llmData = this._enforceDocxVisualizationRules(llmData, question);
+
+      if (Array.isArray(aiResult?.visuals) && aiResult.visuals.length) {
+        llmData.visuals = aiResult.visuals
+          .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            return {
+              kind: String(item.kind || "diagram").toLowerCase(),
+              title: String(item.title || "시각자료").trim(),
+              purpose: String(item.purpose || "").trim(),
+              spec: String(item.spec || "").trim(),
+              scoringPoint: String(item.scoringPoint || "").trim(),
+              imageUrl: String(item.imageUrl || "").trim(),
+            };
+          })
+          .filter(Boolean)
+          .slice(0, 6);
+      }
+
       window.setDataStatus("DOCX 파일 변환 중...", "info");
 
       // 2. 백엔드 브릿지를 통한 Word 문서 생성
@@ -872,12 +1111,32 @@ const Studio = {
         exam_no: examNo,
         period,
         q_num: qNum,
+        docx_style: "submission",
+        raw_question: question.rawQuestion || "",
+        answer_text: question.modelAnswer || "",
         llm_data: llmData,
       };
 
       const docxResult = await window.requestDocxGeneration(payload);
 
       if (docxResult?.ok) {
+        try {
+          const payload = {
+            filename: docxResult.filename || "",
+            path: docxResult.path || "",
+            title,
+            examRound: examRound || "",
+            updatedAt: new Date().toISOString(),
+          };
+          const storage = window.safeLocalStorage || localStorage;
+          storage.setItem(this.LAST_DOCX_META_KEY, JSON.stringify(payload));
+          window.dispatchEvent(
+            new CustomEvent("solve:last-docx-updated", { detail: payload }),
+          );
+        } catch (metaError) {
+          console.warn("최근 DOCX 메타 저장 실패:", metaError);
+        }
+
         if (!usedFallback) {
           this._setDocxGenerationModeBadge("json");
         }
@@ -898,16 +1157,16 @@ const Studio = {
 
         if (
           docxResult.path &&
-          typeof window.requestRevealInExplorer === "function"
+          typeof window.requestOpenInDefaultApp === "function"
         ) {
           try {
-            await window.requestRevealInExplorer(docxResult.path);
-            window.showToast("생성된 파일 위치를 열었습니다.", "info");
-          } catch (revealError) {
-            console.warn("DOCX 위치 열기 실패:", revealError);
+            await window.requestOpenInDefaultApp(docxResult.path);
+            window.showToast("생성된 DOCX 파일을 열었습니다.", "success");
+          } catch (openError) {
+            console.warn("DOCX 파일 열기 실패:", openError);
             this._pushDocxGenerationTrace({
               mode: "error",
-              detail: `파일 생성 성공, 위치 열기 실패: ${revealError?.message || "unknown"}`,
+              detail: `파일 생성 성공, 열기 실패: ${openError?.message || "unknown"}`,
               filename: docxResult.filename || "",
               title,
             });

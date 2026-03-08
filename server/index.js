@@ -178,44 +178,491 @@ function estimateAnalyzeConfidence(meta = {}, questions = []) {
 }
 
 function localDraftTemplate(question, context = "") {
-  const prompt =
-    `${question?.title || ""} ${question?.rawQuestion || ""} ${question?.modelAnswer || ""}`.toLowerCase();
+  const promptRaw = `${question?.title || ""} ${question?.rawQuestion || ""} ${question?.modelAnswer || ""}`;
+  const prompt = promptRaw.toLowerCase();
+  const qTitle = String(question?.title || "문항").trim();
+  const qRaw = String(question?.rawQuestion || "").replace(/\s+/g, " ").trim();
+  const qHint = qRaw.slice(0, 180) || qTitle;
 
   const base = [
-    "1. 정의 및 핵심 개념",
-    "- 문제의 핵심 개념을 영어 병기와 함께 명확히 정의합니다.",
-    "2. 설계/해석 검토",
-    "- 하중, 저항, 파괴모드를 개조식(1.,2.,3.)으로 전개합니다.",
-    "- KDS 기준 코드와 근거 수치를 명시합니다.",
-    "3. 시각화 전략",
-    "- 도해 1개(메커니즘) + 비교표 1개(대안 비교)를 포함합니다.",
-    "4. 결론 및 기술사 제언",
-    "- 시공성과 유지관리 관점의 보강안을 제시합니다.",
+    "1. 정의 및 적용 배경",
+    `- 대상: ${qTitle}`,
+    `- 핵심 쟁점: ${qHint}`,
+    "- 본 문항은 하중 전달 경로와 저항 메커니즘의 정합성을 중심으로 검토해야 하며, 단순 현상 서술보다 인과관계 제시가 중요하다.",
+    "",
+    "2. 거동 메커니즘 (Load Path → Internal Force → Failure Mode)",
+    "- 외력은 작용점에서 지점으로 전달되며, 이 과정에서 휨·전단·부착/정착 거동이 상호작용한다.",
+    "- 파괴모드는 ① 휨 ② 전단 ③ 정착/부착 ④ 사용성(균열·처짐) 순으로 스크리닝하고 지배모드를 기준으로 상세를 결정한다.",
+    "",
+    "3. 설계 검토 및 기준·수치 근거",
+    "- KDS 관련 조항을 명시하고, 검토식(예: φMn ≥ Mu, Vn ≥ Vu, 정착길이 ld)을 본문에 병기한다.",
+    "- 하중조합·저항계수·허용기준을 단위와 함께 제시하고, 기준값 대비 여유도(Margin)로 적정성을 판정한다.",
+    "",
+    "4. 상세·시공·유지관리 대책",
+    "- 상세: 취약구간의 정착·배근 상세를 우선 보강하고, 전단 보강근 배치를 지배모드와 연계해 제시한다.",
+    "- 시공: 피복·정착·다짐·시공이음 품질게이트를 설정해 취성적 파괴 리스크를 억제한다.",
+    "- 유지관리: 균열폭·변위·누수 지표를 계측해 임계치 초과 시 즉시 보수 시나리오를 적용한다.",
+    "",
+    "5. 도해 및 비교표(첨부 이미지 참조)",
+    "- [첨부 이미지-1] 메커니즘 도해(하중경로·취약부·경계조건)",
+    "- [첨부 이미지-2] 대안 비교표(안전성·시공성·경제성·유지관리성)",
+    "- 본문에는 도해/비교표의 핵심 판정 결과만 요약 기재한다.",
+    "",
+    "6. 결론 및 기술사 제언",
+    "- 기준 적합성, 시공 리스크 저감, 유지관리 실행성을 동시에 만족하는 대안을 채택한다.",
+    "- 운영 단계에서는 점검주기·계측항목·임계치 기반 대응 프로토콜을 사전에 설정해 성능 저하를 조기 차단한다.",
   ];
 
-  if (/d-region|stm|응력교란|스트럿|타이/.test(prompt)) {
-    base.splice(
-      1,
-      1,
-      "- D-Region(Discontinuity Region)과 B-Region 구분을 우선 제시합니다.",
-    );
-    base.splice(4, 1, "- Strut/Tie/Node 강도와 정착을 기준으로 검토합니다.");
+  if (/d-region|stm|응력\s*교란|응력교란|스트럿|타이/.test(prompt)) {
+    return [
+      "1. 응력교란구역(D-Region)의 정의와 본질",
+      "- 응력교란구역은 평면유지 가정(Bernoulli Hypothesis)이 성립하지 않는 불연속 구간으로, 하중 재하점·지점부·개구부·단면 급변부에 주로 발생함.",
+      "- 따라서 B-Region의 보통 휨이론만으로는 안전측 평가가 어려우며, 별도의 힘 흐름 모델이 필요함.",
+      "2. 해석 및 설계 접근(핵심: STM)",
+      "- Strut-and-Tie Model(STM)로 내부 힘의 흐름을 압축재(Strut)·인장재(Tie)·절점(Node)으로 이상화함.",
+      "- 검토 순서: ① 하중경로 설정 ② Strut/Tie 산정 ③ Node 응력검토 ④ 정착·상세 검토.",
+      "- 설계 시 KDS 14 20 24 등 관련 기준을 근거로 정착길이, 절점 유효강도, 파괴모드(압축파괴/정착파괴)를 확인함.",
+      "3. 도해 및 비교표(첨부 이미지 참조)",
+      "- [도해] 하중점에서 지점까지의 하중경로를 화살표로 표시하고, Strut(압축)·Tie(인장)·Node를 도식화함.",
+      "- [도해] D-Region과 B-Region 경계를 단면도에 함께 표시하여 적용 해석법의 차이를 제시함.",
+      "- [비교표] B-Region(선형변형률 가정) vs D-Region(STM 적용)의 해석가정·설계절차·오류위험 비교.",
+      "- 본문에는 이미지 해석 결과(지배모드·설계판정·보강결론)만 요약 기재함.",
+      "4. 결론 및 기술사 제언",
+      "- D-Region은 ‘상세설계 실패 시 취성파괴로 직결’되는 구간이므로, 배근 상세·정착·시공 오차 관리까지 통합 검토해야 함.",
+      "- 유지관리 단계에서는 균열패턴 모니터링과 국부보강 계획을 사전에 포함하는 것이 바람직함.",
+    ].join("\n");
   }
 
   if (/psc|긴장재|부식|지연파괴|그라우팅/.test(prompt)) {
-    base.splice(
-      1,
-      1,
-      "- SCC/수소취성 메커니즘과 발생 조건을 구조적으로 설명합니다.",
-    );
-    base.splice(4, 1, "- 설계-시공-유지관리 단계별 대책을 제시합니다.");
+    return [
+      "1. PSC 부재 손상 메커니즘",
+      "- PSC의 핵심 리스크는 긴장재의 응력부식균열(SCC) 및 수소취성(Hydrogen Embrittlement)에 따른 지연파괴임.",
+      "- 그라우팅 불량·공극·염화물 유입이 결합되면 긴장재 부식과 단면 손실이 급격히 진행될 수 있음.",
+      "2. 설계·시공·유지관리 검토",
+      "- 설계: 노출환경 등급별 피복/방청 상세와 허용응력 수준을 명확히 반영함.",
+      "- 시공: 쉬스 충전성, 블리딩, 그라우트 품질관리(배합·주입압·재주입 기준) 확보.",
+      "- 유지관리: 비파괴검사(NDT), 케이블 상태점검, 누수·균열 연계 모니터링 체계를 운영.",
+      "3. 도해/비교표",
+      "- [도해] 쉬스 내부 결함(공극) → 수분/염화물 침투 → 긴장재 부식 진행 메커니즘을 단계도로 제시.",
+      "- [비교표] 예방대책(설계/시공/유지관리)별 효과·비용·적용시기를 비교.",
+      "4. 결론",
+      "- PSC는 ‘사후보수’보다 ‘초기 결함 억제’가 경제적이므로, 설계-시공-유지관리 연계 품질체계를 선제적으로 구축해야 함.",
+    ].join("\n");
   }
 
-  const contextBlock = context
-    ? `\n[검색 컨텍스트 요약]\n${context.slice(0, 1000)}\n`
+  const sanitizeLocalContext = (rawContext = "") => {
+    const text = String(rawContext || "").trim();
+    if (!text) return "";
+
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^\[web_research\]$/i.test(line))
+      .filter((line) => !/^query\s*:/i.test(line))
+      .filter((line) => !/^status\s*:\s*warning\b/i.test(line))
+      .filter((line) => !/^message\s*:/i.test(line))
+      .filter((line) => !/검색\s*결과가\s*충분하지\s*않습니다/i.test(line));
+
+    const joined = lines.join("\n").trim();
+    return joined;
+  };
+
+  const cleanedContext = sanitizeLocalContext(context);
+  const contextBlock = cleanedContext
+    ? `\n[검색 컨텍스트 요약]\n${cleanedContext.slice(0, 1000)}\n`
     : "";
 
   return `${base.join("\n")}${contextBlock}`;
+}
+
+function sanitizeResearchNoise(rawContext = "") {
+  const text = String(rawContext || "").trim();
+  if (!text) return "";
+
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\[web_research\]$/i.test(line))
+    .filter((line) => !/^query\s*:/i.test(line))
+    .filter((line) => !/^status\s*:\s*warning\b/i.test(line))
+    .filter((line) => !/^message\s*:/i.test(line))
+    .filter((line) => !/검색\s*결과가\s*충분하지\s*않습니다/i.test(line))
+    .join("\n")
+    .trim();
+}
+
+function isGenericScaffoldAnswer(text = "") {
+  const source = String(text || "").toLowerCase();
+  if (!source) return false;
+  const signals = [
+    "정의 및 핵심 개념",
+    "문제의 핵심 개념",
+    "하중, 저항, 파괴모드",
+    "도해 1개",
+    "비교표 1개",
+  ];
+  const hit = signals.filter((s) => source.includes(s)).length;
+  return hit >= 2;
+}
+
+function cleanGeneratedAnswerText(text = "") {
+  const stripped = String(text || "")
+    .split(/\r?\n/)
+    .filter((line) => !/^\[web_research\]$/i.test(line.trim()))
+    .filter((line) => !/^query\s*:/i.test(line.trim()))
+    .filter((line) => !/^status\s*:\s*warning\b/i.test(line.trim()))
+    .filter((line) => !/^message\s*:/i.test(line.trim()))
+    .join("\n")
+    .trim();
+
+  return stripped;
+}
+
+function sanitizeExamAnswerText(text = "") {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\[web_research\]$/i.test(line))
+    .filter((line) => !/^\[mandatory_pipeline_context\]$/i.test(line))
+    .filter((line) => !/^\[deep_research_parsed\]$/i.test(line))
+    .filter((line) => !/^\[검색\s*컨텍스트\s*요약\]$/i.test(line))
+    .filter((line) => !/^\[심화\s*보강/i.test(line))
+    .filter((line) => !/^\[연계\s*이론\s*스니펫\]/i.test(line))
+    .filter((line) => !/^\[분량\s*보강\s*블록\]/i.test(line))
+    .filter((line) => !/^query\s*:/i.test(line))
+    .filter((line) => !/^status\s*:/i.test(line))
+    .filter((line) => !/^message\s*:/i.test(line))
+    .filter((line) => !/^title\s*:/i.test(line))
+    .filter((line) => !/^summary\s*:/i.test(line))
+    .filter((line) => !/^url\s*:/i.test(line))
+    .filter((line) => !/^references\s*:/i.test(line))
+    .filter((line) => !/^참고\s*링크\s*없음$/i.test(line))
+    .filter((line) => !/^근거첨부$/i.test(line))
+    .filter((line) => !/^시각화\s*요약\s*\(그림·표·그래프\)/i.test(line))
+    .filter((line) => !/^\d+\)\s*(그림|표|그래프)\s*:/i.test(line))
+    .filter((line) => !/^[-–—]\s*(목적|작성\s*기준|채점\s*포인트)\s*:/i.test(line))
+    .filter((line) => !/^-\s*요청사항\s*:/i.test(line))
+    .filter((line) => !/^-\s*탐색소스\s*:/i.test(line))
+    .filter((line) => !/^\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/i.test(line))
+    .filter((line) => !/^\|---\|---\|---\|---\|/.test(line))
+    .filter((line) => !/^\|\s*[1-5]\s*\|/.test(line));
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function buildVisualsForQuestion(question = {}, answer = "") {
+  const qTitle = String(question?.title || "문항").trim();
+  const qRaw = String(question?.rawQuestion || "").replace(/\s+/g, " ").trim();
+  const seed = `${qTitle} ${qRaw} ${String(answer || "")}`.toLowerCase();
+  const merged = `${qTitle} ${qRaw}`.replace(/\s+/g, " ").trim();
+
+  const pickTopic = () => {
+    const clean = merged
+      .replace(/\[[^\]]+\]/g, " ")
+      .replace(/[(){}<>]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!clean) return "핵심 구조 메커니즘";
+    const short = clean.slice(0, 40).trim();
+    return short || "핵심 구조 메커니즘";
+  };
+
+  const topic = pickTopic();
+
+  const isDRegion = /d-region|응력\s*교란|스트럿|타이|stm/.test(seed);
+  const isDurability = /내구|균열|열화|부식|유지관리/.test(seed);
+
+  if (isDRegion) {
+    return [
+      {
+        kind: "diagram",
+        title: "하중점→지점 하중경로 및 Strut·Tie·Node 도해",
+        purpose: "하중 전달 경로와 Strut(압축)·Tie(인장)·Node의 역할을 시각적으로 제시",
+        spec: [
+          "요소: 하중점, 지점, Strut(압축), Tie(인장), Node",
+          "표현: 하중/내부력 화살표(→), 주요 절점 라벨링",
+          "판독 포인트: 지배 파괴모드와 보강상세의 연결",
+        ].join(" | "),
+        scoringPoint: "STM 핵심 메커니즘을 채점자가 즉시 판독 가능하도록 제시",
+      },
+      {
+        kind: "image",
+        title: "D-Region과 B-Region 경계 단면 도해",
+        purpose: "단면도에서 D/B 경계를 동시에 표시해 적용 해석법 차이를 제시",
+        spec: [
+          "요소: 재하점, 지점, 단면 경계, D-Region/B-Region 구분",
+          "표현: 경계선/해칭으로 영역 구분 + 적용 해석법 주석",
+          "판독 포인트: 경계 설정에 따른 해석 접근 차이",
+        ].join(" | "),
+        scoringPoint: "B-Region(선형변형률)과 D-Region(STM) 적용 구분의 명확성",
+      },
+      {
+        kind: "image",
+        title: "B-Region vs D-Region 해석가정·절차·오류위험 비교표 이미지",
+        purpose: "두 영역의 해석가정·설계절차·오류위험을 표 이미지로 비교 제시",
+        spec: [
+          "열: 구분 | B-Region(선형변형률 가정) | D-Region(STM 적용)",
+          "행: 해석가정, 설계절차, 오류위험",
+          "판독 포인트: 경계 오판 시 과소평가 및 취성파괴 위험",
+        ].join(" | "),
+        scoringPoint: "적용 해석법 선택 근거를 비교표로 명확히 제시",
+      },
+    ];
+  }
+
+  const diagram = {
+        kind: "diagram",
+        title: `${topic} 메커니즘 도해`,
+        purpose: `${topic}의 작용-저항-파괴 전이 경로를 시각화`,
+        spec: [
+          "요소: 작용하중, 지점반력, 주요 부재, 취약 구간",
+          "표현: 단계별 화살표(Load Path → Internal Force → Failure Mode)",
+          "판독 포인트: 결론 문단의 권고안과 도해 라벨 일치",
+        ].join(" | "),
+        scoringPoint: "답안 논리 흐름의 가시화로 채점 가독성 향상",
+      };
+
+  const table = {
+    kind: "table",
+    title: `${topic} 대안 비교표`,
+    purpose: "안전성·시공성·경제성·유지관리성 기반 의사결정 근거 제시",
+    spec: [
+      "열: 항목 | 대안 A | 대안 B | 판정",
+      "행: 안전성, 시공성, 경제성, 유지관리성, 리스크",
+      "판정: 기준값 대비 여유도(Margin) 또는 정성등급(A/B/C) 병기",
+    ].join(" | "),
+    scoringPoint: "대안 선택 근거를 정량·정성으로 동시에 제시",
+  };
+
+  const graph = isDurability
+    ? {
+        kind: "graph",
+        title: "열화지표-시간 추세 그래프",
+        purpose: "균열폭/변위/누수 등 유지관리 지표의 임계치 도달 시점 제시",
+        spec: [
+          "X축: 시간, Y축: 성능지표(균열폭 또는 변위)",
+          "표현: 관리한계선(Threshold)과 실측 추세선 동시 표시",
+          "판독 포인트: 임계치 초과 시 보수 시점/방법 연결",
+        ].join(" | "),
+        scoringPoint: "유지관리 제언의 실행성 및 타이밍 근거 확보",
+      }
+    : {
+        kind: "graph",
+        title: `${topic} 성능-여유도 그래프`,
+        purpose: `${topic}에서 하중 증가에 따른 저항 여유도 변화 제시`,
+        spec: [
+          "X축: 하중 수준, Y축: 저항 여유도(Margin)",
+          "표현: 허용경계선과 해석값 곡선 동시 표시",
+          "판독 포인트: 보강 전/후 곡선 비교로 개선효과 제시",
+        ].join(" | "),
+        scoringPoint: "결론의 정량 근거를 시각적으로 명확화",
+      };
+
+  return [diagram, table, graph];
+}
+
+function ensureVisualGuideInAnswer(answer = "", question = {}) {
+  const base = String(answer || "").trim();
+  if (!base) return { answer: base, visuals: buildVisualsForQuestion(question, base) };
+
+  const visuals = buildVisualsForQuestion(question, base);
+  return {
+    answer: base,
+    visuals,
+  };
+}
+
+function buildMandatoryEvidenceSection(sourceBundle = {}) {
+  const bundle = sourceBundle && typeof sourceBundle === "object" ? sourceBundle : {};
+  const blocks = bundle.blocks && typeof bundle.blocks === "object" ? bundle.blocks : {};
+
+  const oneLine = (text, fallback) => {
+    const value = String(text || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 220);
+    return value || fallback;
+  };
+
+  const stored = oneLine(blocks.storedTheory, "저장 학습/이론 자료 매칭 없음");
+  const notebook = oneLine(blocks.notebookLm, "NotebookLM 매칭 없음");
+  const flowith = oneLine(blocks.flowith, "Flowith 지식정원 매칭 없음");
+  const insight = oneLine(
+    blocks.insight,
+    "딥리서치/첨부 인사이트는 기준·메커니즘·실무대책 관점으로 반영",
+  );
+
+  const esc = (value) =>
+    String(value || "")
+      .replace(/\|/g, "/")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  return [
+    "근거첨부",
+    "| 단계 | 소스 | 핵심근거 | 답안 적용 |",
+    "|---|---|---|---|",
+    `| 1 | 저장 학습/이론자료 | ${esc(stored)} | 정의/기본 메커니즘 근거로 반영 |`,
+    `| 2 | NotebookLM | ${esc(notebook)} | 쟁점 해석 및 채점 키워드 반영 |`,
+    `| 3 | Flowith 지식정원 | ${esc(flowith)} | 실무 대안·비교표 포인트 반영 |`,
+    `| 4 | 인터넷 딥리서치 | ${esc(insight)} | 최신 기준/사례/리스크 근거 반영 |`,
+    "| 5 | 통합정리 | 1~4 근거 교차검토 | 결론에 기술사 제언(시공성·유지관리·리스크) 명시 |",
+  ].join("\n");
+}
+
+function enforceMandatoryPipelineAnswer(answer = "", sourceBundle = {}) {
+  const body = String(answer || "").trim();
+  const evidenceSection = buildMandatoryEvidenceSection(sourceBundle);
+
+  if (!body) {
+    return evidenceSection;
+  }
+
+  const hasEvidenceHeader = /근거첨부|출처근거/.test(body);
+  const hasLegacySteps =
+    /1\)\s*저장/.test(body) &&
+    /2\)\s*NotebookLM/i.test(body) &&
+    /3\)\s*Flowith/i.test(body) &&
+    /4\)\s*인터넷\s*딥리서치/.test(body) &&
+    /5\)\s*통합정리/.test(body);
+  const hasTableSteps =
+    /\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/.test(body) &&
+    /\|\s*1\s*\|/.test(body) &&
+    /\|\s*2\s*\|/.test(body) &&
+    /\|\s*3\s*\|/.test(body) &&
+    /\|\s*4\s*\|/.test(body) &&
+    /\|\s*5\s*\|/.test(body);
+  const hasFullSteps = hasLegacySteps || hasTableSteps;
+
+  if (hasEvidenceHeader && hasFullSteps) {
+    return body;
+  }
+
+  return `${body}\n\n${evidenceSection}`.trim();
+}
+
+function getMandatoryAnswerMinChars(question = {}) {
+  const text = `${question?.title || ""} ${question?.rawQuestion || ""}`;
+  return /1\s*교시|10\s*점|단답|용어/.test(text) ? 1200 : 2200;
+}
+
+function enforceMandatoryDepth(answer = "", question = {}, sourceBundle = {}, options = {}) {
+  let out = String(answer || "").trim();
+  const includeEvidenceSection = options.includeEvidenceSection !== false;
+  const minChars = getMandatoryAnswerMinChars(question);
+
+  const title = String(question?.title || "문항").trim();
+  const raw = String(question?.rawQuestion || "").replace(/\s+/g, " ").trim();
+  const keyHint = raw.slice(0, 220);
+
+  const hasAnalysis = /문제\s*핵심\s*분석|지배\s*파괴모드|검토\s*순서/.test(out);
+  const hasDiagram1 = /\[도해-?1\]|\[도해\]/.test(out);
+  const hasDiagram2 = /\[도해-?2\]|변형률\s*선도|응력블록/.test(out);
+  const hasTable = /\[비교표\]|\|\s*항목\s*\|\s*대안/.test(out);
+  const hasConclusion = /기술사\s*제언|결론/.test(out);
+
+  const blocks = [];
+  if (!hasAnalysis) {
+    blocks.push(
+      [
+        "문제 핵심 분석",
+        `- 대상: ${title}`,
+        `- 핵심 쟁점: ${keyHint || "문제 원문 기반 메커니즘/기준/실무 리스크를 통합 검토"}`,
+        "- 지배 파괴모드 후보: 휨 → 전단 → 정착/부착 → 사용성(균열·처짐) 순으로 스크리닝한다.",
+        "- 검토 순서: 하중조합 확정 → 내부력 산정 → 기준식 판정 → 상세/시공/유지관리 대책 수립.",
+      ].join("\n"),
+    );
+  }
+  if (!hasDiagram1) {
+    blocks.push(
+      [
+        "[도해-1] 하중전달 경로(Load Path)",
+        "- 구성: 작용하중, 지점반력, 내부력(휨/전단), 응력집중 구간",
+        "- 작성순서: ① 외곽/경계조건 ② 하중·반력 ③ 내부력 화살표 ④ 취약부 강조",
+      ].join("\n"),
+    );
+  }
+  if (!hasDiagram2) {
+    blocks.push(
+      [
+        "[도해-2] 단면 거동 및 취약상세",
+        "- 구성: 압축연단/인장연단, 변형률 선도, 응력블록, 정착 취약부",
+        "- 채점 포인트: 지배모드와 보강상세(스터럽/정착길이) 연결 제시",
+      ].join("\n"),
+    );
+  }
+  if (!hasTable) {
+    blocks.push(
+      [
+        "[비교표] 대안별 의사결정",
+        "| 항목 | 대안 A | 대안 B | 판단 |",
+        "|---|---|---|---|",
+        "| 안전성 | 우수/보통 | 우수/보통 | 지배모드 기준 판정 |",
+        "| 시공성 | 공정 난이도 | 공정 난이도 | 현장 적용성 비교 |",
+        "| 경제성 | 초기비용/생애비용 | 초기비용/생애비용 | LCC 관점 비교 |",
+        "| 유지관리성 | 점검 용이성 | 점검 용이성 | 모니터링 계획 반영 |",
+      ].join("\n"),
+    );
+  }
+  if (!hasConclusion) {
+    blocks.push(
+      [
+        "결론 및 기술사 제언",
+        "- 기준 적합성 + 시공 리스크 저감 + 유지관리 모니터링 계획을 동시에 만족하는 대안을 채택한다.",
+        "- 운영 단계에서는 균열·변위·누수 지표의 임계치를 설정하고 초과 시 보수 시나리오를 즉시 실행한다.",
+      ].join("\n"),
+    );
+  }
+
+  if (blocks.length) {
+    out = `${out}\n\n${blocks.join("\n\n")}`.trim();
+  }
+
+  const compactLen = out.replace(/\s+/g, "").length;
+  if (compactLen < minChars) {
+    const padding = [
+      "분량 보강(고득점 조건 충족)",
+      "- 추가 검토 ①: 하중조합별 지배단면 재산정 및 여유도(Margin) 비교",
+      "- 추가 검토 ②: 기준식(예: φMn ≥ Mu, Vn ≥ Vu, 정착길이 ld)과 판정 로직 명시",
+      "- 추가 검토 ③: 시공 오차(피복·정착·다짐) 민감도와 품질게이트 설정",
+      "- 추가 검토 ④: 유지관리 점검주기, 계측항목, 임계치 초과 대응 프로토콜",
+      "- 추가 검토 ⑤: 대안별 트레이드오프와 최종 권고안의 근거를 정량/정성 병행 제시",
+    ].join("\n");
+    out = `${out}\n\n${padding}`.trim();
+  }
+
+  if (includeEvidenceSection) {
+    return enforceMandatoryPipelineAnswer(out, sourceBundle);
+  }
+  return out;
+}
+
+function buildMandatorySourceBundleContext(sourceBundle = {}) {
+  const bundle = sourceBundle && typeof sourceBundle === "object" ? sourceBundle : {};
+  const blocks = bundle.blocks && typeof bundle.blocks === "object" ? bundle.blocks : {};
+
+  const storedTheory = String(blocks.storedTheory || "").trim() || "- 저장 이론 매칭 없음";
+  const notebookLm = String(blocks.notebookLm || "").trim() || "- NotebookLM 매칭 없음";
+  const flowith = String(blocks.flowith || "").trim() || "- Flowith 매칭 없음";
+  const insight = String(blocks.insight || "").trim() || "- 보조 인사이트 없음";
+
+  return [
+    "[MANDATORY_PIPELINE_CONTEXT]",
+    "1) 저장된 학습/이론 자료",
+    storedTheory,
+    "",
+    "2) NotebookLM 관련 자료",
+    notebookLm,
+    "",
+    "3) Flowith 지식정원 관련 자료",
+    flowith,
+    "",
+    "보조 인사이트",
+    insight,
+  ].join("\n");
 }
 
 import { execSync, spawn, spawnSync } from "child_process";
@@ -311,14 +758,425 @@ async function fetchWebContext(query) {
       "research",
       "web_research.py",
     );
-    const stdout = execSync(`python "${pythonScript}" "${query}"`, {
-      encoding: "utf-8",
-    });
-    return stdout || "";
+    const run = (cmd) =>
+      execSync(`${cmd} -X utf8 "${pythonScript}" "${query}"`, {
+        encoding: "utf-8",
+        timeout: 12000,
+        windowsHide: true,
+        env: {
+          ...process.env,
+          PYTHONUTF8: "1",
+          PYTHONIOENCODING: "utf-8",
+        },
+      });
+
+    try {
+      const stdout = run("python");
+      return stdout || "";
+    } catch (firstError) {
+      if (process.platform === "win32") {
+        try {
+          const stdout = run("py -3");
+          return stdout || "";
+        } catch {
+          throw firstError;
+        }
+      }
+      throw firstError;
+    }
   } catch (error) {
     console.error("Python Web Research Error:", error);
     return "";
   }
+}
+
+function parseWebResearchContext(rawContext = "") {
+  const raw = String(rawContext || "").trim();
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const parsed = {
+    query: "",
+    title: "",
+    summary: "",
+    url: "",
+    status: "",
+    message: "",
+    references: [],
+    hasStructuredData: false,
+  };
+
+  if (!lines.length) {
+    return parsed;
+  }
+
+  let inReferences = false;
+  for (const line of lines) {
+    if (/^references\s*:/i.test(line)) {
+      inReferences = true;
+      continue;
+    }
+
+    if (/^query\s*:/i.test(line)) {
+      parsed.query = line.replace(/^query\s*:/i, "").trim();
+      continue;
+    }
+    if (/^title\s*:/i.test(line)) {
+      parsed.title = line.replace(/^title\s*:/i, "").trim();
+      continue;
+    }
+    if (/^summary\s*:/i.test(line)) {
+      parsed.summary = line.replace(/^summary\s*:/i, "").trim();
+      continue;
+    }
+    if (/^url\s*:/i.test(line)) {
+      parsed.url = line.replace(/^url\s*:/i, "").trim();
+      continue;
+    }
+    if (/^status\s*:/i.test(line)) {
+      parsed.status = line.replace(/^status\s*:/i, "").trim();
+      continue;
+    }
+    if (/^message\s*:/i.test(line)) {
+      parsed.message = line.replace(/^message\s*:/i, "").trim();
+      continue;
+    }
+
+    if (inReferences && /^\d+\.\s*/.test(line)) {
+      const body = line.replace(/^\d+\.\s*/, "").trim();
+      const parts = body.split("|").map((p) => p.trim());
+      const title = parts[0] || "";
+      const url = parts[1] || "";
+      const summary = parts.slice(2).join(" | ") || "";
+      parsed.references.push({ title, url, summary });
+    }
+  }
+
+  parsed.hasStructuredData = Boolean(
+    parsed.title ||
+      parsed.summary ||
+      parsed.url ||
+      parsed.references.length ||
+      parsed.status ||
+      parsed.message,
+  );
+  return parsed;
+}
+
+function normalizeHttpUrl(raw = "") {
+  const url = String(raw || "").trim();
+  if (!url) return "";
+  if (!/^https?:\/\//i.test(url)) return "";
+  return url;
+}
+
+function looksLikeDirectImageUrl(url = "") {
+  return /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(String(url || ""));
+}
+
+function absolutizeUrl(maybeUrl = "", baseUrl = "") {
+  const raw = String(maybeUrl || "").trim();
+  if (!raw) return "";
+  try {
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (!baseUrl) return "";
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+async function extractImageCandidatesFromReference(refUrl = "") {
+  const src = normalizeHttpUrl(refUrl);
+  if (!src) return [];
+  if (looksLikeDirectImageUrl(src)) {
+    return [src];
+  }
+
+  try {
+    const response = await axios.get(src, {
+      timeout: 7000,
+      maxRedirects: 3,
+      responseType: "text",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+
+    const html = String(response?.data || "");
+    if (!html) return [];
+
+    const candidates = [];
+    const metaRegexes = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/gi,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/gi,
+    ];
+
+    for (const rgx of metaRegexes) {
+      for (const m of html.matchAll(rgx)) {
+        const abs = absolutizeUrl(m[1], src);
+        if (abs) candidates.push(abs);
+      }
+    }
+
+    const imgTag = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+    if (imgTag?.[1]) {
+      const abs = absolutizeUrl(imgTag[1], src);
+      if (abs) candidates.push(abs);
+    }
+
+    const uniq = [];
+    for (const c of candidates) {
+      const safe = normalizeHttpUrl(c);
+      if (!safe) continue;
+      if (!uniq.includes(safe)) uniq.push(safe);
+    }
+    return uniq.slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+async function collectRelatedImageUrlsFromDeepResearch(parsed = {}, max = 3) {
+  const refs = Array.isArray(parsed?.references) ? parsed.references : [];
+  if (!refs.length) return [];
+
+  const out = [];
+  for (const ref of refs.slice(0, 4)) {
+    const refUrl = normalizeHttpUrl(ref?.url || "");
+    if (!refUrl) continue;
+    const imgs = await extractImageCandidatesFromReference(refUrl);
+    for (const img of imgs) {
+      if (!out.includes(img)) out.push(img);
+      if (out.length >= max) {
+        return out;
+      }
+    }
+  }
+  return out;
+}
+
+function attachImageUrlsToVisuals(visuals = [], imageUrls = []) {
+  const rows = Array.isArray(visuals) ? visuals : [];
+  const imgs = Array.isArray(imageUrls)
+    ? imageUrls.map((u) => normalizeHttpUrl(u)).filter(Boolean)
+    : [];
+
+  if (!rows.length || !imgs.length) return rows;
+
+  const out = [];
+  let cursor = 0;
+  for (const item of rows) {
+    if (!item || typeof item !== "object") continue;
+    const kind = String(item.kind || "diagram").toLowerCase();
+    if (["diagram", "graph", "image"].includes(kind) && cursor < imgs.length) {
+      out.push({ ...item, imageUrl: imgs[cursor++] });
+    } else {
+      out.push(item);
+    }
+  }
+
+  while (cursor < imgs.length && out.length < 6) {
+    const imageUrl = imgs[cursor++];
+    out.push({
+      kind: "image",
+      title: `인터넷 참고 이미지 ${cursor}`,
+      purpose: "문제 관련 레퍼런스 이미지 첨부",
+      spec: `출처 URL: ${imageUrl}`,
+      scoringPoint: "출처 기반 시각자료",
+      imageUrl,
+    });
+  }
+
+  return out.slice(0, 6);
+}
+
+function hasUsableDeepResearchParsed(parsed = {}) {
+  const row = parsed && typeof parsed === "object" ? parsed : {};
+  const refs = Array.isArray(row.references) ? row.references : [];
+  const hasRef = refs.length > 0;
+  const summary = String(row.summary || "").trim();
+  const message = String(row.message || "").trim();
+  const blockedByWarning = /검색\s*결과가\s*충분하지\s*않습니다/i.test(message);
+  return hasRef && !blockedByWarning && summary.length >= 12;
+}
+
+function isUsablePipelineBlock(value = "") {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  if (text.length < 12) return false;
+  if (/^[-–—]$/.test(text)) return false;
+  if (/매칭\s*없음|비활성|없음$/i.test(text)) return false;
+  return true;
+}
+
+function analyzeMandatoryStepChecks(sourceBundle = {}, deepParsed = {}) {
+  const blocks = sourceBundle?.blocks && typeof sourceBundle.blocks === "object"
+    ? sourceBundle.blocks
+    : {};
+
+  const step1 = {
+    ok: isUsablePipelineBlock(blocks.storedTheory),
+    label: "저장 학습/이론자료",
+    evidence: String(blocks.storedTheory || "").replace(/\s+/g, " ").trim().slice(0, 180),
+  };
+  const step2 = {
+    ok: isUsablePipelineBlock(blocks.notebookLm),
+    label: "NotebookLM",
+    evidence: String(blocks.notebookLm || "").replace(/\s+/g, " ").trim().slice(0, 180),
+  };
+  const step3 = {
+    ok: isUsablePipelineBlock(blocks.flowith),
+    label: "Flowith 지식정원",
+    evidence: String(blocks.flowith || "").replace(/\s+/g, " ").trim().slice(0, 180),
+  };
+
+  const refs = Array.isArray(deepParsed?.references) ? deepParsed.references : [];
+  const step4 = {
+    ok: hasUsableDeepResearchParsed(deepParsed),
+    label: "인터넷 딥리서치",
+    evidence: `refs=${refs.length}, title=${String(deepParsed?.title || "-").slice(0, 80)}`,
+  };
+
+  const step5 = {
+    ok: step1.ok && step2.ok && step3.ok && step4.ok,
+    label: "통합정리",
+    evidence: "1~4단계 교차 검증 후 통합답안 작성",
+  };
+
+  return {
+    step1,
+    step2,
+    step3,
+    step4,
+    step5,
+    allPassed: step1.ok && step2.ok && step3.ok && step4.ok && step5.ok,
+  };
+}
+
+function renderParsedWebResearchContext(parsed = {}, fallbackRaw = "") {
+  const row = parsed && typeof parsed === "object" ? parsed : {};
+  if (!row.hasStructuredData) {
+    return String(fallbackRaw || "").trim();
+  }
+
+  const refs = Array.isArray(row.references) ? row.references : [];
+  const refLines = refs.length
+    ? refs
+        .slice(0, 5)
+        .map(
+          (ref, idx) =>
+            `${idx + 1}) ${ref.title || "(제목없음)"} | ${ref.url || ""} | ${String(ref.summary || "").slice(0, 220)}`,
+        )
+        .join("\n")
+    : "참고 링크 없음";
+
+  return [
+    "[DEEP_RESEARCH_PARSED]",
+    `query: ${row.query || ""}`,
+    `status: ${row.status || "success"}`,
+    `message: ${row.message || ""}`,
+    `title: ${row.title || ""}`,
+    `summary: ${row.summary || ""}`,
+    `url: ${row.url || ""}`,
+    "references:",
+    refLines,
+  ].join("\n");
+}
+
+function mergeSourceBundleWithDeepResearch(sourceBundle = null, parsed = {}) {
+  const base =
+    sourceBundle && typeof sourceBundle === "object"
+      ? sourceBundle
+      : { blocks: {} };
+  const merged = {
+    ...base,
+    blocks: {
+      ...(base.blocks && typeof base.blocks === "object" ? base.blocks : {}),
+    },
+  };
+
+  const refs = Array.isArray(parsed?.references) ? parsed.references : [];
+  const refSummary = refs
+    .slice(0, 3)
+    .map((item, idx) => {
+      const rTitle = String(item?.title || "(제목없음)").slice(0, 90);
+      const rUrl = String(item?.url || "").slice(0, 180);
+      return `${idx + 1}) ${rTitle} ${rUrl ? `(${rUrl})` : ""}`.trim();
+    })
+    .join(" / ");
+
+  const deepParsedLine = [
+    `딥리서치 제목: ${parsed?.title || "-"}`,
+    `딥리서치 요약: ${parsed?.summary || parsed?.message || "-"}`,
+    refSummary ? `핵심 참고: ${refSummary}` : "핵심 참고: 없음",
+  ].join(" | ");
+
+  merged.blocks.insight = deepParsedLine;
+  return merged;
+}
+
+function buildDeepResearchQueryCandidates(question = {}, sourceBundle = null) {
+  const seed = [
+    String(question?.title || "").trim(),
+    String(question?.rawQuestion || "").trim().slice(0, 120),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const bundle = sourceBundle && typeof sourceBundle === "object" ? sourceBundle : {};
+  const blockText = Object.values(bundle.blocks || {})
+    .map((row) => String(row || ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const picks = [seed];
+  if (seed) picks.push(`${seed} KDS 구조설계 기준`);
+  if (seed) picks.push(`${seed} 토목구조기술사 해설`);
+  if (blockText) picks.push(`${seed} ${blockText.slice(0, 140)}`.trim());
+
+  const uniq = [];
+  picks
+    .map((q) => String(q || "").trim())
+    .filter((q) => q.length >= 2)
+    .forEach((q) => {
+      if (!uniq.includes(q)) uniq.push(q);
+    });
+
+  return uniq.slice(0, 4);
+}
+
+function buildVisualImageFallbackQueries(question = {}) {
+  const seed = `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`
+    .replace(/\s+/g, " ")
+    .trim();
+  const probe = seed.toLowerCase();
+  const isDRegion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(probe);
+
+  if (isDRegion) {
+    return [
+      "Strut and Tie Model D-Region load path diagram reinforced concrete",
+      "B-Region D-Region comparison STM reinforced concrete",
+    ];
+  }
+
+  if (seed.length >= 6) {
+    return [
+      `${seed} 구조해석 도해`,
+      `${seed} 설계 비교표`,
+    ];
+  }
+
+  return [];
 }
 
 function parseJsonObjectFromText(content = "") {
@@ -599,8 +1457,30 @@ async function generateWithLLM({
 
   const userPrompt =
     format === "json"
-      ? `다음 기출문제: "${question?.title || ""}" 에 대한 전문 서브노트 초안을 작성해주세요.\n\n${enrichedContext}\n\n` +
-        `{\n  "overview": "이 문제에 대한 개요 및 핵심 원리 1~2문장",\n  "characteristics": [\n    {"name": "특성1 이름", "desc1": "설명 1줄", "desc2": "보조 설명"},\n    {"name": "특성2 이름", "desc1": "설명 1줄", "desc2": "보조 설명"}\n  ],\n  "insights": [\n    {"title": "실무 경험", "content": "실제 현장/설계 시 주의사항 1줄"},\n    {"title": "최신 동향", "content": "관련 KDS 기준 혹은 최신 기술 트렌드 1줄"}\n  ],\n  "diagrams": [\n    {"title": "시스템 구성도", "content": "어떤 구성 요소들을 어떤 흐름으로 그려야 하는지 상세 가이드 1줄"}\n  ],\n  "keywords": "키워드1 | 키워드2 | 키워드3",\n  "strategy": "고득점을 위한 차별화 답안 작성 전략 1줄"\n}`
+      ? [
+          "아래 입력을 기반으로 전문 서브노트용 JSON만 출력하세요.",
+          "절대 마크다운 코드블록(```)이나 설명문을 출력하지 마세요.",
+          "문제/모범답안/지시사항의 핵심 용어를 반드시 반영해 구체적으로 작성하세요.",
+          "추상 템플릿 문구 반복(예: 정의 및 핵심 개념, 도해 1개 등)만으로 채우지 마세요.",
+          "",
+          `[문제 제목]\n${question?.title || ""}`,
+          `[문제 원문]\n${question?.rawQuestion || ""}`,
+          `[현재 모범답안 본문(우선 반영)]\n${question?.modelAnswer || ""}`,
+          `[추가 작성 지시]\n${instruction || "없음"}`,
+          `[검색/지식 컨텍스트]\n${enrichedContext || "없음"}`,
+          "",
+          "출력 JSON 스키마(키 이름 고정):",
+          '{"overview":"...","characteristics":[{"name":"...","desc1":"...","desc2":"..."}],"insights":[{"title":"...","content":"..."}],"diagrams":[{"title":"...","content":"..."}],"keywords":"...","strategy":"..."}',
+          "",
+          "세부 규칙:",
+          "- characteristics 최소 3개",
+          "- insights 최소 2개",
+          "- diagrams 최소 2개(실제 도해/도표 지시문)",
+          "- 각 diagram.content에는 반드시 다음 라벨을 포함: 도해 목적:, 구성 요소:, 작성 순서:, 채점 포인트:",
+          "- 최소 1개는 메커니즘 도해, 최소 1개는 비교표/의사결정표 형태로 작성",
+          "- keywords는 콤마 구분 5개 이상",
+          "- strategy는 답안 차별화 전략을 2문장 이상으로 작성",
+        ].join("\n")
       : [
           `문제: ${question?.title || ""}`,
           `원문: ${question?.rawQuestion || ""}`,
@@ -702,6 +1582,82 @@ function localInsightFromText({ title = "", text = "", focus = "" }) {
     answerBoost,
     source: "local-insight",
   };
+}
+
+function scoreDecodedWebText(text = "") {
+  const raw = String(text || "");
+  if (!raw) return 0;
+
+  const controlCount = Array.from(raw).reduce((acc, ch) => {
+    const code = ch.charCodeAt(0);
+    if ((code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31)) {
+      return acc + 1;
+    }
+    return acc;
+  }, 0);
+
+  const replacementPenalty = (raw.match(/�/g) || []).length * 5;
+  const controlPenalty = controlCount * 4;
+  const hangulCount = (raw.match(/[가-힣]/g) || []).length;
+  const printableCount = (raw.match(/[\p{L}\p{N}\p{P}\p{Zs}]/gu) || []).length;
+  const mojibakePenalty = (raw.match(/[ÃÂâ€™â€œâ€â€˜]/g) || []).length * 3;
+
+  return (
+    printableCount +
+    hangulCount * 2 -
+    replacementPenalty -
+    controlPenalty -
+    mojibakePenalty
+  );
+}
+
+function repairUtf8Latin1Mojibake(text = "") {
+  const source = String(text || "");
+  if (!source) return source;
+
+  try {
+    const bytes = Uint8Array.from(
+      Array.from(source).map((ch) => ch.charCodeAt(0) & 0xff),
+    );
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return source;
+  }
+}
+
+async function decodeWebResponseSmart(response) {
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const candidates = ["utf-8", "euc-kr", "windows-1252", "iso-8859-1"];
+
+  let bestText = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const encoding of candidates) {
+    try {
+      const decoded = new TextDecoder(encoding, { fatal: false }).decode(bytes);
+      const repaired = repairUtf8Latin1Mojibake(decoded);
+      const scoreDecoded = scoreDecodedWebText(decoded);
+      const scoreRepaired = scoreDecodedWebText(repaired);
+      const finalText = scoreRepaired > scoreDecoded ? repaired : decoded;
+      const finalScore = Math.max(scoreDecoded, scoreRepaired);
+
+      if (finalScore > bestScore) {
+        bestScore = finalScore;
+        bestText = finalText;
+      }
+    } catch {
+      // ignore and continue
+    }
+  }
+
+  if (bestText) return bestText;
+
+  try {
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return "";
+  }
 }
 
 async function generateInsightWithLLM({ title = "", text = "", focus = "" }) {
@@ -1004,17 +1960,157 @@ app.post("/api/analyze-questions", (req, res) => {
 
 app.post("/api/search-context", async (req, res) => {
   const { query } = req.body || {};
-  const context = await fetchWebContext(query || "");
-  res.json({ query: query || "", context });
+  const contextRaw = await fetchWebContext(query || "");
+  const parsed = parseWebResearchContext(contextRaw);
+  const context = renderParsedWebResearchContext(parsed, contextRaw);
+  res.json({ query: query || "", context, parsed, rawContext: contextRaw });
 });
 
 app.post("/api/generate-answer", async (req, res) => {
-  const { question, instruction, format = "text" } = req.body || {};
+  const {
+    question,
+    instruction,
+    format = "text",
+    mandatoryPipeline = false,
+    sourceBundle = null,
+    outputStyle = "default",
+  } = req.body || {};
   const query =
     `${question?.title || ""} ${question?.rawQuestion || ""}`.trim();
-  const webContext = await fetchWebContext(query);
+  const strictMandatory = !!mandatoryPipeline;
+  const queryCandidates = strictMandatory
+    ? buildDeepResearchQueryCandidates(question, sourceBundle)
+    : [query];
+
+  let webContextRaw = "";
+  let webContextParsed = {
+    hasStructuredData: false,
+    references: [],
+  };
+  let usedResearchQuery = "";
+
+  for (const q of queryCandidates) {
+    const candidateRaw = await fetchWebContext(q);
+    const candidateParsed = parseWebResearchContext(candidateRaw);
+    if (!webContextRaw) {
+      webContextRaw = candidateRaw;
+      webContextParsed = candidateParsed;
+      usedResearchQuery = q;
+    }
+
+    const hasRefs = Array.isArray(candidateParsed?.references)
+      ? candidateParsed.references.length > 0
+      : false;
+    if (candidateParsed?.hasStructuredData && hasRefs) {
+      webContextRaw = candidateRaw;
+      webContextParsed = candidateParsed;
+      usedResearchQuery = q;
+      break;
+    }
+  }
+
+  const webContext = renderParsedWebResearchContext(webContextParsed, webContextRaw);
+  const deepResearchUsable = hasUsableDeepResearchParsed(webContextParsed);
+
   const ragContext = getRagContext(query);
-  const context = [ragContext, webContext].filter(Boolean).join("\n\n");
+  const effectiveSourceBundle = mandatoryPipeline
+    ? mergeSourceBundleWithDeepResearch(sourceBundle, webContextParsed)
+    : sourceBundle;
+  const stepChecks = mandatoryPipeline
+    ? analyzeMandatoryStepChecks(effectiveSourceBundle, webContextParsed)
+    : null;
+  const relatedImageUrls = await collectRelatedImageUrlsFromDeepResearch(
+    webContextParsed,
+    3,
+  );
+
+  if (!relatedImageUrls.length) {
+    const imageFallbackQueries = buildVisualImageFallbackQueries(question);
+    for (const imageQuery of imageFallbackQueries) {
+      const imgResearchRaw = await fetchWebContext(imageQuery);
+      const imgResearchParsed = parseWebResearchContext(imgResearchRaw);
+      const urls = await collectRelatedImageUrlsFromDeepResearch(imgResearchParsed, 3);
+      for (const u of urls) {
+        if (!relatedImageUrls.includes(u)) {
+          relatedImageUrls.push(u);
+        }
+        if (relatedImageUrls.length >= 3) {
+          break;
+        }
+      }
+      if (relatedImageUrls.length >= 3) {
+        break;
+      }
+    }
+  }
+
+  if (strictMandatory && stepChecks && !stepChecks.allPassed) {
+    return res.status(424).json({
+      ok: false,
+      error: "mandatory_pipeline_incomplete",
+      message:
+        "강제 5단계 중 실질 근거가 부족한 단계가 있습니다. 저장자료/NotebookLM/Flowith/딥리서치 근거를 보강 후 재시도하세요.",
+      pipelineAudit: {
+        deepResearchExecuted: true,
+        deepResearchParsed: !!webContextParsed?.hasStructuredData,
+        deepResearchUsable,
+        deepResearchReferences: Array.isArray(webContextParsed?.references)
+          ? webContextParsed.references.length
+          : 0,
+        researchQueriesTried: queryCandidates,
+        researchQueryUsed: usedResearchQuery,
+        stepChecks,
+      },
+    });
+  }
+  const mandatoryContext = mandatoryPipeline
+    ? buildMandatorySourceBundleContext(effectiveSourceBundle)
+    : "";
+  const rawContext = [mandatoryContext, ragContext, webContext]
+    .filter(Boolean)
+    .join("\n\n");
+  const context = sanitizeResearchNoise(rawContext);
+  const examAnswerStyle = String(outputStyle || "").toLowerCase() === "exam-answer";
+
+  const finalizeAnswer = (text) => {
+    const cleaned = cleanGeneratedAnswerText(text);
+    let result = cleaned;
+    if (mandatoryPipeline) {
+      const deepened = enforceMandatoryDepth(
+        cleaned,
+        question,
+        effectiveSourceBundle,
+        { includeEvidenceSection: !examAnswerStyle },
+      );
+      result = examAnswerStyle ? sanitizeExamAnswerText(deepened) : deepened;
+    } else {
+      result = examAnswerStyle ? sanitizeExamAnswerText(cleaned) : cleaned;
+    }
+
+    const visualized = ensureVisualGuideInAnswer(result, question);
+    const withImages = attachImageUrlsToVisuals(
+      visualized.visuals,
+      relatedImageUrls,
+    );
+    return {
+      answer: visualized.answer,
+      visuals: withImages,
+      relatedImages: relatedImageUrls,
+    };
+  };
+
+  const enforcedInstruction = mandatoryPipeline
+    ? [
+        String(instruction || ""),
+        "",
+        "[강제 규칙] 반드시 다음 순서로 수행: 1) 저장자료 2) NotebookLM 3) Flowith 4) 딥리서치 5) 통합작성.",
+        examAnswerStyle
+          ? "내부 근거(1~4)는 audit로 검증하고, 제출 본문에는 메타로그/근거표를 쓰지 말 것."
+          : "답안 본문에 '근거첨부' 소제목을 두고 1~4번 근거를 요약 첨부할 것.",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : instruction;
 
   try {
     const isLocalRule = question?.model === "local-rule" || instruction?.includes("local-rule");
@@ -1023,17 +2119,71 @@ app.post("/api/generate-answer", async (req, res) => {
     if (!isLocalRule) {
       aiAnswer = await generateWithLLM({
         question,
-        instruction,
+        instruction: enforcedInstruction,
         context,
         format,
       });
     }
 
     if (aiAnswer?.text) {
+      const finalized = finalizeAnswer(aiAnswer.text);
+      if (isGenericScaffoldAnswer(finalized.answer)) {
+        const fallback = localDraftTemplate(question, examAnswerStyle ? "" : context);
+        const fallbackFinal = mandatoryPipeline
+          ? enforceMandatoryDepth(fallback, question, effectiveSourceBundle, {
+              includeEvidenceSection: !examAnswerStyle,
+            })
+          : fallback;
+        const fallbackOut = examAnswerStyle
+          ? sanitizeExamAnswerText(fallbackFinal)
+          : fallbackFinal;
+        const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
+        return res.json({
+          answer: fallbackVisualized.answer,
+          visuals: attachImageUrlsToVisuals(
+            fallbackVisualized.visuals,
+            relatedImageUrls,
+          ),
+          relatedImages: relatedImageUrls,
+          source: "local-fallback",
+          context,
+          mandatoryPipeline: !!mandatoryPipeline,
+          pipelineAudit: {
+            deepResearchExecuted: true,
+            deepResearchParsed: !!webContextParsed?.hasStructuredData,
+            deepResearchUsable,
+            deepResearchReferences: Array.isArray(webContextParsed?.references)
+              ? webContextParsed.references.length
+              : 0,
+            researchQueriesTried: queryCandidates,
+            researchQueryUsed: usedResearchQuery,
+            stepChecks,
+          },
+          providers: getProviderConfigStatus(),
+          llmDiagnostics: Array.isArray(aiAnswer?.diagnostics)
+            ? aiAnswer.diagnostics
+            : [],
+        });
+      }
+
       return res.json({
-        answer: aiAnswer.text,
+        answer: finalized.answer,
+        visuals: finalized.visuals,
+        relatedImages: finalized.relatedImages,
         source: `${aiAnswer.provider || "llm"}+web-context`,
         model: aiAnswer.model || "",
+        mandatoryPipeline: !!mandatoryPipeline,
+        pipelineAudit: {
+          deepResearchExecuted: true,
+          deepResearchParsed: !!webContextParsed?.hasStructuredData,
+          deepResearchUsable,
+          deepResearchReferences: Array.isArray(webContextParsed?.references)
+            ? webContextParsed.references.length
+            : 0,
+          researchQueriesTried: queryCandidates,
+          researchQueryUsed: usedResearchQuery,
+          stepChecks,
+        },
         llmDiagnostics: Array.isArray(aiAnswer.diagnostics)
           ? aiAnswer.diagnostics
           : [],
@@ -1041,11 +2191,37 @@ app.post("/api/generate-answer", async (req, res) => {
       });
     }
 
-    const fallback = localDraftTemplate(question, context);
+    const fallback = localDraftTemplate(question, examAnswerStyle ? "" : context);
+    const fallbackFinal = mandatoryPipeline
+      ? enforceMandatoryDepth(fallback, question, effectiveSourceBundle, {
+          includeEvidenceSection: !examAnswerStyle,
+        })
+      : fallback;
+    const fallbackOut = examAnswerStyle
+      ? sanitizeExamAnswerText(fallbackFinal)
+      : fallbackFinal;
+    const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
     return res.json({
-      answer: fallback,
+      answer: fallbackVisualized.answer,
+      visuals: attachImageUrlsToVisuals(
+        fallbackVisualized.visuals,
+        relatedImageUrls,
+      ),
+      relatedImages: relatedImageUrls,
       source: "local-fallback",
       context,
+      mandatoryPipeline: !!mandatoryPipeline,
+      pipelineAudit: {
+        deepResearchExecuted: true,
+        deepResearchParsed: !!webContextParsed?.hasStructuredData,
+        deepResearchUsable,
+        deepResearchReferences: Array.isArray(webContextParsed?.references)
+          ? webContextParsed.references.length
+          : 0,
+        researchQueriesTried: queryCandidates,
+        researchQueryUsed: usedResearchQuery,
+        stepChecks,
+      },
       providers: getProviderConfigStatus(),
       llmDiagnostics: Array.isArray(aiAnswer?.diagnostics)
         ? aiAnswer.diagnostics
@@ -1055,11 +2231,37 @@ app.post("/api/generate-answer", async (req, res) => {
     console.error("Generate Answer Error:", err);
   }
 
-  const fallback = localDraftTemplate(question, context);
+  const fallback = localDraftTemplate(question, examAnswerStyle ? "" : context);
+  const fallbackFinal = mandatoryPipeline
+    ? enforceMandatoryDepth(fallback, question, effectiveSourceBundle, {
+        includeEvidenceSection: !examAnswerStyle,
+      })
+    : fallback;
+  const fallbackOut = examAnswerStyle
+    ? sanitizeExamAnswerText(fallbackFinal)
+    : fallbackFinal;
+  const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
   return res.json({
-    answer: fallback,
+    answer: fallbackVisualized.answer,
+    visuals: attachImageUrlsToVisuals(
+      fallbackVisualized.visuals,
+      relatedImageUrls,
+    ),
+    relatedImages: relatedImageUrls,
     source: "local-fallback",
     context,
+    mandatoryPipeline: !!mandatoryPipeline,
+    pipelineAudit: {
+      deepResearchExecuted: true,
+      deepResearchParsed: !!webContextParsed?.hasStructuredData,
+      deepResearchUsable,
+      deepResearchReferences: Array.isArray(webContextParsed?.references)
+        ? webContextParsed.references.length
+        : 0,
+      researchQueriesTried: queryCandidates,
+      researchQueryUsed: usedResearchQuery,
+      stepChecks,
+    },
     providers: getProviderConfigStatus(),
   });
 });
@@ -1130,30 +2332,43 @@ app.post("/api/reveal-in-explorer", (req, res) => {
     return res.status(400).json({ ok: false, error: "targetPath is required" });
   }
 
-  const targetPath = path.isAbsolute(rawTargetPath)
-    ? rawTargetPath
-    : path.resolve(workspaceRoot, rawTargetPath);
+  const unquotedTargetPath = rawTargetPath.replace(/^['"]|['"]$/g, "");
+  const targetPath = path.normalize(
+    path.isAbsolute(unquotedTargetPath)
+      ? unquotedTargetPath
+      : path.resolve(workspaceRoot, unquotedTargetPath),
+  );
 
   if (!fs.existsSync(targetPath)) {
     return res.status(404).json({ ok: false, error: "target path not found" });
   }
 
   try {
+    const stat = fs.statSync(targetPath);
     if (process.platform === "win32") {
       const normalized = targetPath.replace(/\//g, "\\");
-      const child = spawn("explorer.exe", [`/select,${normalized}`], {
+      const explorerArgs = stat.isDirectory()
+        ? [normalized]
+        : [`/select,${normalized}`];
+      const child = spawn("explorer.exe", explorerArgs, {
         detached: true,
         stdio: "ignore",
       });
       child.unref();
     } else if (process.platform === "darwin") {
-      const child = spawn("open", ["-R", targetPath], {
-        detached: true,
-        stdio: "ignore",
-      });
+      const child = stat.isDirectory()
+        ? spawn("open", [targetPath], {
+            detached: true,
+            stdio: "ignore",
+          })
+        : spawn("open", ["-R", targetPath], {
+            detached: true,
+            stdio: "ignore",
+          });
       child.unref();
     } else {
-      const child = spawn("xdg-open", [path.dirname(targetPath)], {
+      const openTarget = stat.isDirectory() ? targetPath : path.dirname(targetPath);
+      const child = spawn("xdg-open", [openTarget], {
         detached: true,
         stdio: "ignore",
       });
@@ -1165,6 +2380,53 @@ app.post("/api/reveal-in-explorer", (req, res) => {
     return res.status(500).json({
       ok: false,
       error: String(error?.message || error || "reveal_failed"),
+    });
+  }
+});
+
+app.post("/api/open-in-default-app", (req, res) => {
+  const rawTargetPath = String(req.body?.targetPath || "").trim();
+  if (!rawTargetPath) {
+    return res.status(400).json({ ok: false, error: "targetPath is required" });
+  }
+
+  const unquotedTargetPath = rawTargetPath.replace(/^['"]|['"]$/g, "");
+  const targetPath = path.normalize(
+    path.isAbsolute(unquotedTargetPath)
+      ? unquotedTargetPath
+      : path.resolve(workspaceRoot, unquotedTargetPath),
+  );
+
+  if (!fs.existsSync(targetPath)) {
+    return res.status(404).json({ ok: false, error: "target path not found" });
+  }
+
+  try {
+    if (process.platform === "win32") {
+      const child = spawn("cmd.exe", ["/c", "start", "", targetPath], {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+    } else if (process.platform === "darwin") {
+      const child = spawn("open", [targetPath], {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+    } else {
+      const child = spawn("xdg-open", [targetPath], {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+    }
+
+    return res.json({ ok: true, opened: targetPath });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: String(error?.message || error || "open_failed"),
     });
   }
 });
@@ -1181,7 +2443,7 @@ app.post("/api/analyze-webpage", async (req, res) => {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const html = await response.text();
+    const html = await decodeWebResponseSmart(response);
     text = extractPrimaryWebText(html).slice(0, 12000);
   } catch (error) {
     return res
