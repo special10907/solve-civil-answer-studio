@@ -119,6 +119,18 @@ def _is_noise_line(text):
         return True
     noise_patterns = [
         r"^\[\s*심화\s*보강",
+        r"^\[\s*web_research\s*\]$",
+        r"^\[\s*mandatory_pipeline_context\s*\]$",
+        r"^\[\s*deep_research_parsed\s*\]$",
+        r"^\[\s*검색\s*컨텍스트\s*요약\s*\]$",
+        r"^query\s*:",
+        r"^status\s*:",
+        r"^message\s*:",
+        r"^title\s*:",
+        r"^summary\s*:",
+        r"^url\s*:",
+        r"^references\s*:",
+        r"^참고\s*링크\s*없음$",
         r"^[-*]\s*요청사항\s*:",
         r"^[-*]\s*탐색소스\s*:",
         r"^근거첨부$",
@@ -143,6 +155,13 @@ def _clean_multiline_text(text, max_lines=22):
     lines = [ln.strip() for ln in raw.split("\n")]
     cleaned = [ln for ln in lines if ln and not _is_noise_line(ln)]
     return cleaned[:max_lines]
+
+
+def _clean_inline_text(text, fallback=""):
+    lines = _clean_multiline_text(text, max_lines=2)
+    if not lines:
+        return str(fallback or "").strip()
+    return " ".join(lines).strip()
 
 
 def _normalize_visual_items(llm_data, title):
@@ -199,10 +218,10 @@ def _normalize_visual_items(llm_data, title):
 
 
 def _render_visual_table(doc, item, is_submission=False, caption=""):
-    title = item.get("title") or "비교표"
+    title = _clean_inline_text(item.get("title"), "비교표")
     spec_text = item.get("spec") or ""
-    purpose = item.get("purpose") or ""
-    scoring = item.get("scoringPoint") or ""
+    purpose = _clean_inline_text(item.get("purpose"))
+    scoring = _clean_inline_text(item.get("scoringPoint"))
 
     label = caption or "표"
     if is_submission:
@@ -440,9 +459,9 @@ def _render_visual_figure(
     caption="",
 ):
     kind = item.get("kind") or "diagram"
-    title = item.get("title") or "시각자료"
-    purpose = item.get("purpose") or ""
-    scoring = item.get("scoringPoint") or ""
+    title = _clean_inline_text(item.get("title"), "시각자료")
+    purpose = _clean_inline_text(item.get("purpose"))
+    scoring = _clean_inline_text(item.get("scoringPoint"))
 
     label = caption or ("그래프" if kind == "graph" else "도해")
     if is_submission:
@@ -486,13 +505,26 @@ def generate_bridge(payload):
         exam_no = payload.get("exam_no", 120)
         period = payload.get("period", 1)
         q_num = payload.get("q_num", 1)
-        title = payload.get("title", "Untitled Question")
+        title = _clean_inline_text(
+            payload.get("title", "Untitled Question"),
+            "Untitled Question",
+        )
         docx_style = str(
             payload.get("docx_style", "submission") or "submission"
         )
         is_submission = docx_style.lower() == "submission"
-        raw_question = str(payload.get("raw_question", "") or "").strip()
-        answer_text = str(payload.get("answer_text", "") or "").strip()
+        raw_question = "\n".join(
+            _clean_multiline_text(
+                payload.get("raw_question", ""),
+                max_lines=28,
+            )
+        ).strip()
+        answer_text = "\n".join(
+            _clean_multiline_text(
+                payload.get("answer_text", ""),
+                max_lines=32,
+            )
+        ).strip()
         llm_data = payload.get("llm_data", {})
 
         # 저장 경로 기준을 "현재 파일 기준 상대"로 고정하되,
@@ -598,6 +630,13 @@ def generate_bridge(payload):
                 is_table_like_image = kind == "image" and bool(
                     re.search(r"비교표|table", title_text, re.IGNORECASE)
                 )
+                has_real_image = bool(
+                    str(item.get("imageData") or "").strip()
+                    or str(item.get("imageUrl") or "").strip()
+                )
+
+                if is_table_like_image and not has_real_image:
+                    kind = "table"
 
                 if kind == "table":
                     counters["table"] += 1

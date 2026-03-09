@@ -13,7 +13,6 @@ import json
 import time
 import requests
 from pathlib import Path
-from glob import glob
 
 # Add research directory to sys.path to import subnote_framework
 # Current path: solution/core/llm_fill_subnotes.py
@@ -133,6 +132,9 @@ def generate_llm_content(title: str):
   "insights": [
     {{"title": "실무 경험", "content": "실제 현장/설계 시 주의사항 1줄"}},
     {{"title": "최신 동향", "content": "관련 KDS 기준 혹은 최신 기술 트렌드 1줄"}}
+  ],
+  "diagrams": [
+    {{"title": "시스템 구성도", "content": "어떤 구성 요소들을 어떤 흐름으로 그려야 하는지 상세 가이드 1줄"}}
   ],
   "keywords": "키워드1 | 키워드2 | 키워드3",
   "strategy": "고득점을 위한 차별화 답안 작성 전략 1줄"

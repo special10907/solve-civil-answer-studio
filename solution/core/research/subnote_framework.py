@@ -5,6 +5,7 @@ Refactored: parameterized exam_no/period, literal Korean strings,
 """
 
 import os
+import sys
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -593,4 +594,12 @@ def save_document(doc, output_path):
     """Save and report file size."""
     doc.save(output_path)
     size = os.path.getsize(output_path)
-    print(f"✅ Generated: {os.path.basename(output_path)} ({size:,} bytes)")
+    message = f"[OK] Generated: {os.path.basename(output_path)} ({size:,} bytes)"
+    try:
+        print(message, file=sys.stderr)
+    except UnicodeEncodeError:
+        encoded = (message + "\n").encode(
+            sys.stderr.encoding or "utf-8",
+            errors="replace",
+        )
+        sys.stderr.buffer.write(encoded)

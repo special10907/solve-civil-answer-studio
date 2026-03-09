@@ -14,7 +14,9 @@
  * 하이브리드 지능형 주입 파이프라인 (파일 및 웹사이트 통합)
  */
 async function runUnifiedIngestion(input, focus = "") {
-  const isUrl = typeof input === "string" && (input.startsWith("http://") || input.startsWith("https://"));
+  const isUrl =
+    typeof input === "string" &&
+    (input.startsWith("http://") || input.startsWith("https://"));
   const files = !isUrl ? (Array.isArray(input) ? input : [input]) : [];
   const url = isUrl ? input : "";
 
@@ -23,8 +25,11 @@ async function runUnifiedIngestion(input, focus = "") {
     return;
   }
 
-  setDataStatus(`통합 지능형 ${isUrl ? "웹사이트" : "자료"} 분석 시작 중...`, "info");
-  
+  setDataStatus(
+    `통합 지능형 ${isUrl ? "웹사이트" : "자료"} 분석 시작 중...`,
+    "info",
+  );
+
   let items = [];
   if (!isUrl) {
     for (const file of files) {
@@ -34,7 +39,7 @@ async function runUnifiedIngestion(input, focus = "") {
           name: file.name,
           type: file.type,
           size: file.size,
-          textExcerpt
+          textExcerpt,
         });
       } catch (e) {
         console.warn(`File reading failed: ${file.name}`, e);
@@ -54,12 +59,17 @@ async function runUnifiedIngestion(input, focus = "") {
   formData.append("items", JSON.stringify(items));
 
   try {
-    const baseUrl = window.getAnalyzeBackendUrl ? window.getAnalyzeBackendUrl() : "http://localhost:8787";
+    const baseUrl = window.getAnalyzeBackendUrl
+      ? window.getAnalyzeBackendUrl()
+      : "http://localhost:8787";
     // 웹사이트인 경우 기존 api/analyze-webpage를 활용하거나 통합 처리
-    const endpoint = isUrl ? "/api/analyze-webpage" : "/api/ingest-intelligence";
-    
+    const endpoint = isUrl
+      ? "/api/analyze-webpage"
+      : "/api/ingest-intelligence";
+
     // api/analyze-webpage는 JSON을 기대하므로 멀티파트가 아닐 수 있음
-    let body, headers = {};
+    let body,
+      headers = {};
     if (isUrl) {
       body = JSON.stringify({ url, focus });
       headers = { "Content-Type": "application/json" };
@@ -70,17 +80,17 @@ async function runUnifiedIngestion(input, focus = "") {
     const response = await fetch(`${baseUrl}${endpoint}`, {
       method: "POST",
       headers,
-      body
+      body,
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const result = await response.json();
-    
+
     // 1. Intelligence 반영 (이론 지식 베이스)
     // api/analyze-webpage 결과 구조와 api/ingest-intelligence 결과 구조 통합 대응
     const insight = isUrl ? result : result.intelligence;
-    
+
     if (insight) {
       window.latestAttachmentInsight = insight;
       if (typeof window.renderAttachmentInsight === "function") {
@@ -89,16 +99,26 @@ async function runUnifiedIngestion(input, focus = "") {
 
       // 이론 DB 자동 등록 제안 또는 자동 등록
       if (window.shouldAutoAttachTheoryKnowledge(focus)) {
-        const sourceItems = isUrl ? [{ name: url, textExcerpt: insight.originalText || "" }] : items;
-        const autoEntries = window.buildTheoryEntriesFromAnalyzedFiles(sourceItems, insight, focus);
-        const addedCount = window.appendTheoryEntriesToKnowledgeBase(autoEntries);
-        
-        const msg = isUrl 
+        const sourceItems = isUrl
+          ? [{ name: url, textExcerpt: insight.originalText || "" }]
+          : items;
+        const autoEntries = window.buildTheoryEntriesFromAnalyzedFiles(
+          sourceItems,
+          insight,
+          focus,
+        );
+        const addedCount =
+          window.appendTheoryEntriesToKnowledgeBase(autoEntries);
+
+        const msg = isUrl
           ? `웹 지식화 완료: 이론 등록 ${addedCount}건`
-          : `통합 주입 완료: RAG 전송 ${result.savedToDropzone}건, 이론 등록 ${addedCount}건`;
+          : `통합 주입 완료: RAG 전송 ${result.savedToDropzone ?? 0}건, 이론 등록 ${addedCount}건`;
         setDataStatus(msg, "success");
       } else {
-        setDataStatus(`${isUrl ? "웹사이트" : "자료"} 분석 및 RAG 전송 완료`, "success");
+        setDataStatus(
+          `${isUrl ? "웹사이트" : "자료"} 분석 및 RAG 전송 완료`,
+          "success",
+        );
       }
     }
 
@@ -106,9 +126,13 @@ async function runUnifiedIngestion(input, focus = "") {
   } catch (error) {
     console.error("Unified Ingestion Error:", error);
     setDataStatus("분석 엔진 연결 실패. 로컬 엔진으로 전환합니다.", "warning");
-    
+
     const fallbackTitle = isUrl ? url : `${files.length}개 자료`;
-    const localInsight = window.buildLocalAttachmentInsight(items, focus, fallbackTitle);
+    const localInsight = window.buildLocalAttachmentInsight(
+      items,
+      focus,
+      fallbackTitle,
+    );
     window.latestAttachmentInsight = { ...localInsight, mode: "local" };
     if (typeof window.renderAttachmentInsight === "function") {
       window.renderAttachmentInsight(window.latestAttachmentInsight);
@@ -139,10 +163,11 @@ function handleSidebarIngestion() {
   input.onchange = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    
-    // 데이터 허브(이론) 섹션으로 강제 이동하여 가시성 확보
+
+    // 데이터 허브 편집 화면으로 강제 이동하여 가시성 확보
     if (typeof window.showSection === "function") {
-      window.showSection("theory");
+      // 'theory' 섹션은 현재 레이아웃에 없으므로 studio로 이동
+      window.showSection("studio");
     }
     await runUnifiedIngestion(files, "사이드바 신속 주입");
   };

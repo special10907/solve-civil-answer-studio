@@ -177,6 +177,22 @@ function estimateAnalyzeConfidence(meta = {}, questions = []) {
   return 0.65;
 }
 
+function isDRegionTopic(text = "") {
+  const src = String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!src) return false;
+
+  if (/d[\s-]?region|응력\s*교란\s*구역|응력\s*교란|strut\s*[- ]?\s*tie|stm\b|스트럿\s*[-·]?\s*타이|스트럿타이/.test(src)) {
+    return true;
+  }
+
+  const hasStrut = /(^|[^a-z])strut([^a-z]|$)|스트럿/.test(src);
+  const hasTie = /(^|[^a-z])tie([^a-z]|$)|타이\s*모델|타이\s*부재|타이\s*요소/.test(src);
+  return hasStrut && hasTie;
+}
+
 function localDraftTemplate(question, context = "") {
   const promptRaw = `${question?.title || ""} ${question?.rawQuestion || ""} ${question?.modelAnswer || ""}`;
   const prompt = promptRaw.toLowerCase();
@@ -213,7 +229,7 @@ function localDraftTemplate(question, context = "") {
     "- 운영 단계에서는 점검주기·계측항목·임계치 기반 대응 프로토콜을 사전에 설정해 성능 저하를 조기 차단한다.",
   ];
 
-  if (/d-region|stm|응력\s*교란|응력교란|스트럿|타이/.test(prompt)) {
+  if (isDRegionTopic(prompt)) {
     return [
       "1. 응력교란구역(D-Region)의 정의와 본질",
       "- 응력교란구역은 평면유지 가정(Bernoulli Hypothesis)이 성립하지 않는 불연속 구간으로, 하중 재하점·지점부·개구부·단면 급변부에 주로 발생함.",
@@ -353,6 +369,89 @@ function sanitizeExamAnswerText(text = "") {
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function sanitizeDocxBridgeText(text = "") {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\[web_research\]$/i.test(line))
+    .filter((line) => !/^\[mandatory_pipeline_context\]$/i.test(line))
+    .filter((line) => !/^\[deep_research_parsed\]$/i.test(line))
+    .filter((line) => !/^\[검색\s*컨텍스트\s*요약\]$/i.test(line))
+    .filter((line) => !/^\[심화\s*보강/i.test(line))
+    .filter((line) => !/^query\s*:/i.test(line))
+    .filter((line) => !/^status\s*:/i.test(line))
+    .filter((line) => !/^message\s*:/i.test(line))
+    .filter((line) => !/^title\s*:/i.test(line))
+    .filter((line) => !/^summary\s*:/i.test(line))
+    .filter((line) => !/^url\s*:/i.test(line))
+    .filter((line) => !/^references\s*:/i.test(line))
+    .filter((line) => !/^참고\s*링크\s*없음$/i.test(line))
+    .filter((line) => !/^근거첨부$/i.test(line))
+    .filter((line) => !/^-\s*요청사항\s*:/i.test(line))
+    .filter((line) => !/^-\s*탐색소스\s*:/i.test(line))
+    .filter((line) => !/^\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/i.test(line))
+    .filter((line) => !/^\|---\|---\|---\|---\|/.test(line))
+    .filter((line) => !/^\|\s*[1-5]\s*\|/.test(line));
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function sanitizeDocxBridgePayload(inputPayload = {}) {
+  const payload = inputPayload && typeof inputPayload === "object" ? { ...inputPayload } : {};
+  const safe = {
+    ...payload,
+    title: sanitizeDocxBridgeText(payload.title || ""),
+    raw_question: sanitizeDocxBridgeText(payload.raw_question || ""),
+    answer_text: sanitizeDocxBridgeText(payload.answer_text || ""),
+  };
+
+  const llmData = payload.llm_data && typeof payload.llm_data === "object" ? payload.llm_data : {};
+
+  safe.llm_data = {
+    ...llmData,
+    overview: sanitizeDocxBridgeText(llmData.overview || ""),
+    keywords: sanitizeDocxBridgeText(llmData.keywords || "").replace(/\n+/g, ", "),
+    strategy: sanitizeDocxBridgeText(llmData.strategy || ""),
+    characteristics: (Array.isArray(llmData.characteristics) ? llmData.characteristics : [])
+      .map((item) => ({
+        name: sanitizeDocxBridgeText(item?.name || ""),
+        desc1: sanitizeDocxBridgeText(item?.desc1 || ""),
+        desc2: sanitizeDocxBridgeText(item?.desc2 || ""),
+      }))
+      .filter((item) => item.name || item.desc1 || item.desc2)
+      .slice(0, 8),
+    insights: (Array.isArray(llmData.insights) ? llmData.insights : [])
+      .map((item) => ({
+        title: sanitizeDocxBridgeText(item?.title || ""),
+        content: sanitizeDocxBridgeText(item?.content || ""),
+      }))
+      .filter((item) => item.title || item.content)
+      .slice(0, 8),
+    diagrams: (Array.isArray(llmData.diagrams) ? llmData.diagrams : [])
+      .map((item) => ({
+        title: sanitizeDocxBridgeText(item?.title || ""),
+        content: sanitizeDocxBridgeText(item?.content || ""),
+      }))
+      .filter((item) => item.title || item.content)
+      .slice(0, 8),
+    visuals: (Array.isArray(llmData.visuals) ? llmData.visuals : [])
+      .map((item) => ({
+        kind: String(item?.kind || "diagram").trim().toLowerCase(),
+        title: sanitizeDocxBridgeText(item?.title || ""),
+        purpose: sanitizeDocxBridgeText(item?.purpose || ""),
+        spec: sanitizeDocxBridgeText(item?.spec || ""),
+        scoringPoint: sanitizeDocxBridgeText(item?.scoringPoint || ""),
+        imageData: String(item?.imageData || "").trim(),
+        imageUrl: String(item?.imageUrl || "").trim(),
+      }))
+      .filter((item) => item.title || item.purpose || item.spec || item.scoringPoint || item.imageData || item.imageUrl)
+      .slice(0, 8),
+  };
+
+  return safe;
+}
+
 function buildVisualsForQuestion(question = {}, answer = "") {
   const qTitle = String(question?.title || "문항").trim();
   const qRaw = String(question?.rawQuestion || "").replace(/\s+/g, " ").trim();
@@ -372,7 +471,7 @@ function buildVisualsForQuestion(question = {}, answer = "") {
 
   const topic = pickTopic();
 
-  const isDRegion = /d-region|응력\s*교란|스트럿|타이|stm/.test(seed);
+  const isDRegion = isDRegionTopic(seed);
   const isDurability = /내구|균열|열화|부식|유지관리/.test(seed);
 
   if (isDRegion) {
@@ -400,13 +499,14 @@ function buildVisualsForQuestion(question = {}, answer = "") {
         scoringPoint: "B-Region(선형변형률)과 D-Region(STM) 적용 구분의 명확성",
       },
       {
-        kind: "image",
+        kind: "table",
         title: "B-Region vs D-Region 해석가정·절차·오류위험 비교표 이미지",
         purpose: "두 영역의 해석가정·설계절차·오류위험을 표 이미지로 비교 제시",
         spec: [
-          "열: 구분 | B-Region(선형변형률 가정) | D-Region(STM 적용)",
-          "행: 해석가정, 설계절차, 오류위험",
-          "판독 포인트: 경계 오판 시 과소평가 및 취성파괴 위험",
+          "구분 | B-Region(선형변형률 가정) | D-Region(STM 적용)",
+          "해석가정 | 단면 변형률 선형 분포 가정 | 불연속부 비선형 응력 재분배 고려",
+          "설계절차 | 휨이론 중심 단면 검토 | Strut·Tie·Node 기반 STM 검토",
+          "오류위험 | D-Region 누락 시 과소평가 가능 | 경계 오판 시 정착/절점 취약부 과소평가",
         ].join(" | "),
         scoringPoint: "적용 해석법 선택 근거를 비교표로 명확히 제시",
       },
@@ -1121,13 +1221,14 @@ async function collectRelatedImageUrlsFromDeepResearch(parsed = {}, max = 3) {
   return out;
 }
 
-function attachImageUrlsToVisuals(visuals = [], imageUrls = []) {
+function attachImageUrlsToVisuals(visuals = [], imageUrls = [], options = {}) {
   const rows = Array.isArray(visuals) ? visuals : [];
+  const requireStructural = Boolean(options?.requireStructural);
   const imgs = Array.isArray(imageUrls)
     ? imageUrls
         .map((u) => normalizeHttpUrl(u))
         .filter(Boolean)
-        .filter((u) => isStructuralImageCandidate(u))
+        .filter((u) => (requireStructural ? isStructuralImageCandidate(u) : true))
     : [];
 
   if (!rows.length || !imgs.length) return rows;
@@ -1322,7 +1423,7 @@ function buildVisualImageFallbackQueries(question = {}) {
     .replace(/\s+/g, " ")
     .trim();
   const probe = seed.toLowerCase();
-  const isDRegion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(probe);
+  const isDRegion = isDRegionTopic(probe);
 
   if (isDRegion) {
     return [
@@ -2225,8 +2326,8 @@ app.post("/api/generate-answer", async (req, res) => {
     }
   }
 
-  const isDRegionQuestion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(
-    `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`.toLowerCase(),
+  const isDRegionQuestion = isDRegionTopic(
+    `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`,
   );
 
   if (isDRegionQuestion) {
@@ -2308,10 +2409,9 @@ app.post("/api/generate-answer", async (req, res) => {
     }
 
     const visualized = ensureVisualGuideInAnswer(result, question);
-    const withImages = attachImageUrlsToVisuals(
-      visualized.visuals,
-      curatedRelatedImageUrls,
-    );
+    const withImages = attachImageUrlsToVisuals(visualized.visuals, curatedRelatedImageUrls, {
+      requireStructural: isDRegionQuestion,
+    });
     return {
       answer: visualized.answer,
       visuals: withImages,
@@ -2360,10 +2460,9 @@ app.post("/api/generate-answer", async (req, res) => {
         const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
         return res.json({
           answer: fallbackVisualized.answer,
-          visuals: attachImageUrlsToVisuals(
-            fallbackVisualized.visuals,
-            curatedRelatedImageUrls,
-          ),
+          visuals: attachImageUrlsToVisuals(fallbackVisualized.visuals, curatedRelatedImageUrls, {
+            requireStructural: isDRegionQuestion,
+          }),
           relatedImages: curatedRelatedImageUrls,
           source: "local-fallback",
           context,
@@ -2423,10 +2522,9 @@ app.post("/api/generate-answer", async (req, res) => {
     const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
     return res.json({
       answer: fallbackVisualized.answer,
-      visuals: attachImageUrlsToVisuals(
-        fallbackVisualized.visuals,
-        curatedRelatedImageUrls,
-      ),
+      visuals: attachImageUrlsToVisuals(fallbackVisualized.visuals, curatedRelatedImageUrls, {
+        requireStructural: isDRegionQuestion,
+      }),
       relatedImages: curatedRelatedImageUrls,
       source: "local-fallback",
       context,
@@ -2463,10 +2561,9 @@ app.post("/api/generate-answer", async (req, res) => {
   const fallbackVisualized = ensureVisualGuideInAnswer(fallbackOut, question);
   return res.json({
     answer: fallbackVisualized.answer,
-    visuals: attachImageUrlsToVisuals(
-      fallbackVisualized.visuals,
-      curatedRelatedImageUrls,
-    ),
+    visuals: attachImageUrlsToVisuals(fallbackVisualized.visuals, curatedRelatedImageUrls, {
+      requireStructural: isDRegionQuestion,
+    }),
     relatedImages: curatedRelatedImageUrls,
     source: "local-fallback",
     context,
@@ -2500,7 +2597,8 @@ app.post("/api/generate-docx", async (req, res) => {
       "core",
       "bridge_generate_docx.py",
     );
-    const payloadArg = JSON.stringify(payload);
+    const sanitizedPayload = sanitizeDocxBridgePayload(payload);
+    const payloadArg = JSON.stringify(sanitizedPayload);
 
     const runBridge = (command, args) =>
       spawnSync(command, args, {

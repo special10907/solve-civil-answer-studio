@@ -49,6 +49,105 @@ function normalizeOcrText(text, maxLength = 50000) {
     .slice(0, maxLength);
 }
 
+/**
+ * 전역 디버그 로깅 유틸리티
+ */
+function createDebugLogger() {
+  const storage = window.safeLocalStorage || localStorage;
+  const fromQuery = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get("debug") === "1";
+    } catch {
+      return false;
+    }
+  })();
+
+  const fromStorage = (() => {
+    try {
+      return storage.getItem("solve_debug_enabled") === "1";
+    } catch {
+      return false;
+    }
+  })();
+
+  const state = {
+    enabled: fromQuery || fromStorage,
+    maxEntries: 2000,
+    entries: [],
+  };
+
+  const push = (level, scope, message, data) => {
+    const entry = {
+      ts: new Date().toISOString(),
+      level,
+      scope: String(scope || "general"),
+      message: String(message || ""),
+      data: data ?? null,
+    };
+    state.entries.push(entry);
+    if (state.entries.length > state.maxEntries) {
+      state.entries.splice(0, state.entries.length - state.maxEntries);
+    }
+
+    if (!state.enabled) return;
+    const prefix = `[DBG][${entry.scope}] ${entry.message}`;
+    if (level === "error") {
+      console.error(prefix, entry.data ?? "");
+    } else if (level === "warn") {
+      console.warn(prefix, entry.data ?? "");
+    } else {
+      console.log(prefix, entry.data ?? "");
+    }
+  };
+
+  const api = {
+    enable() {
+      state.enabled = true;
+      try {
+        storage.setItem("solve_debug_enabled", "1");
+      } catch {}
+      push("info", "debug", "debug mode enabled");
+    },
+    disable() {
+      push("info", "debug", "debug mode disabled");
+      state.enabled = false;
+      try {
+        storage.setItem("solve_debug_enabled", "0");
+      } catch {}
+    },
+    isEnabled() {
+      return state.enabled;
+    },
+    log(scope, message, data) {
+      push("info", scope, message, data);
+    },
+    warn(scope, message, data) {
+      push("warn", scope, message, data);
+    },
+    error(scope, message, data) {
+      push("error", scope, message, data);
+    },
+    clear() {
+      state.entries = [];
+    },
+    getEntries() {
+      return [...state.entries];
+    },
+    exportText() {
+      return state.entries
+        .map((e) => `${e.ts} [${e.level.toUpperCase()}] [${e.scope}] ${e.message}${e.data != null ? ` ${JSON.stringify(e.data)}` : ""}`)
+        .join("\n");
+    },
+    printSummary() {
+      const count = state.entries.length;
+      const last = count ? state.entries[count - 1] : null;
+      console.log("[DBG] entries:", count, "last:", last);
+    },
+  };
+
+  return api;
+}
+
 // Global Export
 window.utils = {
   escapeHtml,
@@ -62,3 +161,37 @@ window.escapeHtml = escapeHtml;
 window.extractRoundOnly = extractRoundOnly;
 window.isValidWebUrl = isValidWebUrl;
 window.normalizeOcrText = normalizeOcrText;
+
+if (!window.Debug) {
+  window.Debug = createDebugLogger();
+}
+window.debugLog = (...args) => window.Debug?.log(...args);
+window.debugWarn = (...args) => window.Debug?.warn(...args);
+window.debugError = (...args) => window.Debug?.error(...args);
+
+// 디버그 모드일 때 주요 UI 인터랙션 추적
+(function installDebugInteractionHooks() {
+  if (!window.Debug || !window.Debug.isEnabled()) return;
+  const watched = new Set(["addAreaBtn", "extractBtn", "studio-pdf-input"]);
+
+  document.addEventListener(
+    "click",
+    (e) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target) return;
+      const btn = target.closest("button, input, .nav-btn");
+      if (!btn) return;
+      const id = btn.id || "";
+      const isNav = btn.classList.contains("nav-btn");
+      if (!watched.has(id) && !isNav) return;
+
+      window.Debug.log("event", "ui click", {
+        id,
+        className: btn.className,
+        text: (btn.textContent || "").trim().slice(0, 40),
+        isTrusted: !!e.isTrusted,
+      });
+    },
+    true,
+  );
+})();

@@ -348,6 +348,7 @@
                 <p class="text-slate-500 mt-1">실시간 학습 통계 및 목표 달성률</p>
               </div>
               <div class="flex gap-2">
+                <button type="button" id="dashboardOpenLastDocxBtn" class="p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" title="최근 생성된 전문 서브노트를 엽니다" disabled><i class="fas fa-file-word text-slate-400"></i></button>
                 <button type="button" id="dashboardExportBtn" class="p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50" title="답안/이론 JSON 내보내기"><i class="fas fa-download text-slate-400"></i></button>
                 <button type="button" id="dashboardConfigBtn" class="p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50" title="스튜디오로 이동"><i class="fas fa-cog text-slate-400"></i></button>
               </div>
@@ -1209,8 +1210,34 @@
                     </div>
                     
                     <div>
-                      <label class="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1">모범 답안 (Model Answer)</label>
+                      <div class="flex items-center justify-between mb-1.5 ml-1">
+                        <label class="block text-[11px] font-bold text-slate-500">모범 답안 (Model Answer)</label>
+                        <div class="flex items-center gap-2">
+                          <span id="draftPlanState" class="text-[10px] font-bold text-slate-400">계획 없음</span>
+                          <button type="button" id="toggleDraftPlanBtn" class="px-2 py-1 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">계획 보기</button>
+                        </div>
+                      </div>
                       <textarea id="studio-q-modelAnswer" name="modelAnswer" class="w-full h-80 p-4 text-sm rounded-2xl border border-slate-200 bg-white/50 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans leading-relaxed custom-scrollbar shadow-sm" placeholder="답안 본문을 작성하세요..."></textarea>
+                    </div>
+
+                    <div id="draftPlanPanel" class="hidden rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <div class="flex items-center justify-between">
+                        <label for="studio-q-draftPlan" class="text-[11px] font-bold text-slate-600">사전 작성 계획 (Plan)</label>
+                        <button type="button" id="copyDraftPlanBtn" class="px-2 py-1 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100">복사</button>
+                      </div>
+                      <textarea id="studio-q-draftPlan" name="draftPlan" readonly class="w-full h-36 p-3 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 leading-relaxed custom-scrollbar" placeholder="초안 작성 시 생성된 계획이 여기에 표시됩니다."></textarea>
+                      <div class="border-t border-slate-200 pt-2">
+                        <div class="text-[10px] font-bold text-slate-500 mb-1">최근 계획 히스토리</div>
+                        <div id="draftPlanHistoryList" class="space-y-1"></div>
+                      </div>
+                      <div id="draftPlanDiffViewer" class="hidden border-t border-slate-200 pt-2 space-y-2">
+                        <div class="flex items-center justify-between">
+                          <div class="text-[10px] font-bold text-slate-500">현재 계획 vs 선택 히스토리 비교</div>
+                          <button type="button" id="draftPlanDiffCloseBtn" class="px-2 py-1 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100">닫기</button>
+                        </div>
+                        <div id="draftPlanDiffSummary" class="text-[10px] text-slate-600"></div>
+                        <div id="draftPlanDiffBody" class="grid grid-cols-1 gap-2"></div>
+                      </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -1489,6 +1516,37 @@
       <div id="pipelineReport" class="hidden"></div>
       <input id="importJsonFileInput" type="file" accept="application/json" class="hidden" onchange="importAnswerDataFromFile(event)" />
 
+      <!-- Legacy compatibility ids (runtime null-reference guard) -->
+      <div class="hidden" aria-hidden="true">
+        <select id="aiModelPresets"><option value="">프리셋 선택...</option></select>
+        <input id="attachmentWebsiteUrl" type="url" />
+        <button id="analyzeWebsiteBtn" type="button"></button>
+        <input id="attachmentFocus" type="text" />
+        <input id="attachmentFiles" type="file" multiple />
+        <input id="pdfFileInput" type="file" accept=".pdf" />
+        <button id="generateByApiBtn" type="button"></button>
+        <button id="runPipelineBtn" type="button"></button>
+        <input id="filterKeyword" type="text" />
+        <select id="filterTag"><option value="">전체 태그</option></select>
+        <input id="filterLowScore" type="checkbox" />
+        <input id="mergeQualityThreshold" type="number" value="0" />
+        <div id="roundSummary"></div>
+        <div id="theoryMergeSummary"></div>
+        <div id="dataStatus"></div>
+        <div id="dropzoneSpinIcon"></div>
+        <div id="dzQueueCount"></div>
+        <div id="dzStoredCount"></div>
+        <div id="modelRefreshIcon"></div>
+        <input id="kValue" type="text" />
+        <div id="autoExtractReport"></div>
+        <div id="statTotalRounds">0</div>
+        <div id="statTotalQuestions">0</div>
+        <div id="statAvgScore">0</div>
+        <div id="statLowScoreRate">0%</div>
+        <table><tbody id="roundStatsBody"></tbody></table>
+        <canvas id="roundStatsChart"></canvas>
+      </div>
+
     </main>
     </div>
 
@@ -1522,6 +1580,14 @@
       </div>
     </div>
 
+    <!-- Legacy container placeholders (safe, hidden) -->
+    <div id="toast-container" class="hidden" aria-hidden="true"></div>
+    <div id="pdfVisualModal" class="hidden" aria-hidden="true"></div>
+    <button id="entrySubmitBtn" type="button" class="hidden" aria-hidden="true">모범답안 추가</button>
+    <input id="newQReviewed" type="checkbox" class="hidden" aria-hidden="true" />
+    <input id="studio-q-reviewed" type="checkbox" class="hidden" aria-hidden="true" />
+    <input id="editingIndex" type="hidden" value="" aria-hidden="true" />
+
     <!-- App Modules 최신화 (캐시 무력화) -->
     <script>
       // v21.6.9: 전역 변수 초기 선언 (파일 간 스코프 통합 및 초기화 오류 방지)
@@ -1546,7 +1612,7 @@
     <script src="js/api.js?v=21.6.23"></script>
     <script src="js/pdf.js?v=21.6.29"></script>
     <script src="js/ingestion.js?v=21.6.23"></script>
-    <script src="js/studio.js?v=21.6.23"></script>
+    <script src="js/studio.js?v=21.6.26"></script>
     <script src="js/ui.js?v=21.6.23"></script>
     <script src="js/app.js?v=21.6.23"></script>
 

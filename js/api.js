@@ -1,5 +1,6 @@
 function getBackendBaseUrl() {
-  const endpoint = document.getElementById("aiEndpointUrl").value.trim();
+  const endpointEl = document.getElementById("aiEndpointUrl");
+  const endpoint = endpointEl ? endpointEl.value.trim() : "";
   if (!endpoint) {
     return "http://localhost:8787";
   }
@@ -7,7 +8,8 @@ function getBackendBaseUrl() {
 }
 
 function getLmStudioBaseUrl() {
-  const endpoint = document.getElementById("aiEndpointUrl").value.trim();
+  const endpointEl = document.getElementById("aiEndpointUrl");
+  const endpoint = endpointEl ? endpointEl.value.trim() : "";
   if (!endpoint) {
     return "http://127.0.0.1:1234";
   }
@@ -22,6 +24,10 @@ function extractRoundOnlySafe(value) {
   if (typeof extractRoundOnly === "function") {
     return extractRoundOnly(value);
   }
+  if (window.utils && typeof window.utils.extractRoundOnly === "function") {
+    return window.utils.extractRoundOnly(value);
+  }
+  // Fallback if not loaded yet
   const text = String(value || "").trim();
   const match = text.match(/(\d{2,3})\s*회/);
   return match ? `${match[1]}회` : "";
@@ -29,6 +35,41 @@ function extractRoundOnlySafe(value) {
 
 function getFoundryBaseUrl() {
   return getLmStudioBaseUrl();
+}
+
+function resolveGenerateAnswerEndpoint(rawEndpoint) {
+  const endpoint = String(rawEndpoint || "").trim();
+  if (!endpoint) {
+    return "";
+  }
+
+  if (/\/api\/generate-answer\/?$/i.test(endpoint)) {
+    return endpoint;
+  }
+
+  try {
+    const parsed = new URL(endpoint);
+    const host = String(parsed.hostname || "").toLowerCase();
+    const port = String(parsed.port || "");
+    const pathname = String(parsed.pathname || "");
+    const isLocalAnalyzeBackend =
+      (host === "localhost" || host === "127.0.0.1") &&
+      ["8787", "8788", "8789"].includes(port);
+
+    if (
+      isLocalAnalyzeBackend &&
+      (pathname === "" || pathname === "/" || pathname === "/api")
+    ) {
+      parsed.pathname = "/api/generate-answer";
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.toString().replace(/\/$/, "");
+    }
+
+    return endpoint;
+  } catch {
+    return endpoint;
+  }
 }
 
 function getAnalyzeBackendUrl() {
@@ -47,8 +88,14 @@ const MODEL_TOKEN_SEPARATOR = "::";
 
 const CLOUD_MODEL_CATALOG = {
   openai: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"],
-  gemini: ["gemini-2.0-flash", "gemini-1.5-pro"],
+  gemini: [
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+    "gemini-2.0-pro-exp-02-05",
+    "gemini-2.0-flash-thinking-exp",
+  ],
   anthropic: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
+  github: ["copilot-gpt-4o", "copilot-claude-3.5-sonnet"], // GitHub Copilot Models
 };
 
 const ANALYZE_BACKEND_CANDIDATES = [
@@ -146,9 +193,8 @@ async function fetchCloudProviderStatusViaBackend() {
 }
 
 function buildCloudModelEntries(providerStatus) {
-  const status = providerStatus && typeof providerStatus === "object"
-    ? providerStatus
-    : {};
+  const status =
+    providerStatus && typeof providerStatus === "object" ? providerStatus : {};
 
   const entries = [];
   Object.entries(CLOUD_MODEL_CATALOG).forEach(([provider, models]) => {
@@ -164,6 +210,105 @@ function buildCloudModelEntries(providerStatus) {
     });
   });
   return entries;
+}
+
+async function generateAnswer(
+  question,
+  instruction,
+  format = "text",
+  options = {},
+) {
+  const base = await discoverAnalyzeBackendBaseUrl();
+  try {
+    const requestBody = {
+      question,
+      instruction,
+      format,
+    };
+
+    if (options && typeof options === "object") {
+      if (typeof options.mandatoryPipeline === "boolean") {
+        requestBody.mandatoryPipeline = options.mandatoryPipeline;
+      }
+      if (options.sourceBundle && typeof options.sourceBundle === "object") {
+        requestBody.sourceBundle = options.sourceBundle;
+      }
+      if (typeof options.outputStyle === "string" && options.outputStyle.trim()) {
+        requestBody.outputStyle = options.outputStyle.trim();
+      }
+    }
+
+    const response = await fetch(`${base}/api/generate-answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  } catch (error) {
+    console.error("Generate Answer Error:", error);
+    throw error;
+  }
+}
+
+async function requestDocxGeneration(payload) {
+  const base = await discoverAnalyzeBackendBaseUrl();
+  try {
+    const response = await fetch(`${base}/api/generate-docx`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  } catch (error) {
+    console.error("DOCX Generation Error:", error);
+    throw error;
+  }
+}
+
+async function requestRevealInExplorer(targetPath) {
+  const base = await discoverAnalyzeBackendBaseUrl();
+  try {
+    const response = await fetch(`${base}/api/reveal-in-explorer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetPath }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  } catch (error) {
+    console.error("Reveal Path Error:", error);
+    throw error;
+  }
+}
+
+async function requestOpenInDefaultApp(targetPath) {
+  const base = await discoverAnalyzeBackendBaseUrl();
+  try {
+    const response = await fetch(`${base}/api/open-in-default-app`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetPath }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  } catch (error) {
+    console.error("Open Path Error:", error);
+    throw error;
+  }
 }
 
 async function fetchLmStudioModelsViaBackend(baseUrl) {
@@ -190,9 +335,7 @@ async function fetchLmStudioModelsViaBackend(baseUrl) {
       ? payload.attempted.join(", ")
       : "";
     const detail = payload?.error || `HTTP ${response.status}`;
-    throw new Error(
-      attempted ? `${detail} (시도: ${attempted})` : detail,
-    );
+    throw new Error(attempted ? `${detail} (시도: ${attempted})` : detail);
   }
 
   if (!payload?.ok) {
@@ -203,9 +346,8 @@ async function fetchLmStudioModelsViaBackend(baseUrl) {
 }
 
 function isLikelyLmStudioEndpoint() {
-  const endpoint = String(
-    document.getElementById("aiEndpointUrl").value || "",
-  ).toLowerCase();
+  const endpointEl = document.getElementById("aiEndpointUrl");
+  const endpoint = String(endpointEl ? endpointEl.value : "").toLowerCase();
 
   const isLocalHost =
     endpoint.includes("127.0.0.1") || endpoint.includes("localhost");
@@ -257,7 +399,9 @@ function renderAvailableModelOptions(modelEntries = [], preferred = "") {
 
   const storage = getSafeStorage();
   const providerEl = document.getElementById("aiProvider");
-  const fallbackModel = String(document.getElementById("aiFoundryModelId")?.value || "").trim();
+  const fallbackModel = String(
+    document.getElementById("aiFoundryModelId")?.value || "",
+  ).trim();
   const fallbackProvider = String(providerEl?.value || "").trim();
 
   const normalized = (Array.isArray(modelEntries) ? modelEntries : [])
@@ -273,7 +417,10 @@ function renderAvailableModelOptions(modelEntries = [], preferred = "") {
           provider,
           modelId,
           token,
-          label: String(entry.label || (provider ? `[${provider.toUpperCase()}] ${modelId}` : modelId)),
+          label: String(
+            entry.label ||
+              (provider ? `[${provider.toUpperCase()}] ${modelId}` : modelId),
+          ),
         };
       }
 
@@ -300,7 +447,9 @@ function renderAvailableModelOptions(modelEntries = [], preferred = "") {
 
   const preferredToken = String(preferred || "").trim();
   const fallbackToken = buildModelToken(fallbackProvider, fallbackModel);
-  const storedToken = String(storage.getItem(AI_SELECTED_MODEL_STORAGE_KEY) || "").trim();
+  const storedToken = String(
+    storage.getItem(AI_SELECTED_MODEL_STORAGE_KEY) || "",
+  ).trim();
   const target = preferredToken || fallbackToken || storedToken;
 
   if (!unique.length) {
@@ -310,14 +459,19 @@ function renderAvailableModelOptions(modelEntries = [], preferred = "") {
   }
 
   select.innerHTML = unique
-    .map((item) => `<option value="${escapeHtml(item.token)}">${escapeHtml(item.label)}</option>`)
+    .map(
+      (item) =>
+        `<option value="${escapeHtml(item.token)}">${escapeHtml(item.label)}</option>`,
+    )
     .join("");
 
   if (target && unique.some((item) => item.token === target)) {
     select.value = target;
   } else if (target) {
     const parsedTarget = parseSelectedModelToken(target);
-    const byModel = unique.find((item) => item.modelId === parsedTarget.modelId);
+    const byModel = unique.find(
+      (item) => item.modelId === parsedTarget.modelId,
+    );
     select.value = byModel ? byModel.token : unique[0].token;
   } else {
     select.value = unique[0].token;
@@ -342,7 +496,9 @@ function renderAvailableModelOptions(modelEntries = [], preferred = "") {
 
 async function refreshAvailableModels(silent = false, knownModels = null) {
   const select = document.getElementById("aiAvailableModelSelect");
-  const manualModel = String(document.getElementById("aiFoundryModelId")?.value || "").trim();
+  const manualModel = String(
+    document.getElementById("aiFoundryModelId")?.value || "",
+  ).trim();
   const providerEl = document.getElementById("aiProvider");
   const manualProvider = String(providerEl?.value || "").trim();
 
@@ -355,6 +511,13 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
   );
   const cloudEntries = buildCloudModelEntries(cloudProviderStatus);
   const collectedEntries = [...cloudEntries];
+
+  // 로컬 규칙 모델 추가 (백엔드 fallback용)
+  collectedEntries.push({
+    provider: "local",
+    modelId: "local-rule",
+    label: "[로컬 규칙] 템플릿 기반 초안 작성",
+  });
 
   if (!isLikelyLmStudioEndpoint()) {
     if (manualModel) {
@@ -376,12 +539,18 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
         "info",
       );
     }
-    return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
+    return collectedEntries
+      .map((entry) => String(entry.modelId || ""))
+      .filter(Boolean);
   }
 
   if (!knownModels && shouldSkipLmStudioProbe()) {
     if (manualModel) {
-      collectedEntries.push({ provider: "lmstudio", modelId: manualModel, label: `[LM STUDIO] ${manualModel}` });
+      collectedEntries.push({
+        provider: "lmstudio",
+        modelId: manualModel,
+        label: `[LM STUDIO] ${manualModel}`,
+      });
     }
     renderAvailableModelOptions(
       collectedEntries,
@@ -393,7 +562,9 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
         "info",
       );
     }
-    return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
+    return collectedEntries
+      .map((entry) => String(entry.modelId || ""))
+      .filter(Boolean);
   }
 
   let models = Array.isArray(knownModels) ? knownModels : null;
@@ -404,7 +575,11 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
     } catch (error) {
       markLmStudioOffline();
       if (manualModel) {
-        collectedEntries.push({ provider: "lmstudio", modelId: manualModel, label: `[LM STUDIO] ${manualModel}` });
+        collectedEntries.push({
+          provider: "lmstudio",
+          modelId: manualModel,
+          label: `[LM STUDIO] ${manualModel}`,
+        });
       }
       renderAvailableModelOptions(
         collectedEntries,
@@ -416,7 +591,9 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
           "info",
         );
       }
-      return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
+      return collectedEntries
+        .map((entry) => String(entry.modelId || ""))
+        .filter(Boolean);
     }
   }
 
@@ -438,9 +615,14 @@ async function refreshAvailableModels(silent = false, knownModels = null) {
   );
 
   if (!silent) {
-    setBackendStatus(`모델 목록 갱신 완료: ${collectedEntries.length}개`, "success");
+    setBackendStatus(
+      `모델 목록 갱신 완료: ${collectedEntries.length}개`,
+      "success",
+    );
   }
-  return collectedEntries.map((entry) => String(entry.modelId || "")).filter(Boolean);
+  return collectedEntries
+    .map((entry) => String(entry.modelId || ""))
+    .filter(Boolean);
 }
 
 async function generateDraftAnswersByActiveModel() {
@@ -454,7 +636,7 @@ async function generateDraftAnswersByActiveModel() {
     providerEl.value = selected.provider;
   }
 
-  if (selected.provider && selected.provider !== "lmstudio") {
+  if (selected.provider === "local" || (selected.provider && selected.provider !== "lmstudio")) {
     return generateDraftAnswersByApi();
   }
 
@@ -467,10 +649,7 @@ async function generateDraftAnswersByActiveModel() {
 function setLmStudioLocalPreset() {
   const endpointInput = document.getElementById("aiEndpointUrl");
   endpointInput.value = "http://127.0.0.1:1234/v1/chat/completions";
-  getSafeStorage().setItem(
-    AI_ENDPOINT_STORAGE_KEY,
-    endpointInput.value,
-  );
+  getSafeStorage().setItem(AI_ENDPOINT_STORAGE_KEY, endpointInput.value);
   setBackendStatus("LM Studio Local 프리셋 적용됨", "info");
   updateAiModeUx();
   detectLmStudioModelId();
@@ -501,14 +680,13 @@ async function detectLmStudioModelId(silent = false) {
       .filter(Boolean);
     const modelId = modelIds[0] || "";
     if (!modelId) {
-      throw new Error("로드된 모델이 없습니다. LM Studio에서 모델 로드 후 다시 시도하세요.");
+      throw new Error(
+        "로드된 모델이 없습니다. LM Studio에서 모델 로드 후 다시 시도하세요.",
+      );
     }
     renderAvailableModelOptions(modelIds, modelId);
     input.value = modelId;
-    getSafeStorage().setItem(
-      AI_FOUNDRY_MODEL_STORAGE_KEY,
-      modelId,
-    );
+    getSafeStorage().setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelId);
     setBackendStatus(`LM Studio 모델 감지: ${modelId}`, "success");
     window.isBackendAvailable = true; // v21.6.12
     clearLmStudioOffline();
@@ -596,7 +774,8 @@ function setBackendStatus(message, type = "info") {
 
   if (lmMentioned) {
     const coreConnected =
-      text.includes("백엔드 연결됨") || text.includes("연결됨: LM Studio Local");
+      text.includes("백엔드 연결됨") ||
+      text.includes("연결됨: LM Studio Local");
     applyStatusChip(
       coreEl,
       "백엔드",
@@ -612,7 +791,10 @@ function setBackendStatus(message, type = "info") {
     }
 
     let lmMsg = text;
-    const slashSplit = text.split("/").map((part) => part.trim()).filter(Boolean);
+    const slashSplit = text
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
     if (slashSplit.length >= 2) {
       lmMsg = slashSplit[1];
     } else {
@@ -1037,7 +1219,11 @@ function calculateTokenOverlapScore(sourceTokens, targetTokens) {
 }
 
 function buildTheoryContextForQuestion(question, theories, maxItems = 3) {
-  const questionText = [question?.title, question?.rawQuestion, ...(question?.tags || [])]
+  const questionText = [
+    question?.title,
+    question?.rawQuestion,
+    ...(question?.tags || []),
+  ]
     .filter(Boolean)
     .join(" ");
   const questionTokens = tokenizeForSimilarity(questionText);
@@ -1135,7 +1321,318 @@ function buildHighQualityAnswerInstruction(question, relatedTheories = []) {
   ].join("\n");
 }
 
+function buildDraftPlanInstruction(question, relatedTheories = []) {
+  const theoryBlock = relatedTheories.length
+    ? relatedTheories
+        .map((theory, idx) =>
+          `- 이론 ${idx + 1}: ${theory?.title || "이론"} | ${String(theory?.content || "").replace(/\s+/g, " ").slice(0, 180)}`,
+        )
+        .join("\n")
+    : "- 연관 이론 없음";
+
+  return [
+    "역할: 토목구조기술사 답안 설계자",
+    "요구: 답안을 바로 쓰지 말고, 먼저 작성 계획(Plan)만 출력",
+    "출력 형식(반드시 준수):",
+    "1) 문제 인식 요약(2~3줄)",
+    "2) 답안 구조(번호형 5~6개 섹션)",
+    "3) 각 섹션 핵심 포인트(섹션당 2~3개)",
+    "4) 도해 계획(최소 2개: 제목/목적/핵심요소)",
+    "5) 비교표 계획(최소 1개: 비교항목/대안축)",
+    "6) 기준·수치·코드(KDS) 삽입 계획",
+    "금지: 완성 답안 본문 작성, 메타 잡담",
+    "",
+    `[문제 제목] ${question?.title || ""}`,
+    `[문제 원문] ${question?.rawQuestion || ""}`,
+    "[연관 이론]",
+    theoryBlock,
+  ].join("\n");
+}
+
+function mergePlanIntoDraftInstruction(baseInstruction, planText) {
+  const plan = String(planText || "").trim();
+  if (!plan) return baseInstruction;
+  return [
+    baseInstruction,
+    "",
+    "[사전 작성 계획 - 반드시 반영]",
+    plan,
+    "",
+    "[작성 규칙] 위 계획의 섹션 순서/도해/비교표 계획을 본문에 반드시 반영할 것.",
+  ].join("\n");
+}
+
+function appendDraftPlanHistory(question, planText, maxItems = 5) {
+  const plan = String(planText || "").trim();
+  const existing = Array.isArray(question?.draftPlanHistory)
+    ? question.draftPlanHistory
+    : [];
+  const normalizedExisting = existing
+    .map((item) => {
+      if (typeof item === "string") {
+        const text = String(item || "").trim();
+        return text ? { text, createdAt: "" } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+      const text = String(item.text || item.plan || "").trim();
+      if (!text) return null;
+      return {
+        text,
+        createdAt: String(item.createdAt || "").trim(),
+      };
+    })
+    .filter(Boolean);
+
+  if (!plan) {
+    return normalizedExisting.slice(0, maxItems);
+  }
+
+  if (normalizedExisting[0]?.text === plan) {
+    return normalizedExisting.slice(0, maxItems);
+  }
+
+  return [
+    {
+      text: plan,
+      createdAt: new Date().toISOString(),
+    },
+    ...normalizedExisting,
+  ].slice(0, maxItems);
+}
+
+function isMandatoryFiveStepPipelineEnabled() {
+  if (typeof window.__forceMandatoryFiveStepPipeline === "boolean") {
+    return window.__forceMandatoryFiveStepPipeline;
+  }
+  return true;
+}
+
+function collectMandatoryFiveStepSources(question, data) {
+  const safeData = data && typeof data === "object" ? data : { theories: [] };
+  const allTheories = Array.isArray(safeData.theories) ? safeData.theories : [];
+  const related = buildTheoryContextForQuestion(question, allTheories, 8);
+
+  const pickBySource = (regex, maxItems = 3) => {
+    const filtered = allTheories.filter((theory) =>
+      regex.test(
+        `${theory?.source || ""} ${theory?.title || ""} ${theory?.content || ""}`,
+      ),
+    );
+    return buildTheoryContextForQuestion(question, filtered, maxItems);
+  };
+
+  const storedTheory = related.slice(0, 4);
+  const notebookLm = pickBySource(/notebook\s*lm|notebooklm/i, 3);
+  const flowith = pickBySource(/flowith|지식정원/i, 3);
+
+  const insightSummary = String(window.latestAttachmentInsight?.summary || "").trim();
+  const insightBoost = String(window.latestAttachmentInsight?.answerBoost || "").trim();
+
+  const toRows = (label, rows) => {
+    if (!Array.isArray(rows) || !rows.length) {
+      return [`- ${label}: 확인 결과 없음(현재 저장소에서 미매칭)`].join("\n");
+    }
+    return rows
+      .map((item, idx) => {
+        const tags = Array.isArray(item?.tags) ? item.tags.join(", ") : "";
+        return [
+          `- ${label} ${idx + 1}: ${item?.title || "(제목없음)"}`,
+          `  source: ${item?.source || "-"}${tags ? ` / tags: ${tags}` : ""}`,
+          `  snippet: ${String(item?.content || "").replace(/\s+/g, " ").trim().slice(0, 220)}`,
+        ].join("\n");
+      })
+      .join("\n");
+  };
+
+  return {
+    storedTheory,
+    notebookLm,
+    flowith,
+    insightSummary,
+    insightBoost,
+    blocks: {
+      storedTheory: toRows("저장 이론", storedTheory),
+      notebookLm: toRows("NotebookLM", notebookLm),
+      flowith: toRows("Flowith", flowith),
+      insight: insightSummary
+        ? `- 첨부/지식화 요약: ${insightSummary.slice(0, 400)}\n- 첨부 answerBoost: ${insightBoost.slice(0, 400) || "없음"}`
+        : "- 첨부/지식화 요약: 없음",
+    },
+    checklist: {
+      storedTheory: storedTheory.length > 0,
+      notebookLm: notebookLm.length > 0,
+      flowith: flowith.length > 0,
+      deepResearch: true,
+      synthesis: true,
+    },
+  };
+}
+
+function buildMandatoryFiveStepInstruction(question, baseInstruction, sourceBundle) {
+  const bundle = sourceBundle || {};
+  const blocks = bundle.blocks || {};
+  return [
+    baseInstruction,
+    "",
+    "[강제 실행 파이프라인 - 반드시 1~5 순서 준수]",
+    "1) 저장된 학습자료/이론자료를 검토하고, 답안 근거로 첨부한다.",
+    "2) NotebookLM 관련 내용을 확인하고, 답안 근거로 첨부한다.",
+    "3) Flowith 지식정원 관련 내용을 확인하고, 답안 근거로 첨부한다.",
+    "4) 인터넷 딥리서치 결과를 확인하고, 답안 근거로 첨부한다.",
+    "5) 위 1~4의 첨부 근거를 통합 정리하여 최종 답안을 작성한다.",
+    "",
+    "[근거 첨부 자료 - 1) 저장 이론]",
+    blocks.storedTheory || "- 없음",
+    "",
+    "[근거 첨부 자료 - 2) NotebookLM]",
+    blocks.notebookLm || "- 없음",
+    "",
+    "[근거 첨부 자료 - 3) Flowith]",
+    blocks.flowith || "- 없음",
+    "",
+    "[근거 첨부 자료 - 보조 인사이트]",
+    blocks.insight || "- 없음",
+    "",
+    "[출력 강제 규칙]",
+    "- 내부 파이프라인 근거(1~4)는 서버 audit로 검증하며, 제출 본문에는 메타/로그를 쓰지 않는다.",
+    "- 메타 지시문 금지(작성합니다/포함합니다). 실제 제출 답안 문장으로만 작성한다.",
+    `- 문제: ${question?.title || ""}`,
+  ].join("\n");
+}
+
+function generateMandatoryPipelineFallbackAnswer(question, sourceBundle) {
+  const title = String(question?.title || "문항");
+  const raw = String(question?.rawQuestion || "").slice(0, 220);
+  const blocks = sourceBundle?.blocks || {};
+
+  return [
+    `1. 문제 핵심 정의`,
+    `- ${title}의 핵심 쟁점은 하중-저항 메커니즘 및 설계 기준의 정합성 확보에 있다.`,
+    `- 문제 원문 요약: ${raw}${raw.length >= 220 ? "..." : ""}`,
+    "",
+    "2. 근거첨부(필수 1~4단계)",
+    "- [1) 저장 이론]", 
+    blocks.storedTheory || "- 확인 결과 없음",
+    "- [2) NotebookLM]",
+    blocks.notebookLm || "- 확인 결과 없음",
+    "- [3) Flowith 지식정원]",
+    blocks.flowith || "- 확인 결과 없음",
+    "- [4) 인터넷 딥리서치]",
+    "- 서버 딥리서치 결과를 기준/메커니즘/실무대책 근거로 반영함.",
+    "",
+    "3. 통합 정리(5단계)",
+    "- 저장 이론 + NotebookLM + Flowith + 딥리서치 근거를 교차 검토하여 지배 파괴모드와 검토 순서를 재정렬한다.",
+    "- 검토 순서: 1) 하중조합 2) 메커니즘 3) 코드근거(KDS) 4) 시공/유지관리 리스크.",
+    "",
+    "4. 결론/기술사 제언",
+    "- 도해/비교표를 통해 채점 가독성을 확보하고, 시공성·경제성·유지관리성 균형 관점에서 최적안을 제시한다.",
+  ].join("\n");
+}
+
+function enforceAnswerQualityGuard(rawAnswer, question) {
+  const answer = String(rawAnswer || "").trim();
+  if (!answer) {
+    return answer;
+  }
+
+  const spec = inferAnswerWritingSpec(question || {});
+  const compactLength = answer.replace(/\s+/g, "").length;
+  const needsLengthBoost = compactLength < spec.minChars;
+  const hasVisual = /(도해|모식도|그림|선도|그래프|표|상관도|메커니즘)/.test(
+    answer,
+  );
+  const hasComparison =
+    /(비교표|vs\b|대비\s*[:：]|허용응력설계법|한계상태설계법)/i.test(answer);
+  const hasBilingual = /[가-힣][^\n]{0,12}\([A-Za-z][^)]+\)/.test(answer);
+  const hasKds =
+    /KDS\s*\d{2}\s*\d{2}\s*\d{2}|KDS\s*\d{2}\s*\d{2}\s*\d{2}\s*\d{2}/.test(
+      answer,
+    );
+  const hasSymbol =
+    /[→↑↓Δσφ∑]|>=|<=|=|\bP\/?M\b|\bN\/?M\b|\bS\/?N\b/.test(answer);
+
+  const addon = [];
+  const severeLengthGap = compactLength < Math.floor(spec.minChars * 0.5);
+  if (needsLengthBoost) {
+    addon.push(
+      "- 본론 보강: 해석·설계검토·시공·유지관리 파트를 추가해 답안 완성도를 높임",
+    );
+  }
+  if (!hasVisual) {
+    addon.push(
+      "- [도해] 하중 흐름(Load Path) 화살표(→)와 응력블록/변형률 선도를 본문 중간에 명시",
+    );
+  }
+  if (!hasComparison) {
+    addon.push(
+      "- [비교표] 허용응력설계법(ASD) vs 한계상태설계법(LSD)를 항목별로 대비",
+    );
+  }
+  if (!hasBilingual) {
+    addon.push(
+      "- 용어 병기: 연성(Ductility), 여유도(Redundancy), 한계상태(Limit State) 등 최소 3개 포함",
+    );
+  }
+  if (!hasKds) {
+    addon.push("- 기준 근거: KDS 14 20 00 또는 관련 코드 번호를 적용 근거와 함께 명시");
+  }
+  if (!hasSymbol) {
+    addon.push(
+      "- 기호/식 보강: φMn ≥ Mu, Δ ≤ L/240, σ = P/A 중 1개 이상 본문에 삽입",
+    );
+  }
+
+  if (!addon.length) {
+    return answer;
+  }
+
+  const hasNumberedSections = /^\s*\d+\.\s/m.test(answer);
+  const guardHeading = severeLengthGap
+    ? hasNumberedSections
+      ? "5. 답안 보강 포인트"
+      : "[답안 보강 포인트]"
+    : "[보강 포인트]";
+  if (
+    answer.includes("[품질 보강 메모]") ||
+    answer.includes("[보강 포인트]") ||
+    answer.includes("[답안 보강 포인트]") ||
+    answer.includes("답안 보강 포인트")
+  ) {
+    return answer;
+  }
+
+  const bridgeLine = severeLengthGap
+    ? "- 아래 항목을 반영해 채점 포인트를 보강"
+    : "- 누락된 채점요소 보강";
+
+  return `${answer}\n\n${guardHeading}\n${bridgeLine}\n${addon.join("\n")}`;
+}
+
+function isDRegionTopic(text = "") {
+  const src = String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!src) return false;
+
+  if (/d[\s-]?region|응력\s*교란\s*구역|응력\s*교란|strut\s*[- ]?\s*tie|stm\b|스트럿\s*[-·]?\s*타이|스트럿타이/.test(src)) {
+    return true;
+  }
+
+  const hasStrut = /(^|[^a-z])strut([^a-z]|$)|스트럿/.test(src);
+  const hasTie = /(^|[^a-z])tie([^a-z]|$)|타이\s*모델|타이\s*부재|타이\s*요소/.test(src);
+  return hasStrut && hasTie;
+}
+
 async function generateDraftAnswersByLmStudioLocal() {
+  if (isMandatoryFiveStepPipelineEnabled()) {
+    setPdfStatus(
+      "5단계 강제 파이프라인 모드가 활성화되어 백엔드 통합 생성으로 전환합니다.",
+      "info",
+    );
+    return generateDraftAnswersByApi({ forceBackend: true });
+  }
+
   const endpointRaw = document.getElementById("aiEndpointUrl").value.trim();
   const apiKey = document.getElementById("aiApiKey").value.trim();
   const modelInput = document.getElementById("aiFoundryModelId");
@@ -1162,10 +1659,7 @@ async function generateDraftAnswersByLmStudioLocal() {
     }
   }
 
-  getSafeStorage().setItem(
-    AI_FOUNDRY_MODEL_STORAGE_KEY,
-    modelId,
-  );
+  getSafeStorage().setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelId);
 
   let data;
   try {
@@ -1182,7 +1676,10 @@ async function generateDraftAnswersByLmStudioLocal() {
     ? data.questions.filter((q) => selectedIdSet.has(String(q.id || ""))).length
     : data.questions.length;
   if (selectedMode && targetTotal === 0) {
-    setPdfStatus("선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.", "error");
+    setPdfStatus(
+      "선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.",
+      "error",
+    );
     return { ok: false, updated: 0, fallbackCount: 0 };
   }
   let updated = 0;
@@ -1252,7 +1749,7 @@ async function generateDraftAnswersByLmStudioLocal() {
 
       data.questions[index] = {
         ...question,
-        modelAnswer: String(answer).trim(),
+        modelAnswer: enforceAnswerQualityGuard(String(answer).trim(), question),
         source: question.source
           ? `${question.source} + LMStudioLocal`
           : "LMStudioLocal",
@@ -1261,7 +1758,10 @@ async function generateDraftAnswersByLmStudioLocal() {
     } catch {
       data.questions[index] = {
         ...question,
-        modelAnswer: generateLocalAnswerTemplate(question),
+        modelAnswer: enforceAnswerQualityGuard(
+          generateLocalAnswerTemplate(question),
+          question,
+        ),
         source: question.source
           ? `${question.source} + LMStudioLocalFallback`
           : "LMStudioLocalFallback",
@@ -1296,37 +1796,212 @@ async function extractPdfText() {
 }
 
 async function extractQuestionsFromPdfText() {
-  // Prefer analyzing attached files (images/pdf/text).
-  // Check both `attachmentFiles` and `pdfFileInput` inputs so users
-  // who used either control are covered.
-  const attachmentInput = document.getElementById("attachmentFiles");
-  const pdfInput = document.getElementById("pdfFileInput");
-  const attachedFiles = [];
-  if (
-    attachmentInput &&
-    attachmentInput.files &&
-    attachmentInput.files.length
-  ) {
-    attachedFiles.push(...Array.from(attachmentInput.files));
+  if (window.Debug) {
+    window.Debug.log("extract", "extractQuestionsFromPdfText start", {
+      hasVisualPdfDoc: !!window.visualPdfDoc,
+    });
   }
-  if (pdfInput && pdfInput.files && pdfInput.files.length) {
-    attachedFiles.push(...Array.from(pdfInput.files));
-  }
+  const extractBtn = document.getElementById("extractBtn");
+  const extractCancelBtn = document.getElementById("extractCancelBtn");
+  const originalExtractBtnHtml = extractBtn ? extractBtn.innerHTML : "";
+  const progressWrap = document.getElementById("extractProgressWrap");
+  const progressBar = document.getElementById("extractProgressBar");
+  const progressMeta = document.getElementById("extractProgressMeta");
+  const progressText = document.getElementById("extractProgressText");
+  const progressMsg = document.getElementById("extractProgressMessage");
+  let progressInterval = null;
+  const startedAt = Date.now();
+  let currentProgress = 0;
+  const cancelController = new AbortController();
 
-  let extracted = "";
+  window.__extractCancelled = false;
+  window.__extractAbortController = cancelController;
 
-  if (!attachedFiles.length) {
-    setPdfStatus(
-      "첨부파일이 없습니다. 문제 자동 추출을 사용하려면 파일을 첨부하세요.",
-      "error",
+  const throwIfCancelled = () => {
+    if (window.__extractCancelled) {
+      const err = new Error("사용자가 추출을 중단했습니다.");
+      err.code = "EXTRACT_CANCELLED";
+      throw err;
+    }
+  };
+
+  const setExtractProgress = (value, message = "") => {
+    currentProgress = Math.max(currentProgress, Math.min(100, Number(value) || 0));
+    if (progressWrap) progressWrap.classList.remove("hidden");
+    if (progressMeta) progressMeta.classList.remove("hidden");
+    if (progressBar) progressBar.style.width = `${currentProgress}%`;
+    if (progressText) progressText.textContent = `${Math.round(currentProgress)}%`;
+    if (progressMsg && message) progressMsg.textContent = message;
+  };
+
+  const finishExtractUi = (ok = true, message = "") => {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    if (extractBtn) {
+      extractBtn.disabled = false;
+      extractBtn.classList.remove("opacity-60", "cursor-not-allowed");
+      extractBtn.innerHTML = originalExtractBtnHtml;
+    }
+    if (extractCancelBtn) {
+      extractCancelBtn.classList.add("hidden");
+    }
+
+    setExtractProgress(
+      ok ? 100 : Math.max(currentProgress, 8),
+      message || (ok ? "자동 추출 완료" : "자동 추출 실패"),
     );
+    setTimeout(() => {
+      if (progressWrap) progressWrap.classList.add("hidden");
+      if (progressMeta) progressMeta.classList.add("hidden");
+      if (progressBar) progressBar.style.width = "0%";
+      if (progressText) progressText.textContent = "0%";
+      currentProgress = 0;
+    }, ok ? 1200 : 1800);
+
+    window.__extractCancelled = false;
+    window.__extractAbortController = null;
+  };
+  if (extractCancelBtn) {
+    extractCancelBtn.classList.remove("hidden");
+  }
+
+  window.cancelExtractQuestions = () => {
+    if (!extractBtn || !extractBtn.disabled) return;
+    window.__extractCancelled = true;
+    try {
+      window.__extractAbortController?.abort();
+    } catch {}
+    if (typeof setPdfStatus === "function") {
+      setPdfStatus("자동 추출을 중단하는 중입니다...", "info");
+    }
+    setExtractProgress(currentProgress, "중단 요청됨... 안전하게 종료 중");
+    if (window.Debug) {
+      window.Debug.warn("extract", "cancel requested", {
+        progress: currentProgress,
+      });
+    }
+  };
+
+  if (extractBtn) {
+    extractBtn.disabled = true;
+    extractBtn.classList.add("opacity-60", "cursor-not-allowed");
+    extractBtn.innerHTML =
+      '<i class="fas fa-spinner fa-spin"></i> 자동 추출 진행 중...';
+  }
+
+  if (typeof setPdfStatus === "function") {
+    setPdfStatus("자동 추출 시작: 파일/텍스트 준비 중...", "info");
+  }
+  setExtractProgress(5, "자동 추출 시작: 입력 소스 확인 중...");
+
+  progressInterval = setInterval(() => {
+    if (window.__extractCancelled) return;
+    const sec = Math.floor((Date.now() - startedAt) / 1000);
+    if (sec === 8 && typeof setPdfStatus === "function") {
+      setPdfStatus(
+        "추출 작업이 진행 중입니다. PDF/텍스트 크기에 따라 시간이 더 소요될 수 있습니다...",
+        "info",
+      );
+      setExtractProgress(currentProgress + 2, "텍스트 분석 작업 진행 중...");
+    }
+    if (sec > 0 && sec % 15 === 0 && typeof setPdfStatus === "function") {
+      setPdfStatus(`자동 추출 진행 중... (${sec}초 경과)`, "info");
+      setExtractProgress(currentProgress + 1, `자동 추출 진행 중... (${sec}초 경과)`);
+    }
+  }, 1000);
+
+  try {
+    throwIfCancelled();
+    // Prefer analyzing attached files (images/pdf/text).
+    // v21.6.23: studio-pdf-input + visualPdfDoc (persistent viewer) 도 소스로 인식
+    const attachmentInput = document.getElementById("attachmentFiles");
+    const pdfInput = document.getElementById("pdfFileInput");
+    const studioPdfInput = document.getElementById("studio-pdf-input"); // 상단 [파일 선택] 버튼
+    const attachedFiles = [];
+
+    if (attachmentInput?.files?.length) {
+      attachedFiles.push(...Array.from(attachmentInput.files));
+    }
+    if (pdfInput?.files?.length) {
+      attachedFiles.push(...Array.from(pdfInput.files));
+    }
+    if (studioPdfInput?.files?.length) {
+      attachedFiles.push(...Array.from(studioPdfInput.files));
+    }
+    if (window.Debug) {
+      window.Debug.log("extract", "input source collected", {
+        attachedCount: attachedFiles.length,
+        hasVisualPdfDoc: !!window.visualPdfDoc,
+      });
+    }
+    setExtractProgress(12, "입력 소스 확인 완료");
+  throwIfCancelled();
+
+    let extracted = "";
+
+    // v21.6.23: 파일 선택이 없어도 이미 로드된 visualPdfDoc이 있으면 텍스트를 직접 추출
+    if (!attachedFiles.length && window.visualPdfDoc) {
+    try {
+      throwIfCancelled();
+      if (typeof setPdfStatus === "function")
+        setPdfStatus("PDF 뷰어에서 텍스트 추출 중...", "info");
+      const pdf = window.visualPdfDoc;
+      const parts = [];
+      const maxPages = Math.min(pdf.numPages, 30); // 기술사 시험지 대응: 최대 30페이지
+      if (window.Debug) {
+        window.Debug.log("extract", "extracting from loaded viewer pdf", {
+          totalPages: pdf.numPages,
+          targetPages: maxPages,
+        });
+      }
+      for (let i = 1; i <= maxPages; i++) {
+        throwIfCancelled();
+        setExtractProgress(
+          12 + (i / Math.max(1, maxPages)) * 26,
+          `PDF 뷰어 텍스트 추출 중... (${i}/${maxPages}페이지)`,
+        );
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        parts.push(content.items.map((item) => item.str).join(" "));
+      }
+      extracted = parts.join("\n");
+      if (typeof setPdfStatus === "function")
+        setPdfStatus(`뷰어에서 텍스트 추출 완료 (${maxPages}p)`, "success");
+    } catch (err) {
+      console.error("[ExtractFromViewer] 텍스트 추출 실패:", err);
+    }
+  }
+
+    if (!attachedFiles.length && !extracted) {
+    if (typeof setPdfStatus === "function")
+      setPdfStatus(
+        "PDF 파일을 먼저 선택하거나 뷰어에 로드하세요. (상단 [파일 선택] 버튼)",
+        "error",
+      );
+    if (typeof showToast === "function")
+      showToast("먼저 상단의 [파일 선택] 버튼으로 PDF를 로드하세요.", "error");
+    finishExtractUi(false, "입력 소스 없음");
     return { ok: false, addedCount: 0, examRound: "미지정" };
   }
 
-  if (attachedFiles.length) {
+    if (attachedFiles.length) {
     setAttachmentStatus("첨부파일에서 텍스트 추출 중...", "info");
     const parts = [];
-    for (const f of attachedFiles) {
+    for (let i = 0; i < attachedFiles.length; i += 1) {
+      throwIfCancelled();
+      const f = attachedFiles[i];
+      if (typeof setPdfStatus === "function") {
+        setPdfStatus(
+          `첨부파일 텍스트 추출 중... (${i + 1}/${attachedFiles.length}) ${f.name}`,
+          "info",
+        );
+      }
+      setExtractProgress(
+        15 + ((i + 1) / Math.max(1, attachedFiles.length)) * 35,
+        `첨부파일 추출 중... (${i + 1}/${attachedFiles.length}) ${f.name}`,
+      );
       try {
         const snippet = await readAttachmentTextExcerpt(f);
         parts.push(`===== ${f.name} =====\n${snippet}`);
@@ -1338,52 +2013,86 @@ async function extractQuestionsFromPdfText() {
     setAttachmentStatus("첨부파일 텍스트 준비 완료.", "success");
   }
 
-  if (!extracted) {
+    if (!extracted) {
+    if (window.Debug) {
+      window.Debug.warn("extract", "no extracted text", {
+        attachedCount: attachedFiles.length,
+      });
+    }
     setPdfStatus(
       "추출된 텍스트가 없습니다. 스캔된 이미지 기반 PDF이거나 텍스트 레이어가 없는 파일일 수 있습니다. '인식 영역 확인' 모드에서 수동으로 영역을 지정하거나 OCR 보조 도구 사용을 권장합니다.",
       "error",
     );
+    finishExtractUi(false, "추출 가능한 텍스트 없음");
     return { ok: false, addedCount: 0, examRound: "미지정" };
   }
+    setExtractProgress(55, "텍스트 추출 완료, 문제 파싱 시작...");
 
-  let data;
-  try {
-    data = getCurrentAnswerData();
-  } catch (error) {
-    setPdfStatus(`현재 JSON 파싱 오류: ${error.message}`, "error");
-    return { ok: false, addedCount: 0, examRound: "미지정" };
-  }
+    let data;
+    try {
+      data = getCurrentAnswerData();
+    } catch (error) {
+      setPdfStatus(`현재 JSON 파싱 오류: ${error.message}`, "error");
+      finishExtractUi();
+      return { ok: false, addedCount: 0, examRound: "미지정" };
+    }
 
-  let parsedQuestions = [];
-  let aiQuestions = [];
-  let localQuestions = [];
+    let parsedQuestions = [];
+    let aiQuestions = [];
+    let localQuestions = [];
 
-  // 1. Local Parsing (Baseline)
-  localQuestions = parseQuestionsFromText(extracted);
-  if (typeof console.debug === "function") {
-    console.debug(`[Local Parser] Found ${localQuestions.length} questions`);
-  }
+    // 1. Local Parsing (Baseline)
+    localQuestions = parseQuestionsFromText(extracted);
+    if (window.Debug) {
+      window.Debug.log("extract", "local parsing complete", {
+        localCount: localQuestions.length,
+      });
+    }
+    setExtractProgress(65, `로컬 파서 분석 완료 (${localQuestions.length}개)`);
+    if (typeof console.debug === "function") {
+      console.debug(`[Local Parser] Found ${localQuestions.length} questions`);
+    }
+    throwIfCancelled();
 
-  // 2. AI Parsing (Optional Enhancement)
-  const baseUrl = isLikelyLmStudioEndpoint()
-    ? await discoverAnalyzeBackendBaseUrl()
-    : getBackendBaseUrl();
+    // 2. AI Parsing (Optional Enhancement)
+    const baseUrl = isLikelyLmStudioEndpoint()
+      ? await discoverAnalyzeBackendBaseUrl()
+      : getBackendBaseUrl();
 
-  // v21.6.12: 연결이 확실히 오프라인인 경우 fetch 시도 자체를 건너뜀 (콘솔 노이즈 방지)
-  if (window.isBackendAvailable === false) {
+    // v21.6.12: 연결이 확실히 오프라인인 경우 fetch 시도 자체를 건너뜀 (콘솔 노이즈 방지)
+    if (window.isBackendAvailable === false) {
     console.debug("[AI Parser] Backend confirmed offline, using local only.");
     setBackendStatus("로컬 분석 모드 (AI 서버 미연결)", "info");
-  } else {
+    } else {
+    setExtractProgress(72, "백엔드 AI 분석 요청 중...");
     try {
+      // v21.6.13: 추출 시에도 사용자 선택 모델/프로바이더 반영
+      const modelSelect = document.getElementById("aiAvailableModelSelect");
+      const selectedToken = modelSelect ? modelSelect.value : "";
+      const parsed = parseSelectedModelToken(selectedToken);
+
+      const requestBody = {
+        text: extracted,
+        source: "attachments",
+        provider: parsed.provider || "gemini",
+        model: parsed.modelId || "",
+      };
+
       const response = await fetch(`${baseUrl}/api/analyze-questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: extracted, source: "attachments" }),
+        signal: cancelController.signal,
+        body: JSON.stringify(requestBody),
       }).catch(() => null);
 
-      if (response && response.ok) {
+      if (response?.ok) {
         const payload = await response.json();
         aiQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+        if (window.Debug) {
+          window.Debug.log("extract", "backend ai parsing complete", {
+            aiCount: aiQuestions.length,
+          });
+        }
         if (typeof console.debug === "function") {
           console.debug(`[AI Parser] Found ${aiQuestions.length} questions`);
         }
@@ -1393,6 +2102,7 @@ async function extractQuestionsFromPdfText() {
             : "문제 추출: AI 분석 불충분, 로컬 병합",
           "success",
         );
+        setExtractProgress(80, `AI 분석 완료 (${aiQuestions.length}개)`);
       } else {
         window.isBackendAvailable = false;
         throw new Error("백엔드 응답 없음");
@@ -1404,49 +2114,57 @@ async function extractQuestionsFromPdfText() {
       );
       setBackendStatus("로컬 분석 모드 (AI 서버 미연결)", "info");
     }
-  }
+    }
 
-  // 3. Smart Merge
+    // 3. Smart Merge
   // 로컬 파서가 1개 이하(보통 파일명 헤더만 찾은 경우)를 찾았고 AI가 더 많이 찾았다면 AI 우선.
   // 기술사 시험(31문항)인 경우 로컬 파서의 정확도가 높을 확률이 큼.
-  if (
-    localQuestions.length <= 1 &&
-    aiQuestions.length > localQuestions.length
-  ) {
+    if (
+      localQuestions.length <= 1 &&
+      aiQuestions.length > localQuestions.length
+    ) {
     parsedQuestions = aiQuestions;
-  } else if (localQuestions.length >= aiQuestions.length) {
+    } else if (localQuestions.length >= aiQuestions.length) {
     parsedQuestions = localQuestions;
-  } else {
+    } else {
     // 둘 다 유효한 경우, 더 많이 찾은 쪽을 선택하되
     // 로컬이 최소 10개 이상 찾았다면 로컬 파서의 구조적 신뢰도를 우선함.
     parsedQuestions = localQuestions.length > 10 ? localQuestions : aiQuestions;
-  }
+    }
 
-  if (!parsedQuestions.length) {
+    if (!parsedQuestions.length) {
+    if (window.Debug) {
+      window.Debug.warn("extract", "merged parsing result empty", {
+        localCount: localQuestions.length,
+        aiCount: aiQuestions.length,
+      });
+    }
     setPdfStatus(
       "문제 추출에 실패했습니다. 텍스트 파싱 결과를 확인하세요.",
       "error",
     );
+    finishExtractUi(false, "문제 파싱 결과 없음");
     return { ok: false, addedCount: 0, examRound: "미지정" };
-  }
+    }
+    setExtractProgress(88, `파싱 완료 (${parsedQuestions.length}개), 데이터 반영 중...`);
 
-  // Compute per-round counts from parsedQuestions (use inference per question)
-  const countsByRound = {};
-  parsedQuestions.forEach((q) => {
+    // Compute per-round counts from parsedQuestions (use inference per question)
+    const countsByRound = {};
+    parsedQuestions.forEach((q) => {
     const maybeRound =
       q.examRound || inferExamRoundFromText(q.rawQuestion || "") || "미지정";
     countsByRound[maybeRound] = (countsByRound[maybeRound] || 0) + 1;
-  });
-  const examRound =
-    Object.keys(countsByRound).length === 1
-      ? Object.keys(countsByRound)[0]
-      : "혼합";
-  const existingKeys = new Set(
-    data.questions.map((item) => `${item.examRound}|${item.id}|${item.title}`),
-  );
-  let addedCount = 0;
+    });
+    const examRound =
+      Object.keys(countsByRound).length === 1
+        ? Object.keys(countsByRound)[0]
+        : "혼합";
+    const existingKeys = new Set(
+      data.questions.map((item) => `${item.examRound}|${item.id}|${item.title}`),
+    );
+    let addedCount = 0;
 
-  parsedQuestions.forEach((item, index) => {
+    parsedQuestions.forEach((item, index) => {
     const inferredFromRaw = inferExamRoundFromText(item.rawQuestion || "");
     const qRound =
       extractRoundOnlySafe(item.examRound) ||
@@ -1469,23 +2187,31 @@ async function extractQuestionsFromPdfText() {
       existingKeys.add(key);
       addedCount += 1;
     }
-  });
+    });
 
-  syncJsonAndRender(
-    data,
-    `자동 추출 완료: ${addedCount}개 신규 추가 (총 ${data.questions.length}문항 보유)`,
-  );
-  setPdfStatus(
-    `추출 결과: ${parsedQuestions.length}개 발견 (${addedCount}개 신규 추가)`,
-    "success",
-  );
+    syncJsonAndRender(
+      data,
+      `자동 추출 완료: ${addedCount}개 신규 추가 (총 ${data.questions.length}문항 보유)`,
+    );
+    if (window.Debug) {
+      window.Debug.log("extract", "extract completed", {
+        parsedCount: parsedQuestions.length,
+        addedCount,
+        totalQuestions: data.questions.length,
+      });
+    }
+    setExtractProgress(96, `JSON 반영 완료 (신규 ${addedCount}개)`);
+    setPdfStatus(
+      `추출 결과: ${parsedQuestions.length}개 발견 (${addedCount}개 신규 추가)`,
+      "success",
+    );
 
-  // ──── 보강된 공통 리포트 함수 호출 ────
-  refreshAutoExtractSummary(addedCount);
+    // ──── 보강된 공통 리포트 함수 호출 ────
+    refreshAutoExtractSummary(addedCount);
 
-  // ──── 사이드-바이-사이드 리뷰어 활성화 ────
-  const reviewerSection = document.getElementById("extractReviewer");
-  if (reviewerSection) {
+    // ──── 사이드-바이-사이드 리뷰어 활성화 ────
+    const reviewerSection = document.getElementById("extractReviewer");
+    if (reviewerSection) {
     reviewerSection.classList.remove("hidden");
     revCurrentPage = 1;
     renderReviewerPdf(1);
@@ -1493,20 +2219,45 @@ async function extractQuestionsFromPdfText() {
     initReviewerControls(); // 버튼 리스너 연동
 
     // 스크롤 이동
-    reviewerSection.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }
+      reviewerSection.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
 
-  return { ok: true, addedCount, examRound, countsByRound };
+    finishExtractUi(true, `자동 추출 완료 (신규 ${addedCount}개)`);
+    return { ok: true, addedCount, examRound, countsByRound };
+  } catch (error) {
+    console.error("[ExtractQuestions] Unexpected error:", error);
+    if (window.Debug) {
+      window.Debug.error("extract", "extract failed", {
+        message: error?.message || String(error),
+        code: error?.code || "",
+      });
+    }
+    if (error?.code === "EXTRACT_CANCELLED") {
+      if (typeof setPdfStatus === "function") {
+        setPdfStatus("자동 추출이 사용자 요청으로 중단되었습니다.", "info");
+      }
+      finishExtractUi(false, "자동 추출 중단됨");
+      return { ok: false, addedCount: 0, examRound: "미지정", cancelled: true };
+    }
+    if (typeof setPdfStatus === "function") {
+      setPdfStatus(
+        `자동 추출 중 오류가 발생했습니다: ${error?.message || "unknown"}`,
+        "error",
+      );
+    }
+    finishExtractUi(false, `자동 추출 실패: ${error?.message || "unknown"}`);
+    return { ok: false, addedCount: 0, examRound: "미지정" };
+  }
 }
 
 function generateLocalAnswerTemplate(question) {
   const prompt = `${question.title || ""} ${question.rawQuestion || ""}`;
   const lower = prompt.toLowerCase();
 
-  if (/d-region|stm|응력교란|스트럿|타이/.test(lower)) {
+  if (isDRegionTopic(lower)) {
     return [
       "1. 정의 및 적용 배경",
       "- 응력교란구역(D-Region, Discontinuity Region)은 평면유지 가정이 성립하지 않는 구간임.",
@@ -1554,15 +2305,17 @@ function generateLocalAnswerTemplate(question) {
   }
 
   return [
-    "1. 문제 정의 및 배경",
-    "- 핵심 개념을 영어 병기와 함께 정의하고 적용 범위를 제시.",
-    "2. 메커니즘/설계 검토",
-    "- 하중-저항-파괴모드 관점으로 단계별 검토항목을 번호화.",
-    "- KDS 코드와 수치 근거를 명시.",
-    "3. 도해/비교표",
-    "- 도해 1개(메커니즘) + 비교표 1개(대안 비교) 구성.",
-    "4. 결론 및 제언",
-    "- 시공/유지관리 관점의 실무 제언으로 마무리.",
+    "1. 문제 핵심 및 정의",
+    "- 본 문항은 구조물의 하중 전달 메커니즘과 파괴 지배요인을 검토하여 안전성과 사용성을 동시에 확보하는 것이 핵심임.",
+    "- 핵심 용어는 영문 병기를 병행함(Ductility, Redundancy, Limit State).",
+    "2. 메커니즘 및 설계 검토",
+    "- 검토 흐름: ① 하중조건 정리 ② 내부력/응력경로 확인 ③ 지배 파괴모드 판단 ④ 기준식 대입 및 안전성 확인.",
+    "- KDS 관련 조항과 단위·계수(예: 하중계수, 저항계수)를 함께 명시하여 근거를 분명히 함.",
+    "3. 도해 및 비교표(본문 포함)",
+    "- [도해] 하중 작용점에서 지점까지의 Load Path와 응력집중 구간을 화살표로 표시함.",
+    "- [비교표] 대안 A/B의 안전성·시공성·경제성·유지관리성을 항목별로 비교하여 최적안을 도출함.",
+    "4. 결론 및 기술사 제언",
+    "- 결론은 구조성능 확보 + 시공 리스크 저감 + 유지관리 모니터링 계획까지 포함한 실무형 권고로 정리함.",
   ].join("\n");
 }
 
@@ -1582,7 +2335,10 @@ function generateDraftAnswersLocal() {
     ? data.questions.filter((q) => selectedIdSet.has(String(q.id || ""))).length
     : data.questions.length;
   if (selectedMode && targetTotal === 0) {
-    setPdfStatus("선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.", "error");
+    setPdfStatus(
+      "선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.",
+      "error",
+    );
     return { ok: false, updated: 0 };
   }
   let updated = 0;
@@ -1598,7 +2354,10 @@ function generateDraftAnswersLocal() {
     updated += 1;
     return {
       ...question,
-      modelAnswer: generateLocalAnswerTemplate(question),
+      modelAnswer: enforceAnswerQualityGuard(
+        generateLocalAnswerTemplate(question),
+        question,
+      ),
       source: hasAnswer
         ? `${question.source || "-"} + LocalDraft`
         : "LocalDraft",
@@ -1613,12 +2372,16 @@ function generateDraftAnswersLocal() {
   return { ok: true, updated };
 }
 
-async function generateDraftAnswersByApi() {
-  if (isLikelyLmStudioEndpoint()) {
+async function generateDraftAnswersByApi(options = {}) {
+  const forceBackend = !!options?.forceBackend;
+  if (isLikelyLmStudioEndpoint() && !forceBackend && !isMandatoryFiveStepPipelineEnabled()) {
     return generateDraftAnswersByLmStudioLocal();
   }
 
-  const endpoint = document.getElementById("aiEndpointUrl").value.trim();
+  const rawEndpoint = String(
+    document.getElementById("aiEndpointUrl")?.value || "",
+  ).trim();
+  const endpoint = resolveGenerateAnswerEndpoint(rawEndpoint);
   const apiKey = document.getElementById("aiApiKey").value.trim();
   const selectedModelId = getEffectiveSelectedModelId();
   if (!endpoint) {
@@ -1629,10 +2392,7 @@ async function generateDraftAnswersByApi() {
     return { ok: false, updated: 0, fallbackCount: 0 };
   }
 
-  getSafeStorage().setItem(
-    AI_ENDPOINT_STORAGE_KEY,
-    endpoint,
-  );
+  getSafeStorage().setItem(AI_ENDPOINT_STORAGE_KEY, rawEndpoint || endpoint);
 
   let data;
   try {
@@ -1649,13 +2409,18 @@ async function generateDraftAnswersByApi() {
     ? data.questions.filter((q) => selectedIdSet.has(String(q.id || ""))).length
     : data.questions.length;
   if (selectedMode && targetTotal === 0) {
-    setPdfStatus("선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.", "error");
+    setPdfStatus(
+      "선택된 문항이 없습니다. 인식된 문항 리스트에서 대상을 선택하세요.",
+      "error",
+    );
     return { ok: false, updated: 0, fallbackCount: 0 };
   }
   let updated = 0;
   let fallbackCount = 0;
+  let blockedCount = 0;
   const diagnosticLogs = [];
   let providerStatus = null;
+  const mandatoryEnabled = isMandatoryFiveStepPipelineEnabled();
 
   setPdfStatus(
     `외부 API로 초안 생성 중... (${selectedMode ? `선택 ${targetTotal}개` : `전체 ${targetTotal}개`})`,
@@ -1671,6 +2436,8 @@ async function generateDraftAnswersByApi() {
     if (!overwrite && hasAnswer) {
       continue;
     }
+
+    let planText = "";
 
     try {
       // 외부 API일 경우 Provider 강제 주입 로직.
@@ -1688,14 +2455,70 @@ async function generateDraftAnswersByApi() {
         data.theories || [],
         3,
       );
-      const qualityInstruction = buildHighQualityAnswerInstruction(
+      try {
+        setPdfStatus(
+          `문제 인식/작성 계획 수립 중... (${updated + blockedCount + 1}/${targetTotal})`,
+          "info",
+        );
+        const planInstruction = buildDraftPlanInstruction(question, relatedTheories);
+        const planBody = {
+          question,
+          instruction: planInstruction,
+          mandatoryPipeline: false,
+          outputStyle: "exam-answer",
+        };
+        if (providerValue) {
+          planBody.provider = providerValue;
+        }
+        if (selectedModelId) {
+          planBody.model = selectedModelId;
+        }
+
+        const planResp = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          body: JSON.stringify(planBody),
+        });
+        if (planResp.ok) {
+          const planPayload = await planResp.json().catch(() => ({}));
+          planText = String(
+            planPayload?.answer ||
+              planPayload?.content ||
+              planPayload?.result ||
+              planPayload?.choices?.[0]?.message?.content ||
+              "",
+          ).trim();
+        }
+      } catch {
+        planText = "";
+      }
+
+      const sourceBundle = collectMandatoryFiveStepSources(question, data);
+      const qualityInstructionBase = buildHighQualityAnswerInstruction(
         question,
         relatedTheories,
       );
+      const qualityInstructionSeed = mergePlanIntoDraftInstruction(
+        qualityInstructionBase,
+        planText,
+      );
+      const qualityInstruction = isMandatoryFiveStepPipelineEnabled()
+        ? buildMandatoryFiveStepInstruction(
+            question,
+            qualityInstructionSeed,
+            sourceBundle,
+          )
+        : qualityInstructionSeed;
 
       const requestBody = {
         question,
         instruction: qualityInstruction,
+        mandatoryPipeline: isMandatoryFiveStepPipelineEnabled(),
+        sourceBundle,
+        outputStyle: "exam-answer",
       };
       if (providerValue) {
         requestBody.provider = providerValue;
@@ -1714,7 +2537,11 @@ async function generateDraftAnswersByApi() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errPayload = await response.json().catch(() => ({}));
+        const serverMsg = String(
+          errPayload?.message || errPayload?.error || `HTTP ${response.status}`,
+        );
+        throw new Error(serverMsg);
       }
 
       const payload = await response.json();
@@ -1734,6 +2561,17 @@ async function generateDraftAnswersByApi() {
         providerStatus = payload.providers;
       }
 
+      if (
+        mandatoryEnabled &&
+        payload?.mandatoryPipeline &&
+        payload?.pipelineAudit &&
+        payload.pipelineAudit.deepResearchParsed === false
+      ) {
+        throw new Error(
+          "mandatory_deep_research_parse_failed: 딥리서치 파싱 실패",
+        );
+      }
+
       const payloadSource = String(payload.source || "").toLowerCase();
       const isFallbackByApi = payloadSource.includes("local-fallback");
       if (isFallbackByApi) {
@@ -1746,16 +2584,40 @@ async function generateDraftAnswersByApi() {
 
       data.questions[index] = {
         ...question,
-        modelAnswer: String(answer).trim(),
+        modelAnswer: enforceAnswerQualityGuard(String(answer).trim(), question),
+        draftPlan: planText || String(question.draftPlan || "").trim(),
+        draftPlanHistory: appendDraftPlanHistory(question, planText),
         source: question.source
           ? `${question.source} + ${sourceLabel}`
           : sourceLabel,
       };
       updated += 1;
     } catch (error) {
+      if (mandatoryEnabled) {
+        blockedCount += 1;
+        diagnosticLogs.push({
+          provider: "mandatory-pipeline",
+          status: "failed",
+          reason: String(error?.message || "mandatory_pipeline_blocked").slice(
+            0,
+            180,
+          ),
+        });
+        continue;
+      }
+
+      const sourceBundle = collectMandatoryFiveStepSources(question, data);
+      const fallbackAnswer = isMandatoryFiveStepPipelineEnabled()
+        ? generateMandatoryPipelineFallbackAnswer(question, sourceBundle)
+        : generateLocalAnswerTemplate(question);
       data.questions[index] = {
         ...question,
-        modelAnswer: generateLocalAnswerTemplate(question),
+        modelAnswer: enforceAnswerQualityGuard(
+          fallbackAnswer,
+          question,
+        ),
+        draftPlan: planText || String(question.draftPlan || "").trim(),
+        draftPlanHistory: appendDraftPlanHistory(question, planText),
         source: question.source
           ? `${question.source} + LocalFallback`
           : "LocalFallback",
@@ -1767,7 +2629,9 @@ async function generateDraftAnswersByApi() {
 
   syncJsonAndRender(
     data,
-    `외부 API 기반 초안 생성(실패 시 로컬 대체) 완료: ${updated}개${selectedMode ? ` / 선택대상 ${targetTotal}개` : ""}`,
+    mandatoryEnabled
+      ? `외부 API 기반 초안 생성 완료: ${updated}개, 차단 ${blockedCount}개${selectedMode ? ` / 선택대상 ${targetTotal}개` : ""}`
+      : `외부 API 기반 초안 생성(실패 시 로컬 대체) 완료: ${updated}개${selectedMode ? ` / 선택대상 ${targetTotal}개` : ""}`,
   );
   const diagnosticSummary = summarizeLlmDiagnostics(diagnosticLogs);
   if (diagnosticSummary) {
@@ -1775,10 +2639,21 @@ async function generateDraftAnswersByApi() {
   }
   renderBackendDiagnostics(diagnosticLogs, providerStatus);
   setPdfStatus(
-    `외부 API 초안 작성 완료: ${updated}개 (로컬 대체 ${fallbackCount}개)`,
-    fallbackCount > 0 ? "info" : "success",
+    mandatoryEnabled
+      ? `외부 API 초안 작성 완료: ${updated}개 (딥리서치 파싱 실패 차단 ${blockedCount}개)`
+      : `외부 API 초안 작성 완료: ${updated}개 (로컬 대체 ${fallbackCount}개)`,
+    mandatoryEnabled
+      ? blockedCount > 0
+        ? "error"
+        : "success"
+      : fallbackCount > 0
+        ? "info"
+        : "success",
   );
-  return { ok: true, updated, fallbackCount };
+  if (mandatoryEnabled && updated === 0 && blockedCount > 0) {
+    return { ok: false, updated, fallbackCount, blockedCount };
+  }
+  return { ok: true, updated, fallbackCount, blockedCount };
 }
 
 async function runAutoPipeline() {
@@ -1789,8 +2664,10 @@ async function runAutoPipeline() {
 
   pipelineRunning = true;
   const runBtn = document.getElementById("runPipelineBtn");
-  runBtn.disabled = true;
-  runBtn.classList.add("opacity-60", "cursor-not-allowed");
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.classList.add("opacity-60", "cursor-not-allowed");
+  }
 
   try {
     setPdfStatus(
@@ -1860,7 +2737,9 @@ async function runAutoPipeline() {
     }
   } finally {
     pipelineRunning = false;
-    runBtn.disabled = false;
-    runBtn.classList.remove("opacity-60", "cursor-not-allowed");
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.classList.remove("opacity-60", "cursor-not-allowed");
+    }
   }
 }

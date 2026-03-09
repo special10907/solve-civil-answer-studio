@@ -23,26 +23,94 @@ async function extractTextFromPdfFile(file, fromPage = 1, toPage = 2) {
   });
 }
 
+function flashPdfMessage(message, type = "info", duration = 1800) {
+  const host = document.getElementById("pdfVisualWorkspaceContainer");
+  if (!host) return;
+
+  let badge = document.getElementById("pdfCaptureFeedback");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "pdfCaptureFeedback";
+    badge.style.position = "absolute";
+    badge.style.right = "16px";
+    badge.style.bottom = "16px";
+    badge.style.zIndex = "999";
+    badge.style.padding = "10px 12px";
+    badge.style.borderRadius = "10px";
+    badge.style.fontSize = "12px";
+    badge.style.fontWeight = "700";
+    badge.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+    badge.style.transition = "opacity 180ms ease, transform 180ms ease";
+    badge.style.opacity = "0";
+    badge.style.transform = "translateY(6px)";
+    host.appendChild(badge);
+  }
+
+  const theme = {
+    info: { bg: "#1d4ed8", fg: "#ffffff" },
+    success: { bg: "#047857", fg: "#ffffff" },
+    error: { bg: "#b91c1c", fg: "#ffffff" },
+  };
+  const colors = theme[type] || theme.info;
+  badge.style.background = colors.bg;
+  badge.style.color = colors.fg;
+  badge.textContent = message;
+
+  requestAnimationFrame(() => {
+    badge.style.opacity = "1";
+    badge.style.transform = "translateY(0)";
+  });
+
+  clearTimeout(window.__pdfFlashTimer);
+  window.__pdfFlashTimer = setTimeout(() => {
+    badge.style.opacity = "0";
+    badge.style.transform = "translateY(6px)";
+  }, Math.max(900, duration));
+}
+
+function syncAddAreaButtonState(btn, enabled) {
+  if (!btn) return;
+  btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+  btn.title = enabled ? "영역 지정 모드: ON" : "영역 지정 모드: OFF";
+  const icon = btn.querySelector("i");
+  if (icon) {
+    icon.className = enabled ? "fas fa-draw-polygon" : "fas fa-plus";
+  }
+  const textNode = btn.childNodes[btn.childNodes.length - 1];
+  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+    textNode.textContent = enabled
+      ? " 영역 지정 ON"
+      : " 영역 지정 (Add Area)";
+  }
+}
+
 function openPdfVisualModal() {
+  bindAddAreaButton();
+  if (window.Debug) {
+    window.Debug.log("pdf", "openPdfVisualModal called", {
+      hasPdf: !!window.visualPdfDoc,
+      currentPage: window.visualCurrentPage || 1,
+    });
+  }
   if (!window.visualPdfDoc) {
-    alert("먼저 PDF 파일을 첨부하고 추출 버튼을 눌러주세요.");
+    // PDF가 없으면 빈 화면이라도 유지하거나 안내 메시지 출력
+    setPdfStatus("PDF 파일을 선택 후 추출을 누르세요.", "info");
     return;
   }
-  document.getElementById("pdfVisualModal").classList.remove("hidden");
-  document.getElementById("pdfVisualModal").classList.add("flex");
-  window.visualCurrentPage = 1;
+  // Modal logic removed - now persistent in #studio section
+  window.visualCurrentPage = window.visualCurrentPage || 1;
 
   // v21.6.18: 저장된 상태가 있으면 복원, 없으면 빈 배열로 시작
-  const state = window.App.State.pdf;
+  const state = window.App.State.pdf || { questions: [], ignoredBlocks: [] };
   if (window._savedVisualQuestions && window._savedVisualQuestions.length > 0) {
     window.currentReviewingQuestions = JSON.parse(JSON.stringify(window._savedVisualQuestions));
     state.ignoredBlocks = Array.isArray(window._savedIgnoredBlocks)
       ? JSON.parse(JSON.stringify(window._savedIgnoredBlocks))
       : [];
-    setPdfStatus(`이전 작업 상태 복원: ${window.currentReviewingQuestions.length}개 문항`, "success");
+    setPdfStatus(`상태 복원: ${window.currentReviewingQuestions.length}개 영역`, "success");
   } else {
-    window.currentReviewingQuestions = [];
-    state.ignoredBlocks = [];
+    window.currentReviewingQuestions = window.currentReviewingQuestions || [];
+    state.ignoredBlocks = state.ignoredBlocks || [];
   }
 
   window.selectedBoxIds = [];
@@ -52,9 +120,13 @@ function openPdfVisualModal() {
   if (!window._pdfKeyListenerAttached) {
     window._pdfKeyListenerAttached = true;
     document.addEventListener("keydown", (e) => {
-      // 모달이 열려 있을 때만 처리
+      // v21.6.24: 모달 구조 제거 후에도 Studio 뷰에서 단축키 동작하도록 가드 보정
       const modal = document.getElementById("pdfVisualModal");
-      if (!modal || modal.classList.contains("hidden")) return;
+      const studio = document.getElementById("studio");
+      const isActive = modal
+        ? !modal.classList.contains("hidden")
+        : !!(studio && studio.classList.contains("active"));
+      if (!isActive) return;
 
       // 인풋/텍스트에어리어 포커스 중이면 무시
       const tag = document.activeElement?.tagName;
@@ -135,6 +207,9 @@ function openPdfVisualModal() {
     }
   };
 }
+
+// ui.js에서 동일 이름 함수가 래퍼로 재정의되므로, 실제 구현을 전역 포인터로 보존
+window._openPdfVisualModalImpl = openPdfVisualModal;
 
 function groupTextItems(items, thresholdY = 8) {
   if (!items || items.length === 0) return [];
@@ -249,6 +324,13 @@ function calculateLevenshteinDistance(a = "", b = "") {
 // Removing redundant/simple stubs to avoid conflicts.
 
 async function renderVisualPage(pageNum) {
+  if (window.Debug) {
+    window.Debug.log("pdf", "renderVisualPage start", {
+      pageNum,
+      hasPdf: !!window.visualPdfDoc,
+      zoom: window.pdfZoomLevel || 1.5,
+    });
+  }
   if (!window.visualPdfDoc) {
     console.warn("No visualPdfDoc loaded");
     return;
@@ -281,7 +363,21 @@ async function renderVisualPage(pageNum) {
     if (!canvas) throw new Error("Canvas element not found");
 
     const context = canvas.getContext("2d");
-    const viewport = page.getViewport({ scale: 1.5 });
+    let scale = window.pdfZoomLevel || 1.5;
+    // v21.6.27: 첫 진입/자동 렌더 시 컨테이너 너비에 맞춰 배율 자동 보정 (조작 안정성 향상)
+    if (!window._userZoomTouched) {
+      const container = document.getElementById("pdfVisualWorkspaceContainer");
+      if (container) {
+        const baseViewport = page.getViewport({ scale: 1 });
+        const fitScale = (container.clientWidth - 64) / baseViewport.width;
+        if (Number.isFinite(fitScale) && fitScale > 0) {
+          scale = Math.min(2.2, Math.max(0.5, fitScale));
+          window.pdfZoomLevel = scale;
+        }
+      }
+    }
+
+    const viewport = page.getViewport({ scale });
     window.currentVisualViewport = viewport; // 전역 저장 (오버레이 업데이트용)
 
     canvas.width = viewport.width;
@@ -331,11 +427,24 @@ async function renderVisualPage(pageNum) {
     if (statusEl)
       statusEl.textContent =
         "렌더링 완료. 인식된 텍스트 영역이 표시되었습니다.";
+    if (window.Debug) {
+      window.Debug.log("pdf", "renderVisualPage success", {
+        pageNum,
+        canvasW: canvas.width,
+        canvasH: canvas.height,
+      });
+    }
   } catch (err) {
     if (err.name === "RenderingCancelledException") {
       console.log(`[PDF] Page ${pageNum} rendering cancelled.`);
     } else {
       console.error(`[PDF] Render Error on Page ${pageNum}:`, err);
+      if (window.Debug) {
+        window.Debug.error("pdf", "renderVisualPage failed", {
+          pageNum,
+          message: err?.message || String(err),
+        });
+      }
       if (statusEl) statusEl.textContent = `렌더링 오류: ${err.message}`;
     }
   } finally {
@@ -803,6 +912,7 @@ function updateReviewerOverlayBoxes(pageNum, viewport) {
 }
 
 function renderReviewerList(questions) {
+  ensureLowConfidenceFilterInitialized();
   const container = document.getElementById("revQuestionList");
   const countLabel = document.getElementById("revCountLabel");
   const modalCount = document.getElementById("modalCaptureCount");
@@ -875,10 +985,22 @@ function renderReviewerList(questions) {
   const isPending = (idx) => window.pendingAssignIndex === idx;
   const selectedForAiSet = new Set(window.selectedQuestionIdsForAi || []);
 
-  const isModalOpen = !document
-    .getElementById("pdfVisualModal")
-    .classList.contains("hidden");
+  const modalEl = document.getElementById("pdfVisualModal");
+  const isModalOpen = modalEl ? !modalEl.classList.contains("hidden") : true;
   const targetPage = isModalOpen ? visualCurrentPage : revCurrentPage;
+  const lowConfidenceOnly = !!window.lowConfidenceOnly;
+
+  const indexedPageQuestions = window.currentReviewingQuestions
+    .map((q, i) => ({ q, i }))
+    .filter(({ q }) => !q.rect || q.rect.page === targetPage);
+  const visibleIndexedQuestions = lowConfidenceOnly
+    ? indexedPageQuestions.filter(({ q }) => isLowConfidenceQuestion(q))
+    : indexedPageQuestions;
+  const pageCountAll = indexedPageQuestions.length;
+  const pageCountVisible = visibleIndexedQuestions.length;
+  const lowConfidenceCount = indexedPageQuestions.filter(({ q }) =>
+    isLowConfidenceQuestion(q),
+  ).length;
 
   if (!qs.length) {
     container.innerHTML = `<p class="text-xs text-slate-400 text-center mt-10">인식된 문항이 없습니다.<br>PDF의 파란 박스를 클릭하여 직접 추가하세요.</p>`;
@@ -886,21 +1008,43 @@ function renderReviewerList(questions) {
     if (modalCount)
       modalCount.textContent = `현재 선택된 문항: 0개 (인식영역: ${displayBlocksCount})`;
   } else {
-    // Calculate how many belong to current page
-    const pageCount = qs.filter(
-      (q) => q.rect && q.rect.page === targetPage,
-    ).length;
-    if (countLabel) countLabel.textContent = `표시 중: ${pageCount}개`;
+    if (countLabel) {
+      countLabel.textContent = lowConfidenceOnly
+        ? `표시 중: ${pageCountVisible}개 (저신뢰 필터)`
+        : `표시 중: ${pageCountVisible}개`;
+    }
     if (modalCount)
-      modalCount.textContent = `현재 페이지 문항: ${pageCount}개 (AI 선택: ${selectedForAiSet.size}개 / 전체: ${qs.length}개 / 인식후보: ${displayBlocksCount})`;
+      modalCount.textContent =
+        `현재 페이지 문항: ${pageCountVisible}개` +
+        `${lowConfidenceOnly ? ` (전체 ${pageCountAll} 중)` : ""}` +
+        ` (AI 선택: ${selectedForAiSet.size}개 / 전체: ${qs.length}개 / 인식후보: ${displayBlocksCount})`;
   }
 
-  const listHtml = window.currentReviewingQuestions
-    .map((q, i) => {
-      if (q.rect && q.rect.page !== targetPage) return "";
+  const listHtml = visibleIndexedQuestions
+    .map(({ q, i }) => {
       const pending = isPending(i);
       const selectedForAi = selectedForAiSet.has(String(q.id || ""));
       const safeQId = String(q.id || "").replace(/'/g, "\\'");
+      const analysisModeLabel = q.analysisMode
+        ? getContentModeLabel(q.analysisMode)
+        : "";
+      const analysisConfidenceText =
+        typeof q.analysisConfidence === "number"
+          ? `${Math.round(q.analysisConfidence * 100)}%`
+          : "";
+      const analysisBadgeToneClass = getAnalysisBadgeToneClass(
+        q.analysisConfidence,
+      );
+      const analysisBadgeHtml = analysisModeLabel
+        ? `<div class="mt-1 text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${analysisBadgeToneClass}">서버분석 ${analysisModeLabel}${analysisConfidenceText ? ` · ${analysisConfidenceText}` : ""}</div>`
+        : "";
+      const analysisMetaBadge = getAnalysisMetaBadgeData(q.analysisMeta || null);
+      const analysisMetaHtml = analysisBadgeHtml && analysisMetaBadge
+        ? `<div class="mt-1 text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600" title="${analysisMetaBadge.text} | ${analysisMetaBadge.tooltip}">meta ⓘ</div>`
+        : "";
+      const analysisRowHtml = analysisBadgeHtml || analysisMetaHtml
+        ? `<div class="mt-1 inline-flex items-center gap-1">${analysisBadgeHtml}${analysisMetaHtml}</div>`
+        : "";
       return `
                 <div
                   draggable="true"
@@ -934,6 +1078,7 @@ function renderReviewerList(questions) {
                       AI 작성 대상
                     </label>
                     <h5 class="text-sm font-bold text-slate-800 line-clamp-2 mb-1 group-hover:text-blue-700">${escapeHtml(q.title)}</h5>
+                    ${analysisRowHtml}
                     ${
                       pending
                         ? '<div class="text-[9px] text-blue-600 font-bold mt-1 animate-bounce"><i class="fas fa-crosshairs mr-1"></i>PDF에서 영역을 클릭하세요</div>'
@@ -971,15 +1116,23 @@ function renderReviewerList(questions) {
     .join("");
 
   if (window.currentReviewingQuestions.length > 0) {
+    const filterNoticeHtml = lowConfidenceOnly
+      ? `<div class="mb-2 text-[11px] px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700">저신뢰 필터 적용 중 (기준: 70% 미만)</div>`
+      : "";
+    const listBodyHtml = listHtml
+      ? listHtml
+      : `<p class="text-xs text-slate-400 text-center mt-8">필터 조건에 맞는 문항이 없습니다.<br>저신뢰만 보기 OFF로 전환해 전체 문항을 확인하세요.</p>`;
     container.innerHTML = `
+      ${filterNoticeHtml}
       <div class="mb-2 flex items-center justify-between text-[11px]">
         <div class="text-slate-500">AI 대상 선택: ${selectedForAiSet.size}개</div>
         <div class="flex gap-1.5">
+          <button type="button" onclick="event.stopPropagation(); toggleLowConfidenceFilter()" class="px-2 py-1 rounded border ${lowConfidenceOnly ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600"} hover:bg-slate-50">${lowConfidenceOnly ? `저신뢰만 보기 ON (${lowConfidenceCount})` : `저신뢰만 보기 OFF (${lowConfidenceCount})`}</button>
           <button type="button" onclick="event.stopPropagation(); selectAllAiQuestionsOnCurrentPage()" class="px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">현재 페이지 전체선택</button>
           <button type="button" onclick="event.stopPropagation(); clearAiQuestionSelection()" class="px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">선택해제</button>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-2 h-full content-start">${listHtml}</div>
+      <div class="grid grid-cols-2 gap-2 h-full content-start">${listBodyHtml}</div>
     `;
   }
 
@@ -1000,9 +1153,8 @@ function toggleAiQuestionSelection(qId, checked) {
 }
 
 function selectAllAiQuestionsOnCurrentPage() {
-  const isModalOpen = !document
-    .getElementById("pdfVisualModal")
-    .classList.contains("hidden");
+  const modalEl = document.getElementById("pdfVisualModal");
+  const isModalOpen = modalEl ? !modalEl.classList.contains("hidden") : true;
   const targetPage = isModalOpen ? visualCurrentPage : revCurrentPage;
   const questions = (window.currentReviewingQuestions || []).filter(
     (q) => !q.rect || q.rect.page === targetPage,
@@ -1013,6 +1165,12 @@ function selectAllAiQuestionsOnCurrentPage() {
 
 function clearAiQuestionSelection() {
   window.selectedQuestionIdsForAi = [];
+  renderReviewerList(window.currentReviewingQuestions || []);
+}
+
+function toggleLowConfidenceFilter() {
+  window.lowConfidenceOnly = !window.lowConfidenceOnly;
+  persistLowConfidenceFilterPreference(window.lowConfidenceOnly);
   renderReviewerList(window.currentReviewingQuestions || []);
 }
 
@@ -1028,6 +1186,7 @@ function _highlightQuestionOnPdfLegacy(index) {
 // Redundant version removed. See consolidated version below.
 
 function updateModalNavigation(targetPage) {
+  ensureLowConfidenceFilterInitialized();
   const modalList = document.getElementById("modalCaptureList");
   if (!modalList) {
     console.warn("modalCaptureList element not found. targetPage:", targetPage);
@@ -1035,14 +1194,37 @@ function updateModalNavigation(targetPage) {
   }
 
   const currentQuestions = window.currentReviewingQuestions || [];
+  const lowConfidenceOnly = !!window.lowConfidenceOnly;
 
   if (!currentQuestions.length) {
     modalList.innerHTML = `<p class="text-center text-[11px] text-slate-400 mt-10">캡처된 문항이 없습니다.<br />PDF 박스를 클릭하세요.</p>`;
   } else {
     // 폼 요소는 이미 HTML (solve_120.html) 쪽에 고정 위치하므로, 동적 리스트만 삽입
     const filtered = currentQuestions
-      .map((q, i) => {
-        if (q.rect && q.rect.page !== targetPage) return "";
+      .map((q, i) => ({ q, i }))
+      .filter(({ q }) => !q.rect || q.rect.page === targetPage)
+      .filter(({ q }) => !lowConfidenceOnly || isLowConfidenceQuestion(q))
+      .map(({ q, i }) => {
+        const analysisModeLabel = q.analysisMode
+          ? getContentModeLabel(q.analysisMode)
+          : "";
+        const analysisConfidenceText =
+          typeof q.analysisConfidence === "number"
+            ? `${Math.round(q.analysisConfidence * 100)}%`
+            : "";
+        const analysisBadgeToneClass = getAnalysisBadgeToneClass(
+          q.analysisConfidence,
+        );
+        const analysisBadgeHtml = analysisModeLabel
+          ? `<div class="mt-1 text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${analysisBadgeToneClass}">서버분석 ${analysisModeLabel}${analysisConfidenceText ? ` · ${analysisConfidenceText}` : ""}</div>`
+          : "";
+        const analysisMetaBadge = getAnalysisMetaBadgeData(q.analysisMeta || null);
+        const analysisMetaHtml = analysisBadgeHtml && analysisMetaBadge
+          ? `<div class="mt-1 text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600" title="${analysisMetaBadge.text} | ${analysisMetaBadge.tooltip}">meta ⓘ</div>`
+          : "";
+        const analysisRowHtml = analysisBadgeHtml || analysisMetaHtml
+          ? `<div class="mt-1 inline-flex items-center gap-1">${analysisBadgeHtml}${analysisMetaHtml}</div>`
+          : "";
         return `
           <div
             onclick="highlightQuestionOnPdf(${i})"
@@ -1051,6 +1233,7 @@ function updateModalNavigation(targetPage) {
             class="p-2 border border-slate-100 rounded bg-slate-50 relative group cursor-pointer hover:border-blue-300 transition-colors item-${q.id}"
           >
             <div class="text-[11px] font-bold text-slate-700 truncate pr-5">${escapeHtml(q.title)}</div>
+            ${analysisRowHtml}
             <button onclick="event.stopPropagation(); deleteCapturedQuestion(${i})" class="absolute right-1 top-1 w-4 h-4 text-slate-300 hover:text-rose-500"><i class="fas fa-times text-[10px]"></i></button>
           </div>`;
       })
@@ -1063,7 +1246,42 @@ function updateModalNavigation(targetPage) {
 
 function deleteCapturedQuestion(index) {
   const questions = window.currentReviewingQuestions || [];
-  if (index < 0 || index >= questions.length) return;
+  if (index < 0) {
+    if (!questions.length) {
+      setPdfStatus("삭제할 문항이 없습니다.", "info");
+      return;
+    }
+
+    if (!confirm(`현재 인식/등록된 문항 ${questions.length}개를 전체 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    const removedIds = new Set(questions.map((q) => q.id));
+    window.currentReviewingQuestions = [];
+    window.selectedBoxIds = [];
+    window.selectedCandidateRects = [];
+    window.pendingAssignIndex = null;
+    window._needsCandidateRefresh = true;
+
+    try {
+      const data = getCurrentAnswerData();
+      data.questions = data.questions.filter((q) => !removedIds.has(q.id));
+      syncJsonAndRender(data, "모든 인식 문항을 삭제했습니다.", true);
+    } catch (e) {
+      console.error("데이터 동기화 실패:", e);
+    }
+
+    renderReviewerList(window.currentReviewingQuestions);
+    if (currentVisualViewport) {
+      updateVisualOverlayBoxes(visualCurrentPage, currentVisualViewport);
+    }
+    renderReviewerPdf(visualCurrentPage);
+    refreshAutoExtractSummary();
+    setPdfStatus("전체 삭제가 완료되었습니다.", "success");
+    return;
+  }
+
+  if (index >= questions.length) return;
 
   const removed = questions[index];
   const hasRect = !!removed.rect;
@@ -1156,7 +1374,7 @@ function handleDrop(e, toIndex) {
   draggedItemIndex = null;
 }
 
-function captureManualQuestion(text, rectData = null) {
+function captureManualQuestion(text, rectData = null, mediaData = null) {
   if (!text || !text.trim()) return;
   const questions = window.currentReviewingQuestions || [];
 
@@ -1228,13 +1446,70 @@ function captureManualQuestion(text, rectData = null) {
   }
 
   window.pendingManualRect = rectData;
+  window.pendingManualCaptureMedia = mediaData || null;
+  const panelEl = document.getElementById("manualCapturePanel");
+  const rectHintEl = document.getElementById("manualCaptureRectHint");
+  const previewEl = document.getElementById("manualCapturePreview");
+  const imagePreviewEl = ensureManualCaptureImagePreviewElement();
+  if (panelEl) {
+    const panelScroller = panelEl.closest(".overflow-y-auto");
+    if (panelScroller) {
+      const scrollerRect = panelScroller.getBoundingClientRect();
+      const panelRect = panelEl.getBoundingClientRect();
+      const padding = 20;
+      const outOfView =
+        panelRect.top < scrollerRect.top + padding ||
+        panelRect.bottom > scrollerRect.bottom - padding;
+
+      if (outOfView) {
+        const targetTop = Math.max(0, panelEl.offsetTop - padding);
+        panelScroller.scrollTo({ top: targetTop, behavior: "smooth" });
+      }
+    }
+    panelEl.classList.add("ring-2", "ring-indigo-200", "rounded-lg");
+    setTimeout(() => {
+      panelEl.classList.remove("ring-2", "ring-indigo-200", "rounded-lg");
+    }, 1200);
+  }
+
+  if (rectHintEl) {
+    if (rectData) {
+      rectHintEl.textContent = `지정 영역: ${rectData.page}페이지 · x:${Math.round(rectData.x)}, y:${Math.round(rectData.y)}, w:${Math.round(rectData.w)}, h:${Math.round(rectData.h)}`;
+      rectHintEl.classList.remove("hidden");
+    } else {
+      rectHintEl.classList.add("hidden");
+    }
+  }
+
+  if (previewEl) {
+    const compact = String(text || "").replace(/\s+/g, " ").trim();
+    const preview = compact.length > 120 ? `${compact.slice(0, 120)}…` : compact;
+    previewEl.textContent = preview
+      ? `캡처 텍스트 미리보기: ${preview}`
+      : "캡처 텍스트가 비어 있습니다.";
+    previewEl.classList.remove("hidden");
+  }
+
+  if (imagePreviewEl) {
+    if (mediaData && mediaData.thumbnailDataUrl) {
+      imagePreviewEl.src = mediaData.thumbnailDataUrl;
+      imagePreviewEl.classList.remove("hidden");
+    } else {
+      imagePreviewEl.src = "";
+      imagePreviewEl.classList.add("hidden");
+    }
+  }
+
   setPdfStatus(
     "영역 텍스트 추출됨. 우측 폼에서 명칭 부여 후 '확정 및 저장' 하세요.",
     "info",
   );
+  flashPdfMessage("영역 캡처 완료 ✅", "success", 1700);
 
   if (inputEl) {
     inputEl.classList.add("bg-blue-100", "border-blue-400");
+    inputEl.focus({ preventScroll: true });
+    inputEl.setSelectionRange(0, 0);
     setTimeout(
       () => inputEl.classList.remove("bg-blue-100", "border-blue-400"),
       800,
@@ -1242,9 +1517,8 @@ function captureManualQuestion(text, rectData = null) {
   }
 
   // 렌더링을 즉시 다시 수행하여 방금 추가된 녹색(대기) 영역이 그려지도록 함
-  const isModalOpen = !document
-    .getElementById("pdfVisualModal")
-    .classList.contains("hidden");
+  const modalEl = document.getElementById("pdfVisualModal");
+  const isModalOpen = modalEl ? !modalEl.classList.contains("hidden") : true;
   if (isModalOpen) {
     renderVisualPage(visualCurrentPage);
   } else {
@@ -1252,41 +1526,593 @@ function captureManualQuestion(text, rectData = null) {
   }
 }
 
+function ensureManualCaptureImagePreviewElement() {
+  const panel = document.getElementById("manualCapturePanel");
+  if (!panel) return null;
+
+  let img = document.getElementById("manualCaptureImagePreview");
+  if (img) return img;
+
+  img = document.createElement("img");
+  img.id = "manualCaptureImagePreview";
+  img.alt = "캡처 이미지 미리보기";
+  img.className =
+    "hidden mt-2 w-full max-h-56 object-contain rounded border border-slate-200 bg-white";
+
+  const previewEl = document.getElementById("manualCapturePreview");
+  if (previewEl && previewEl.parentElement) {
+    previewEl.parentElement.insertBefore(img, previewEl.nextSibling);
+  } else {
+    panel.appendChild(img);
+  }
+
+  return img;
+}
+
+function extractSelectionImagePayload(overlay, minX, minY, maxX, maxY, pdfRect) {
+  if (!overlay) return null;
+
+  const canvasId = overlay.id === "revPdfOverlay" ? "revPdfCanvas" : "pdfVisualCanvas";
+  const sourceCanvas = document.getElementById(canvasId);
+  if (!sourceCanvas) return null;
+
+  const viewW = overlay.clientWidth || sourceCanvas.width;
+  const viewH = overlay.clientHeight || sourceCanvas.height;
+  if (!viewW || !viewH) return null;
+
+  const scaleX = sourceCanvas.width / viewW;
+  const scaleY = sourceCanvas.height / viewH;
+
+  const sx = Math.max(0, Math.floor(minX * scaleX));
+  const sy = Math.max(0, Math.floor(minY * scaleY));
+  const sw = Math.min(sourceCanvas.width - sx, Math.ceil((maxX - minX) * scaleX));
+  const sh = Math.min(sourceCanvas.height - sy, Math.ceil((maxY - minY) * scaleY));
+
+  if (sw < 4 || sh < 4) return null;
+
+  const crop = document.createElement("canvas");
+  crop.width = sw;
+  crop.height = sh;
+  const cropCtx = crop.getContext("2d", { willReadFrequently: false });
+  if (!cropCtx) return null;
+
+  cropCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  const imageDataUrl = crop.toDataURL("image/jpeg", 0.9);
+
+  const thumbMax = 320;
+  const thumbScale = Math.min(1, thumbMax / Math.max(sw, sh));
+  const tw = Math.max(1, Math.round(sw * thumbScale));
+  const th = Math.max(1, Math.round(sh * thumbScale));
+  const thumbCanvas = document.createElement("canvas");
+  thumbCanvas.width = tw;
+  thumbCanvas.height = th;
+  const thumbCtx = thumbCanvas.getContext("2d");
+  if (!thumbCtx) return null;
+  thumbCtx.drawImage(crop, 0, 0, sw, sh, 0, 0, tw, th);
+  const thumbnailDataUrl = thumbCanvas.toDataURL("image/jpeg", 0.8);
+
+  return {
+    hasImage: true,
+    imageDataUrl,
+    thumbnailDataUrl,
+    width: sw,
+    height: sh,
+    sourceCanvasId: canvasId,
+    rect: pdfRect ? { ...pdfRect } : null,
+  };
+}
+
+function extractSelectionTextFromBlocks(pageData, viewport, minX, minY, maxX, maxY) {
+  if (!pageData) return "";
+
+  if (pageData.texts && !pageData.groupedBlocks) {
+    pageData.groupedBlocks = groupTextItems(pageData.texts);
+    pageData.texts = null;
+  }
+
+  const blocks = pageData.groupedBlocks || [];
+  if (!blocks.length) return "";
+
+  const selected = blocks
+    .map((block) => {
+      const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
+        block.x,
+        block.y,
+        block.x + (block.w || 20),
+        block.y + (block.h || 10),
+      ]);
+      const bx1 = Math.min(vx1, vx2);
+      const by1 = Math.min(vy1, vy2);
+      const bx2 = Math.max(vx1, vx2);
+      const by2 = Math.max(vy1, vy2);
+
+      const interW = Math.max(0, Math.min(maxX, bx2) - Math.max(minX, bx1));
+      const interH = Math.max(0, Math.min(maxY, by2) - Math.max(minY, by1));
+      const interArea = interW * interH;
+      const blockArea = Math.max(1, (bx2 - bx1) * (by2 - by1));
+      const overlapRatio = interArea / blockArea;
+
+      const cx = (bx1 + bx2) / 2;
+      const cy = (by1 + by2) / 2;
+      const centerInside = cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+
+      if (!centerInside && overlapRatio < 0.12 && interArea < 30) {
+        return null;
+      }
+
+      return {
+        str: block.str || "",
+        sortY: by1,
+        sortX: bx1,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.sortY - b.sortY || a.sortX - b.sortX);
+
+  return selected
+    .map((b) => String(b.str || "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function deriveTitleFromCapturedText(rawText) {
+  const lines = String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const firstMeaningful =
+    lines.find((line) => line.replace(/[^가-힣a-zA-Z0-9]/g, "").length >= 4) ||
+    lines[0] ||
+    "";
+
+  const compact = firstMeaningful.replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+
+  return compact.length > 60 ? `${compact.slice(0, 60)}...` : compact;
+}
+
+function tokenizeSimple(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 2);
+}
+
+function buildKnowledgeContextForDraft(rawQuestion) {
+  try {
+    const data = getCurrentAnswerData();
+    const theories = Array.isArray(data?.theories) ? data.theories : [];
+    if (!theories.length) {
+      return "- 연관 이론 데이터 없음";
+    }
+
+    const qTokens = tokenizeSimple(rawQuestion);
+    if (!qTokens.length) {
+      return "- 연관 이론 매칭 불가(질문 토큰 부족)";
+    }
+
+    const qSet = new Set(qTokens);
+    const scored = theories
+      .map((theory) => {
+        const text = [
+          theory?.title,
+          theory?.category,
+          ...(Array.isArray(theory?.tags) ? theory.tags : []),
+          theory?.content,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const tTokens = tokenizeSimple(text);
+        if (!tTokens.length) return { theory, score: 0 };
+        let hit = 0;
+        tTokens.forEach((token) => {
+          if (qSet.has(token)) hit += 1;
+        });
+        return { theory, score: hit / Math.max(1, qSet.size) };
+      })
+      .filter((row) => row.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    if (!scored.length) {
+      return "- 연관 이론 매칭 결과 없음";
+    }
+
+    return scored
+      .map(({ theory }, idx) => {
+        const tags = Array.isArray(theory?.tags) ? theory.tags.join(", ") : "";
+        const body = String(theory?.content || "").replace(/\s+/g, " ").trim();
+        return [
+          `- 참조 이론 ${idx + 1}: ${theory?.title || "(제목없음)"}`,
+          `  분류/태그: ${theory?.category || "일반"}${tags ? ` / ${tags}` : ""}`,
+          `  핵심: ${body.slice(0, 260)}`,
+        ].join("\n");
+      })
+      .join("\n");
+  } catch {
+    return "- 연관 이론 컨텍스트 로딩 실패";
+  }
+}
+
+function appendDraftPlanHistoryForManual(question, planText, maxItems = 5) {
+  const plan = String(planText || "").trim();
+  const existing = Array.isArray(question?.draftPlanHistory)
+    ? question.draftPlanHistory
+    : [];
+  const normalizedExisting = existing
+    .map((item) => {
+      if (typeof item === "string") {
+        const text = String(item || "").trim();
+        return text ? { text, createdAt: "" } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+      const text = String(item.text || item.plan || "").trim();
+      if (!text) return null;
+      return {
+        text,
+        createdAt: String(item.createdAt || "").trim(),
+      };
+    })
+    .filter(Boolean);
+
+  if (!plan) {
+    return normalizedExisting.slice(0, maxItems);
+  }
+
+  if (normalizedExisting[0]?.text === plan) {
+    return normalizedExisting.slice(0, maxItems);
+  }
+
+  return [
+    {
+      text: plan,
+      createdAt: new Date().toISOString(),
+    },
+    ...normalizedExisting,
+  ].slice(0, maxItems);
+}
+
+function getActiveCaptureImagePayload() {
+  return window.pendingManualCaptureMedia || null;
+}
+
+function getDesignatedReferenceImagePayload() {
+  return window.pendingManualReferenceImage || null;
+}
+
+function classifyManualContentMode(rawText, mediaPayload, referencePayload) {
+  const text = String(rawText || "").trim();
+  const compact = text.replace(/\s+/g, "");
+  const textLen = compact.length;
+  const hasCaptureImage = !!mediaPayload?.imageDataUrl;
+  const hasReferenceImage = !!referencePayload?.imageDataUrl;
+  const hasImage = hasCaptureImage || hasReferenceImage;
+  const isPlaceholderText = /^\[(이미지 영역|선택 영역)\]/.test(text);
+
+  let mode = "text";
+  if (!textLen && hasImage) {
+    mode = "image";
+  } else if ((textLen < 12 || isPlaceholderText) && hasImage) {
+    mode = "image";
+  } else if (hasImage && textLen >= 12) {
+    mode = "mixed";
+  } else {
+    mode = "text";
+  }
+
+  return {
+    mode,
+    hasText: textLen > 0,
+    hasImage,
+    textLen,
+    hasCaptureImage,
+    hasReferenceImage,
+  };
+}
+
+function getContentModeLabel(mode) {
+  const labelMap = {
+    text: "텍스트 중심",
+    image: "이미지 중심",
+    mixed: "혼합(텍스트+이미지)",
+  };
+  return labelMap[String(mode || "").toLowerCase()] || "미지정";
+}
+
+function getAnalysisMetaBadgeData(analysisMeta) {
+  if (!analysisMeta || typeof analysisMeta !== "object") {
+    return null;
+  }
+
+  const bits = [];
+  const details = [];
+
+  if (typeof analysisMeta.hasText === "boolean") {
+    bits.push(`text:${analysisMeta.hasText ? "Y" : "N"}`);
+    details.push(`hasText=${analysisMeta.hasText}`);
+  }
+  if (typeof analysisMeta.hasImage === "boolean") {
+    bits.push(`img:${analysisMeta.hasImage ? "Y" : "N"}`);
+    details.push(`hasImage=${analysisMeta.hasImage}`);
+  }
+  if (typeof analysisMeta.textLength === "number") {
+    bits.push(`len:${analysisMeta.textLength}`);
+    details.push(`textLength=${analysisMeta.textLength}`);
+  }
+
+  if (!bits.length) {
+    return null;
+  }
+
+  const tooltip = details
+    .join(" | ")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return {
+    text: `meta ${bits.join(" · ")}`,
+    tooltip,
+  };
+}
+
+function getAnalysisBadgeToneClass(confidence) {
+  const score = Number(confidence);
+  if (!Number.isFinite(score)) {
+    return "border-violet-200 bg-violet-50 text-violet-700";
+  }
+  if (score >= 0.85) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (score >= 0.7) {
+    return "border-violet-200 bg-violet-50 text-violet-700";
+  }
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function isLowConfidenceQuestion(question, threshold = 0.7) {
+  return (
+    typeof question?.analysisConfidence === "number" &&
+    question.analysisConfidence < threshold
+  );
+}
+
+const LOW_CONFIDENCE_FILTER_STORAGE_KEY = "pdfReviewer.lowConfidenceOnly";
+
+function readLowConfidenceFilterPreference() {
+  try {
+    return window.localStorage.getItem(LOW_CONFIDENCE_FILTER_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistLowConfidenceFilterPreference(enabled) {
+  try {
+    window.localStorage.setItem(
+      LOW_CONFIDENCE_FILTER_STORAGE_KEY,
+      enabled ? "1" : "0",
+    );
+  } catch {}
+}
+
+function ensureLowConfidenceFilterInitialized() {
+  if (typeof window.lowConfidenceOnly === "boolean") return;
+  window.lowConfidenceOnly = readLowConfidenceFilterPreference();
+}
+
+function updateManualContentModeBadge(rawText = null) {
+  const badge = document.getElementById("manualContentModeBadge");
+  if (!badge) return;
+
+  const media = getActiveCaptureImagePayload();
+  const ref = getDesignatedReferenceImagePayload();
+  const currentText = rawText !== null ? String(rawText) : String(document.getElementById("manualInputText")?.value || "");
+  const verdict = classifyManualContentMode(currentText, media, ref);
+  window.pendingManualContentMode = verdict.mode;
+
+  const styleMap = {
+    text: "bg-sky-50 text-sky-700 border-sky-200",
+    image: "bg-amber-50 text-amber-700 border-amber-200",
+    mixed: "bg-violet-50 text-violet-700 border-violet-200",
+  };
+  badge.className = `text-[10px] rounded px-2 py-1 border ${styleMap[verdict.mode] || styleMap.text}`;
+  const feedback = window.pendingManualAnalysisFeedback || null;
+  const confidencePart =
+    typeof feedback?.confidence === "number"
+      ? ` · 서버신뢰도:${Math.round(feedback.confidence * 100)}%`
+      : "";
+  const serverPart = feedback?.mode
+    ? ` · 서버모드:${getContentModeLabel(feedback.mode)}`
+    : "";
+
+  badge.textContent =
+    `분석 모드: ${getContentModeLabel(verdict.mode)} · text:${verdict.textLen} · image:${verdict.hasImage ? "Y" : "N"}` +
+    `${serverPart}${confidencePart}`;
+  badge.classList.remove("hidden");
+}
+
+function updateManualImageHint() {
+  const hintEl = document.getElementById("manualImageRectHint");
+  if (!hintEl) return;
+
+  const ref = getDesignatedReferenceImagePayload();
+  if (!ref || !ref.rect) {
+    hintEl.classList.add("hidden");
+    hintEl.textContent = "";
+    return;
+  }
+
+  hintEl.textContent = `지정 이미지: ${ref.rect.page}페이지 · x:${Math.round(ref.rect.x)}, y:${Math.round(ref.rect.y)}, w:${Math.round(ref.rect.w)}, h:${Math.round(ref.rect.h)}`;
+  hintEl.classList.remove("hidden");
+  updateManualContentModeBadge();
+}
+
+async function ensureTesseractAvailable() {
+  if (window.Tesseract && typeof window.Tesseract.recognize === "function") {
+    return true;
+  }
+
+  const existing = document.getElementById("dynamic-tesseract-loader");
+  if (existing) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return !!(window.Tesseract && typeof window.Tesseract.recognize === "function");
+  }
+
+  const script = document.createElement("script");
+  script.id = "dynamic-tesseract-loader";
+  script.src = "vendor/js/tesseract.min.js";
+
+  await new Promise((resolve, reject) => {
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  }).catch(() => null);
+
+  return !!(window.Tesseract && typeof window.Tesseract.recognize === "function");
+}
+
+async function extractTextByOcrFromImage(imageDataUrl) {
+  if (!imageDataUrl) return "";
+
+  const ok = await ensureTesseractAvailable();
+  if (!ok) {
+    throw new Error("OCR 라이브러리를 로드하지 못했습니다.");
+  }
+
+  const result = await window.Tesseract.recognize(imageDataUrl, "kor+eng", {
+    logger: () => {},
+  });
+
+  return String(result?.data?.text || "")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function markCurrentAreaAsImage() {
+  const media = getActiveCaptureImagePayload();
+  const rect = window.pendingManualRect || null;
+
+  if (!media || !media.imageDataUrl) {
+    setPdfStatus("이미지로 지정할 영역이 없습니다. 먼저 PDF에서 영역을 선택하세요.", "error");
+    return;
+  }
+
+  window.pendingManualReferenceImage = {
+    imageDataUrl: media.imageDataUrl,
+    thumbnailDataUrl: media.thumbnailDataUrl,
+    width: media.width,
+    height: media.height,
+    rect: rect ? { ...rect } : null,
+  };
+
+  updateManualImageHint();
+  updateManualContentModeBadge();
+  setPdfStatus("이미지 참조 영역이 지정되었습니다. 이제 텍스트 영역을 선택해 AI 분석을 실행하세요.", "success");
+  if (typeof window.showToast === "function") {
+    window.showToast("이미지 영역 지정 완료", "success");
+  }
+}
+
 async function analyzeCurrentArea() {
   const textEl = document.getElementById("manualInputText");
-  const roundEl = document.getElementById("manualExamRound");
   const numEl = document.getElementById("manualQNum");
 
-  const rawText = textEl ? textEl.value.trim() : "";
+  let rawText = textEl ? textEl.value.trim() : "";
+  const media = getActiveCaptureImagePayload();
+  const referenceImage = getDesignatedReferenceImagePayload();
+  const needsOcr =
+    !rawText ||
+    /^\[(이미지 영역|선택 영역)\]/.test(rawText) ||
+    rawText.replace(/\s+/g, "").length < 8;
+
+  updateManualContentModeBadge(rawText);
+
+  if (needsOcr) {
+    if (!media || !media.imageDataUrl) {
+      setPdfStatus(
+        "텍스트 인식 데이터가 없습니다. 먼저 텍스트 영역을 선택하거나 이미지 지정 후 다시 시도하세요.",
+        "error",
+      );
+      return;
+    }
+
+    try {
+      setPdfStatus("텍스트 레이어가 약해 OCR 보강 중입니다...", "info");
+      const ocrText = await extractTextByOcrFromImage(media.imageDataUrl);
+      if (ocrText) {
+        rawText = ocrText;
+        if (textEl) textEl.value = ocrText;
+      }
+    } catch (ocrErr) {
+      console.warn("OCR fallback failed:", ocrErr);
+    }
+  }
+
   if (!rawText) {
     setPdfStatus(
-      "분석할 내용이 없습니다. 영역을 먼저 클릭하거나 드래그하세요.",
+      "텍스트를 인식하지 못했습니다. 텍스트/이미지 영역을 다시 지정한 뒤 재시도하세요.",
       "error",
     );
     return;
   }
 
+  updateManualContentModeBadge(rawText);
+
+  const extractedTitle = deriveTitleFromCapturedText(rawText);
+  if (numEl && extractedTitle) {
+    numEl.value = extractedTitle;
+  }
+
   setPdfStatus("AI 분석 중...", "info");
   try {
+    const verdict = classifyManualContentMode(rawText, media, referenceImage);
     // Cloudflare Worker API 또는 Local Endpoint 호출
     const response = await fetch(
       "http://localhost:8787/api/analyze-questions",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: rawText }),
+        body: JSON.stringify({
+          text: rawText,
+          imageDataUrl: media?.imageDataUrl || null,
+          referenceImageDataUrl: referenceImage?.imageDataUrl || null,
+          rect: window.pendingManualRect || null,
+          referenceRect: referenceImage?.rect || null,
+          contentMode: verdict.mode,
+          hasText: verdict.hasText,
+          hasImage: verdict.hasImage,
+          textLength: verdict.textLen,
+        }),
       },
     );
 
     if (!response.ok) throw new Error("API 연동 실패");
 
     const resData = await response.json();
+    window.pendingManualAnalysisFeedback = {
+      mode: typeof resData?.analysisMode === "string" ? resData.analysisMode : verdict.mode,
+      confidence:
+        typeof resData?.confidence === "number" ? resData.confidence : null,
+      meta: resData?.meta || null,
+    };
+    updateManualContentModeBadge(rawText);
+
     if (resData.questions && resData.questions.length > 0) {
       const q = resData.questions[0];
-      if (numEl && q.title) numEl.value = q.title;
+      if (numEl && extractedTitle) {
+        numEl.value = extractedTitle;
+      } else if (numEl && q.title) {
+        numEl.value = q.title;
+      }
       if (textEl && q.rawQuestion) textEl.value = q.rawQuestion;
       setPdfStatus(
-        "AI 분석 완료. 내역을 확인하고 '추가' 버튼을 누르세요.",
+        "AI 분석 완료. 제목이 지정되었습니다. '확정 저장' 후 '초안 작성'을 실행하세요.",
         "success",
       );
     } else {
@@ -1294,14 +2120,13 @@ async function analyzeCurrentArea() {
     }
   } catch (e) {
     console.error("AI Analyzer Error:", e);
+    window.pendingManualAnalysisFeedback = null;
+    updateManualContentModeBadge(rawText);
     setPdfStatus("API 분석에 실패했습니다. 형식만 확정합니다.", "warning");
 
     let previewTitle = numEl && numEl.value.trim() ? numEl.value.trim() : "";
     if (!previewTitle) {
-      previewTitle =
-        rawText.length > 30
-          ? rawText.slice(0, 30).trim() + "..."
-          : rawText.trim();
+      previewTitle = deriveTitleFromCapturedText(rawText);
     }
     if (numEl && !numEl.value) numEl.value = previewTitle;
   }
@@ -1332,6 +2157,10 @@ function commitAreaToList() {
   }
 
   const rectData = window.pendingManualRect || null;
+  const mediaData = window.pendingManualCaptureMedia || null;
+  const referenceImage = getDesignatedReferenceImagePayload();
+  const modeVerdict = classifyManualContentMode(text, mediaData, referenceImage);
+  const analysisFeedback = window.pendingManualAnalysisFeedback || null;
   const questions = window.currentReviewingQuestions || [];
 
   if (rectData) {
@@ -1361,18 +2190,56 @@ function commitAreaToList() {
     rect: rectData,
     modelAnswer: "",
     source: "Manual Capture",
+    contentMode: modeVerdict.mode,
+    analysisMode: analysisFeedback?.mode || null,
+    analysisMeta: analysisFeedback?.meta || null,
+    analysisConfidence:
+      typeof analysisFeedback?.confidence === "number"
+        ? analysisFeedback.confidence
+        : null,
     reviewed: false,
+    captureImage:
+      mediaData && mediaData.thumbnailDataUrl
+        ? {
+            thumbnailDataUrl: mediaData.thumbnailDataUrl,
+            width: mediaData.width,
+            height: mediaData.height,
+          }
+        : null,
+    referenceImage:
+      referenceImage && referenceImage.thumbnailDataUrl
+        ? {
+            thumbnailDataUrl: referenceImage.thumbnailDataUrl,
+            width: referenceImage.width,
+            height: referenceImage.height,
+            rect: referenceImage.rect || null,
+          }
+        : null,
   };
 
   window.currentReviewingQuestions.push(newQ);
+  window.selectedBoxIds = [newQ.id];
+  window.currentHighlightedBoxIndex = window.currentReviewingQuestions.length - 1;
+  window.currentHighlightedBoxPage = rectData?.page || window.visualCurrentPage || -1;
   window._needsCandidateRefresh = true;
+
+  // v21.6.25: 확정 저장 즉시 JSON 데이터에도 반영하여 사용자 체감 일관성 확보
+  try {
+    const data = getCurrentAnswerData();
+    if (!Array.isArray(data.questions)) data.questions = [];
+    data.questions.push({ ...newQ });
+    syncJsonAndRender(data, `문항이 저장되었습니다: ${newQ.title}`, true);
+  } catch (e) {
+    console.error("commitAreaToList 데이터 동기화 실패:", e);
+  }
+
   renderReviewerList(window.currentReviewingQuestions);
   // v21.6 캔버스 날아감 방지: 백그라운드 렌더링 대신 오버레이만 갱신
   if (currentVisualViewport) {
     updateVisualOverlayBoxes(visualCurrentPage, currentVisualViewport);
   }
   setPdfStatus(
-    "새 항목이 리뷰 목록에 등록되었습니다. 닫기 전 '적용'을 누르세요.",
+    "문항이 확정 저장되었습니다. 옆의 '초안 작성' 버튼으로 답안을 생성할 수 있습니다.",
     "success",
   );
 
@@ -1380,26 +2247,533 @@ function commitAreaToList() {
   if (textEl) textEl.value = "";
   if (numEl) numEl.value = "";
   window.pendingManualRect = null;
+  window.pendingManualCaptureMedia = null;
+  window.pendingManualReferenceImage = null;
+  window.pendingManualContentMode = null;
+  window.pendingManualAnalysisFeedback = null;
+  updateManualImageHint();
+  const badge = document.getElementById("manualContentModeBadge");
+  if (badge) {
+    badge.classList.add("hidden");
+    badge.textContent = "";
+  }
+
+  const imagePreviewEl = document.getElementById("manualCaptureImagePreview");
+  if (imagePreviewEl) {
+    imagePreviewEl.src = "";
+    imagePreviewEl.classList.add("hidden");
+  }
+}
+
+async function generateDraftForCurrentArea() {
+  const textEl = document.getElementById("manualInputText");
+  const numEl = document.getElementById("manualQNum");
+  const roundEl = document.getElementById("manualExamRound");
+  const sessionEl = document.getElementById("manualSession");
+
+  const reviewingQuestions = window.currentReviewingQuestions || [];
+  const selectedQuestionId =
+    (Array.isArray(window.selectedBoxIds) && window.selectedBoxIds[0]) || null;
+  const highlightedQuestion =
+    Number.isInteger(window.currentHighlightedBoxIndex) &&
+    window.currentHighlightedBoxIndex >= 0
+      ? reviewingQuestions[window.currentHighlightedBoxIndex]
+      : null;
+  const selectedQuestion = selectedQuestionId
+    ? reviewingQuestions.find((q) => String(q.id) === String(selectedQuestionId)) ||
+      highlightedQuestion ||
+      reviewingQuestions[reviewingQuestions.length - 1] ||
+      null
+    : highlightedQuestion || reviewingQuestions[reviewingQuestions.length - 1] || null;
+
+  const hasDirectInput = !!String(textEl?.value || "").trim();
+  let rawQuestion = String(textEl?.value || "").trim();
+  if (!rawQuestion && selectedQuestion?.rawQuestion) {
+    rawQuestion = String(selectedQuestion.rawQuestion).trim();
+    if (textEl) textEl.value = rawQuestion;
+  }
+  if (!rawQuestion) {
+    setPdfStatus(
+      "초안을 생성할 문제 텍스트가 없습니다. 문항을 선택하거나 수동 캡처 후 다시 시도하세요.",
+      "error",
+    );
+    return;
+  }
+
+  const derivedTitle = deriveTitleFromCapturedText(rawQuestion);
+  const title =
+    String(numEl?.value || "").trim() ||
+    String(selectedQuestion?.title || "").trim() ||
+    derivedTitle ||
+    "문제";
+  if (numEl && !numEl.value.trim() && title) {
+    numEl.value = title;
+  }
+
+  let examRound = "";
+  if (roundEl && roundEl.value.trim()) examRound += roundEl.value.trim();
+  if (sessionEl && sessionEl.value !== "미지정" && sessionEl.value !== "선택") {
+    examRound += (examRound ? " " : "") + sessionEl.value;
+  }
+  if (!examRound && selectedQuestion?.examRound) {
+    examRound = String(selectedQuestion.examRound).trim();
+    if (roundEl && !roundEl.value.trim()) {
+      roundEl.value = examRound;
+    }
+  }
+  if (!examRound) examRound = "미지정";
+
+  if (hasDirectInput) {
+    setPdfStatus("입력된 캡처 텍스트 기준으로 초안을 생성합니다.", "info");
+  } else if (selectedQuestion?.id) {
+    setPdfStatus(
+      `선택 문항(${selectedQuestion.title || selectedQuestion.id}) 기준으로 초안을 생성합니다.`,
+      "info",
+    );
+  }
+
+  const selectedToken = String(
+    document.getElementById("aiAvailableModelSelect")?.value || "",
+  ).trim();
+  const providerFromToken = selectedToken.includes("::")
+    ? selectedToken.split("::")[0]
+    : "";
+  const modelFromToken = selectedToken.includes("::")
+    ? selectedToken.split("::").slice(1).join("::")
+    : selectedToken;
+  const provider =
+    providerFromToken ||
+    String(document.getElementById("aiProvider")?.value || "").trim() ||
+    "gemini";
+  const model = modelFromToken || "";
+
+  const knowledgeContext = buildKnowledgeContextForDraft(rawQuestion);
+  const instruction = [
+    "당신은 토목구조기술사 고득점 답안 코치다.",
+    "딥리서치(핵심 원리/기준/실무 포인트)와 기존 지식 컨텍스트를 결합해 답안을 작성하라.",
+    "답안 형식: 번호형(1,2,3...), 도해/비교표 지시 포함, KDS 기준 근거 포함.",
+    "결론에는 기술사 관점 제언(시공성/유지관리/리스크) 3~4줄 포함.",
+    "",
+    `[문제 제목] ${title}`,
+    `[회차/교시] ${examRound}`,
+    `[문제 원문] ${rawQuestion}`,
+    "",
+    "[기존 지식 컨텍스트]",
+    knowledgeContext,
+  ].join("\n");
+
+  const planInstruction = [
+    "역할: 토목구조기술사 답안 설계자",
+    "요구: 답안을 쓰기 전에 작성 계획(Plan)만 먼저 제시",
+    "출력 형식:",
+    "1) 문제 인식 요약",
+    "2) 답안 섹션 구성(5~6개)",
+    "3) 도해 계획(최소 2개)",
+    "4) 비교표 계획(최소 1개)",
+    "5) 기준/수치/KDS 반영 계획",
+    "금지: 완성 답안 본문 작성",
+    "",
+    `[문제 제목] ${title}`,
+    `[회차/교시] ${examRound}`,
+    `[문제 원문] ${rawQuestion}`,
+    "",
+    "[기존 지식 컨텍스트]",
+    knowledgeContext,
+  ].join("\n");
+
+  const question = {
+    id: selectedQuestion?.id || "MANUAL-DRAFT",
+    title,
+    examRound,
+    rawQuestion,
+    tags: ["수동지정", "AI초안"],
+  };
+
+  const endpointInput = String(
+    document.getElementById("aiEndpointUrl")?.value || "",
+  ).trim();
+  const apiKey = String(document.getElementById("aiApiKey")?.value || "").trim();
+  let endpoint = endpointInput || "http://localhost:8787/api/generate-answer";
+  if (/\/v1\/chat\/completions/i.test(endpoint) || /:1234/i.test(endpoint)) {
+    endpoint = "http://localhost:8787/api/generate-answer";
+  } else if (!/\/api\/generate-answer\/?$/i.test(endpoint)) {
+    endpoint = endpoint.replace(/\/$/, "") + "/api/generate-answer";
+  }
+
+  const ensureAnswerEditorVisible = () => {
+    if (typeof window.showSection === "function") {
+      window.showSection("studio");
+    }
+    if (window.Studio && typeof window.Studio.switchTab === "function") {
+      window.Studio.switchTab("answers");
+    }
+
+    const answerEl = document.getElementById("studio-q-modelAnswer");
+    const formEl = document.getElementById("answerForm");
+    const anchor = answerEl || formEl;
+    if (anchor && typeof anchor.scrollIntoView === "function") {
+      anchor.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (answerEl && typeof answerEl.focus === "function") {
+      answerEl.focus();
+    }
+  };
+
+  const buildLocalManualDraft = () => {
+    const contextPreview = String(knowledgeContext || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 260);
+
+    return [
+      `1) 핵심 개념 및 배경`,
+      `- ${title}의 정의와 적용 범위를 먼저 명확히 제시한다.`,
+      `- 관련 기준(KDS/설계기준/시방)에서 요구하는 검토 항목을 연결한다.`,
+      "",
+      `2) 메커니즘·원인 분석`,
+      `- 문제 원문: ${rawQuestion.slice(0, 200)}${rawQuestion.length > 200 ? "..." : ""}`,
+      `- 하중전달/재료거동/상세(정착·이음·접합) 관점에서 원인을 단계적으로 설명한다.`,
+      "",
+      `3) 설계·시공 대책`,
+      `- 설계 검토(안전율, 한계상태, 상세치수)와 시공 품질관리(공정·검측·시험)를 분리해 기술한다.`,
+      `- 필요한 경우 비교표(대안별 장단점) 및 도해 포인트를 함께 제시한다.`,
+      "",
+      `4) 기술사형 결론`,
+      `- 경제성·시공성·유지관리·리스크를 종합해 최적 대안을 제시한다.`,
+      contextPreview ? `- 참고 컨텍스트: ${contextPreview}` : "- 참고 컨텍스트: (없음)",
+    ].join("\n");
+  };
+
+  const upsertDraftIntoData = (answerText, draftSource, draftPlanText = "") => {
+    const data = getCurrentAnswerData();
+    const arr = Array.isArray(data.questions) ? data.questions : [];
+    const normalizedPlan = String(draftPlanText || "").trim();
+
+    const selectedIndexInData = selectedQuestion?.id
+      ? arr.findIndex((q) => String(q?.id) === String(selectedQuestion.id))
+      : -1;
+    if (selectedIndexInData >= 0) {
+      const target = arr[selectedIndexInData];
+      target.modelAnswer = String(answerText || "").trim();
+      target.draftPlan = normalizedPlan || String(target.draftPlan || "").trim();
+      target.draftPlanHistory = appendDraftPlanHistoryForManual(
+        target,
+        normalizedPlan,
+      );
+      target.source = target.source
+        ? `${target.source} + ${draftSource}`
+        : draftSource;
+      target.rawQuestion = target.rawQuestion || rawQuestion;
+      target.title = target.title || title;
+      target.examRound = target.examRound || examRound;
+      syncJsonAndRender(data, `초안 작성 완료: ${target.title || title}`, true);
+      return selectedIndexInData;
+    }
+
+    const normalizedRaw = rawQuestion.replace(/\s+/g, " ").trim();
+    const reverseIdx = arr
+      .slice()
+      .reverse()
+      .findIndex((q) => {
+        const qRaw = String(q?.rawQuestion || "").replace(/\s+/g, " ").trim();
+        return qRaw && qRaw === normalizedRaw;
+      });
+    const targetIndex = reverseIdx >= 0 ? arr.length - 1 - reverseIdx : -1;
+
+    if (targetIndex >= 0) {
+      const target = arr[targetIndex];
+      target.modelAnswer = String(answerText || "").trim();
+      target.draftPlan = normalizedPlan || String(target.draftPlan || "").trim();
+      target.draftPlanHistory = appendDraftPlanHistoryForManual(
+        target,
+        normalizedPlan,
+      );
+      target.source = target.source
+        ? `${target.source} + ${draftSource}`
+        : draftSource;
+      syncJsonAndRender(data, `초안 작성 완료: ${target.title || title}`, true);
+      return targetIndex;
+    }
+
+    const newQuestion = {
+      id: `MANUAL-${Date.now()}`,
+      title,
+      examRound,
+      rawQuestion,
+      tags: ["수동지정", "AI초안"],
+      modelAnswer: String(answerText || "").trim(),
+      draftPlan: normalizedPlan,
+      draftPlanHistory: appendDraftPlanHistoryForManual({}, normalizedPlan),
+      source: draftSource,
+      reviewed: false,
+    };
+    arr.push(newQuestion);
+    data.questions = arr;
+    syncJsonAndRender(data, `초안 작성 완료: ${title}`, true);
+    return arr.length - 1;
+  };
+
+  setPdfStatus(`초안 작성 중... (${provider}${model ? ` / ${model}` : ""})`, "info");
+
+  let planText = "";
+
+  try {
+    try {
+      setPdfStatus("문제 인식/작성 계획 수립 중...", "info");
+      const planResp = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          question,
+          instruction: planInstruction,
+          provider,
+          model,
+        }),
+      });
+      if (planResp.ok) {
+        const planPayload = await planResp.json().catch(() => ({}));
+        planText = String(
+          planPayload?.answer ||
+            planPayload?.content ||
+            planPayload?.result ||
+            planPayload?.choices?.[0]?.message?.content ||
+            "",
+        ).trim();
+      }
+    } catch {
+      planText = "";
+    }
+
+    const instructionWithPlan = planText
+      ? [
+          instruction,
+          "",
+          "[사전 작성 계획 - 반드시 반영]",
+          planText,
+          "",
+          "[작성 규칙] 위 계획의 섹션/도해/비교표 계획을 실제 초안에 반영할 것.",
+        ].join("\n")
+      : instruction;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        question,
+        instruction: instructionWithPlan,
+        provider,
+        model,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const answer =
+      payload?.answer ||
+      payload?.content ||
+      payload?.result ||
+      payload?.choices?.[0]?.message?.content ||
+      "";
+
+    if (!String(answer).trim()) {
+      throw new Error("응답에 답안 텍스트가 없습니다.");
+    }
+
+    const generatedSource = `Draft(${provider}${model ? `:${model}` : ""})`;
+    let updatedIndex = -1;
+    try {
+      updatedIndex = upsertDraftIntoData(answer, generatedSource, planText);
+    } catch {
+      // 저장 동기화 실패 시에도 생성 텍스트는 에디터에 반영
+    }
+
+    const formIdEl = document.getElementById("studio-q-id");
+    const formRoundEl = document.getElementById("studio-q-examRound");
+    const formTitleEl = document.getElementById("studio-q-title");
+    const formSourceEl = document.getElementById("studio-q-source");
+    const formAnswerEl = document.getElementById("studio-q-modelAnswer");
+    const formPlanEl = document.getElementById("studio-q-draftPlan");
+
+    if (formRoundEl) formRoundEl.value = examRound;
+    if (formTitleEl) formTitleEl.value = title;
+    if (formSourceEl) formSourceEl.value = generatedSource;
+    if (formAnswerEl) {
+      formAnswerEl.value = String(answer).trim();
+    }
+    if (formPlanEl) {
+      formPlanEl.value = String(planText || "").trim();
+    }
+
+    if (updatedIndex >= 0 && typeof window.editModelAnswerEntry === "function") {
+      window.editModelAnswerEntry(updatedIndex);
+    } else if (formIdEl && !formIdEl.value) {
+      formIdEl.value = `MANUAL-${Date.now()}`;
+    }
+
+    if (typeof window.updateAttachmentBoostButtonState === "function") {
+      window.updateAttachmentBoostButtonState();
+    }
+    if (window.Studio && typeof window.Studio.refreshDraftPlanUi === "function") {
+      window.Studio.refreshDraftPlanUi();
+    }
+
+    ensureAnswerEditorVisible();
+
+    setPdfStatus("초안 작성이 완료되었습니다. 답안 에디터에서 검토 후 저장하세요.", "success");
+    if (typeof window.showToast === "function") {
+      window.showToast("초안 생성 완료: 답안 에디터에 자동 반영되었습니다.", "success");
+    }
+  } catch (error) {
+    console.error("Draft generation failed:", error);
+    const hint = [
+      "점검 순서: ① 분석 백엔드(8787) 실행 ② LM Studio 모델 로드 ③ 상단 Provider/Model 선택 확인",
+      "④ 필요 시 AI Endpoint를 /api/generate-answer 로 유지",
+    ].join(" ");
+    const fallbackAnswer = buildLocalManualDraft();
+    const fallbackSource = `DraftFallback(Local:${provider}${model ? `:${model}` : ""})`;
+
+    const formRoundEl = document.getElementById("studio-q-examRound");
+    const formTitleEl = document.getElementById("studio-q-title");
+    const formSourceEl = document.getElementById("studio-q-source");
+    const formAnswerEl = document.getElementById("studio-q-modelAnswer");
+    const formPlanEl = document.getElementById("studio-q-draftPlan");
+
+    if (formRoundEl) formRoundEl.value = examRound;
+    if (formTitleEl) formTitleEl.value = title;
+    if (formSourceEl) formSourceEl.value = fallbackSource;
+    if (formAnswerEl) formAnswerEl.value = fallbackAnswer;
+    if (formPlanEl) formPlanEl.value = String(planText || "").trim();
+
+    try {
+      const fallbackIndex = upsertDraftIntoData(
+        fallbackAnswer,
+        fallbackSource,
+        planText,
+      );
+      if (
+        fallbackIndex >= 0 &&
+        typeof window.editModelAnswerEntry === "function"
+      ) {
+        window.editModelAnswerEntry(fallbackIndex);
+      }
+    } catch {}
+
+    if (typeof window.updateAttachmentBoostButtonState === "function") {
+      window.updateAttachmentBoostButtonState();
+    }
+    if (window.Studio && typeof window.Studio.refreshDraftPlanUi === "function") {
+      window.Studio.refreshDraftPlanUi();
+    }
+
+    ensureAnswerEditorVisible();
+    setPdfStatus(
+      `백엔드 응답 실패로 로컬 초안을 자동 생성했습니다. (${error.message || "unknown"})`,
+      "success",
+    );
+    if (typeof window.showToast === "function") {
+      window.showToast(
+        `백엔드 연결 오류로 로컬 초안을 채웠습니다. (${hint})`,
+        "info",
+      );
+    }
+  }
 }
 
 function toggleAddAreaMode() {
   window.isAddAreaMode = !window.isAddAreaMode;
-  const btn = document.getElementById("toggleAddAreaBtn");
+  const btn = document.getElementById("addAreaBtn");
   const overlay = document.getElementById("pdfVisualOverlay");
+  const pageNum = window.visualCurrentPage || 1;
+  const viewport = window.currentVisualViewport;
+  if (window.Debug) {
+    window.Debug.log("area", "toggleAddAreaMode", {
+      enabled: !!window.isAddAreaMode,
+      hasOverlay: !!overlay,
+      hasButton: !!btn,
+      hasViewport: !!viewport,
+      pageNum,
+    });
+  }
+  if (!btn) {
+    setPdfStatus("영역 지정 버튼을 찾지 못했습니다.", "error");
+    return;
+  }
   if (window.isAddAreaMode) {
+    // v21.6.26: 재진입 직후(렌더 타이밍) 첫 드래그 누락 방지를 위해 즉시 핸들러 재바인딩
+    if (overlay && viewport && typeof initDragSelection === "function") {
+      initDragSelection(overlay, viewport, pageNum);
+      if (window.Debug) {
+        window.Debug.log("area", "drag selection rebound on enable", {
+          pageNum,
+        });
+      }
+    } else if (window.visualPdfDoc && typeof renderVisualPage === "function") {
+      renderVisualPage(pageNum);
+      if (window.Debug) {
+        window.Debug.warn("area", "viewport not ready, forced render", {
+          pageNum,
+        });
+      }
+    }
+
     btn.classList.add("bg-blue-600", "text-white", "border-blue-700");
     btn.classList.remove("bg-white", "text-slate-600", "border-slate-200");
+    syncAddAreaButtonState(btn, true);
     if (overlay) overlay.style.cursor = "crosshair";
     setPdfStatus(
       "영역 추가 모드가 활성화되었습니다. 드래그하여 영역을 지정하세요.",
       "info",
     );
+    flashPdfMessage("영역 지정 모드 ON", "info", 1300);
   } else {
     btn.classList.remove("bg-blue-600", "text-white", "border-blue-700");
     btn.classList.add("bg-white", "text-slate-600", "border-slate-200");
+    syncAddAreaButtonState(btn, false);
     if (overlay) overlay.style.cursor = "default";
     setPdfStatus("영역 추가 모드가 해제되었습니다.", "info");
+    flashPdfMessage("영역 지정 모드 OFF", "info", 1100);
   }
+}
+
+function bindAddAreaButton() {
+  const btn = document.getElementById("addAreaBtn");
+  if (!btn) return;
+  if (btn.dataset.boundAddArea === "1") return;
+  btn.dataset.boundAddArea = "1";
+  syncAddAreaButtonState(btn, !!window.isAddAreaMode);
+
+  btn.addEventListener("pointerdown", () => {
+    if (window.Debug) {
+      window.Debug.log("area", "addAreaBtn pointerdown", {
+        isAddAreaMode: !!window.isAddAreaMode,
+      });
+    }
+  });
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.Debug) {
+      window.Debug.log("area", "addAreaBtn click handler", {
+        before: !!window.isAddAreaMode,
+      });
+    }
+    toggleAddAreaMode();
+    if (window.Debug) {
+      window.Debug.log("area", "addAreaBtn click applied", {
+        after: !!window.isAddAreaMode,
+      });
+    }
+  });
 }
 
 function deselectAllAreas() {
@@ -1415,7 +2789,23 @@ function deselectAllAreas() {
   if (sessionEl) sessionEl.value = "미지정";
 
   window.pendingManualRect = null;
+  window.pendingManualCaptureMedia = null;
+  window.pendingManualReferenceImage = null;
+  window.pendingManualContentMode = null;
+  window.pendingManualAnalysisFeedback = null;
   window.currentHighlightedBoxIndex = null;
+  updateManualImageHint();
+  const badge = document.getElementById("manualContentModeBadge");
+  if (badge) {
+    badge.classList.add("hidden");
+    badge.textContent = "";
+  }
+
+  const imagePreviewEl = document.getElementById("manualCaptureImagePreview");
+  if (imagePreviewEl) {
+    imagePreviewEl.src = "";
+    imagePreviewEl.classList.add("hidden");
+  }
 
   // Unset selection if any active question was in resizing/moving state
   if (window.activeQuestionId !== null) endMouseInteraction();
@@ -1429,9 +2819,8 @@ function deselectAllAreas() {
 }
 
 function ignoreAllCandidatesOnPage() {
-  const isModalOpen = !document
-    .getElementById("pdfVisualModal")
-    .classList.contains("hidden");
+  const modalEl = document.getElementById("pdfVisualModal");
+  const isModalOpen = modalEl ? !modalEl.classList.contains("hidden") : true;
   const pageNum = isModalOpen
     ? window.visualCurrentPage
     : window.revCurrentPage;
@@ -1955,9 +3344,20 @@ function endMouseInteraction() {
 function initDragSelection(overlay, viewport, pageNum) {
   let dragStart = null;
   let dragRect = null;
+  let suppressOverlayClickOnce = false;
 
   // v21.6.20: overlay.onclick 방식으로 변경 (addEventListener는 페이지 전환 시 이벤트가 누적됨)
   overlay.onclick = (e) => {
+    if (suppressOverlayClickOnce) {
+      suppressOverlayClickOnce = false;
+      if (window.Debug) {
+        window.Debug.log("area", "overlay click suppressed after drag", {
+          pageNum,
+        });
+      }
+      return;
+    }
+
     if (
       !e.target.closest(".group-box") &&
       !e.target.closest(".group-candidate") &&
@@ -1975,11 +3375,20 @@ function initDragSelection(overlay, viewport, pageNum) {
 
   overlay.onmousedown = (e) => {
     if (e.button !== 0) return;
-    // 기존 박스/핸들/후보 박스/버튼 위에서는 드래그 진입하지 않음
+    const addAreaMode = !!window.isAddAreaMode;
+    if (window.Debug) {
+      window.Debug.log("area", "overlay mousedown", {
+        addAreaMode,
+        targetClass: e.target?.className || "",
+        pageNum,
+      });
+    }
+    // 기본 모드에서는 기존 박스/핸들/후보/버튼 위에서 드래그 진입하지 않음
+    // 단, 영역 지정 모드(addAreaMode)에서는 후보 박스 위에서도 드래그를 허용해야 함
     if (
       e.target.closest(".group-box") ||
       e.target.closest(".resizer") ||
-      e.target.closest(".group-candidate") ||
+      (!addAreaMode && e.target.closest(".group-candidate")) ||
       e.target.closest("button")
     )
       return;
@@ -2050,6 +3459,9 @@ function initDragSelection(overlay, viewport, pageNum) {
       return;
     }
 
+    // 드래그 완료 직후 발생하는 click 이벤트가 선택 해제/상태 덮어쓰기를 유발하지 않도록 1회 억제
+    suppressOverlayClickOnce = true;
+
     const p1 = viewport.convertToPdfPoint(minX, minY);
     const p2 = viewport.convertToPdfPoint(maxX, maxY);
 
@@ -2061,41 +3473,50 @@ function initDragSelection(overlay, viewport, pageNum) {
       h: Math.abs(p1[1] - p2[1]),
     };
 
-    if (isAddAreaMode) {
+    if (window.Debug) {
+      window.Debug.log("area", "overlay mouseup selection", {
+        pageNum,
+        addAreaMode: !!window.isAddAreaMode,
+        pdfRect,
+      });
+    }
+
+    if (window.isAddAreaMode) {
       // 영역 추가 로직: 녹색 박스 생성
       const pageData = visualTextCache.find((d) => d.page === pageNum);
-      if (pageData) {
-        // v21.6.17: texts가 null이어도 groupedBlocks에서 영역 내 텍스트 추출
-        if (pageData.texts && !pageData.groupedBlocks) {
-          pageData.groupedBlocks = groupTextItems(pageData.texts);
-          pageData.texts = null;
-        }
+      let fullText = extractSelectionTextFromBlocks(
+        pageData,
+        viewport,
+        minX,
+        minY,
+        maxX,
+        maxY,
+      );
+      const imagePayload = extractSelectionImagePayload(
+        overlay,
+        minX,
+        minY,
+        maxX,
+        maxY,
+        pdfRect,
+      );
 
-        let fullText = "수동 지정 영역";
+      if (!fullText) {
+        fullText = imagePayload
+          ? "[이미지 영역] 텍스트 레이어 미검출 (필요 시 AI/OCR 분석 사용)"
+          : "[선택 영역] 텍스트 레이어 미검출";
+      }
 
-        if (pageData.groupedBlocks && pageData.groupedBlocks.length > 0) {
-          // groupedBlocks 중 드래그 영역과 겹치는 블록들을 수집
-          const blocksInRect = pageData.groupedBlocks.filter((block) => {
-            const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([
-              block.x,
-              block.y,
-              block.x + (block.w || 20),
-              block.y + (block.h || 10),
-            ]);
-            const cx = Math.min(vx1, vx2) + Math.abs(vx2 - vx1) / 2;
-            const cy = Math.min(vy1, vy2) + Math.abs(vy2 - vy1) / 2;
-            return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
-          });
-
-          if (blocksInRect.length > 0) {
-            fullText = blocksInRect
-              .map((b) => b.str)
-              .join(" ")
-              .trim();
-          }
-        }
-
-        captureManualQuestion(fullText, pdfRect);
+      captureManualQuestion(fullText, pdfRect, imagePayload);
+      updateManualContentModeBadge(fullText);
+      if (window.Debug) {
+        window.Debug.log("area", "manual capture requested", {
+          textLen: (fullText || "").length,
+          pageNum,
+          hasPageData: !!pageData,
+          hasImage: !!(imagePayload && imagePayload.hasImage),
+          pdfRect,
+        });
       }
     } else {
       // 다중 선택 모드: 기존 박스 일괄 선택
@@ -2233,35 +3654,106 @@ function applyAndClosePdfModal() {
   }
 }
 
-/**
- * v21.6.18: '닫기' 버튼 - 변경사항 확인 후 창을 닫습니다.
- */
-function applyAndClosePdfModalWithClose() {
-  applyAndClosePdfModal();
-  closePdfVisualModal();
-}
-
-function closePdfVisualModal() {
-  document.getElementById("pdfVisualModal").classList.add("hidden");
-  document.getElementById("pdfVisualModal").classList.remove("flex");
-
-  // v21.6.15: 대규모 리소스 명시적 정리 (GC 유도)
-  window.selectedBoxIds = [];
-  window.selectedCandidateRects = [];
-  window.isAddAreaMode = false;
-  window._isUpdatingOverlay = false;
-  window._needsCandidateRefresh = true; // 다음 오픈 시 다시 계산
-
-  // 메모리 해제: 대규모 텍스트 캐시의 원본은 이미 날렸겠지만, 캐시 자체도 정리 고려
-  // 만약 아예 파일을 다시 읽게 할 거라면 window.visualTextCache = []; 가능
-  // 여기서는 단순히 카운트 캐시만 초기화
-  window._cachedGlobalCandidateCount = undefined;
-
-  const addBtn = document.getElementById("toggleAddAreaBtn");
-  if (addBtn) {
-    addBtn.classList.remove("bg-blue-600", "text-white", "border-blue-700");
-    addBtn.classList.add("bg-white", "text-slate-600", "border-slate-200");
-  }
-}
+// v21.6.22: Zoom Support for persistent viewer
+window.pdfZoomLevel = 1.5;
+window.zoomIn = function() {
+  window._userZoomTouched = true;
+  window.pdfZoomLevel += 0.2;
+  if (window.pdfZoomLevel > 3.0) window.pdfZoomLevel = 3.0;
+  if (window.visualCurrentPage) renderVisualPage(window.visualCurrentPage);
+};
+window.zoomOut = function() {
+  window._userZoomTouched = true;
+  window.pdfZoomLevel -= 0.2;
+  if (window.pdfZoomLevel < 0.5) window.pdfZoomLevel = 0.5;
+  if (window.visualCurrentPage) renderVisualPage(window.visualCurrentPage);
+};
 
 // End of pdf.js
+
+// v21.6.23: PDF 파일 선택 인풋 리스너 연결 (studio-pdf-input)
+// 상단 "파일 선택" 버튼 클릭 → input.click() → 이 리스너에서 PDF 로드 처리
+(function attachStudioPdfInputListener() {
+  function bindInput() {
+    bindAddAreaButton();
+    const pdfInput = document.getElementById("studio-pdf-input");
+    if (!pdfInput) return;
+    if (pdfInput.dataset.listenerAttached) return; // 중복 방지
+    pdfInput.dataset.listenerAttached = "1";
+
+    pdfInput.addEventListener("change", async function (e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        if (typeof setPdfStatus === "function") {
+          setPdfStatus("PDF 파일만 지원됩니다.", "error");
+        }
+        return;
+      }
+
+      if (typeof setPdfStatus === "function") {
+        setPdfStatus(`'${file.name}' 로딩 중...`, "info");
+      }
+
+      try {
+        const reader = new FileReader();
+        reader.onload = async function (ev) {
+          try {
+            const typedarray = new Uint8Array(ev.target.result);
+            const pdfjsLib = window.pdfjsLib || window["pdfjs-dist/build/pdf"];
+            if (!pdfjsLib) {
+              if (typeof setPdfStatus === "function") setPdfStatus("PDF.js 미로딩", "error");
+              return;
+            }
+            const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+            window.visualPdfDoc = pdf;
+            window.visualCurrentPage = 1;
+            window.ignoredVisualBlocks = [];
+            window.currentReviewingQuestions = window.currentReviewingQuestions || [];
+
+            // 파일 선택 즉시 Studio 뷰를 노출하여 "로드됐는데 안 보임" 체감을 방지
+            if (typeof window.showSection === "function") {
+              window.showSection("studio");
+            }
+
+            if (typeof openPdfVisualModal === "function") {
+              openPdfVisualModal();
+            }
+
+            // 레이아웃 반영 직후 한 번 더 렌더링해 숨김→표시 전환 타이밍 이슈를 완화
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(() => {
+                if (window.visualPdfDoc && typeof renderVisualPage === "function") {
+                  renderVisualPage(window.visualCurrentPage || 1);
+                }
+              });
+            }
+
+            if (typeof setPdfStatus === "function") {
+              setPdfStatus(`${file.name} (${pdf.numPages}페이지) 로드 완료`, "success");
+            }
+            if (typeof showToast === "function") {
+              showToast(`PDF '${file.name}' 로드 완료 (${pdf.numPages}p)`, "success");
+            }
+          } catch (err) {
+            console.error("[studio-pdf-input] PDF 로드 오류:", err);
+            if (typeof setPdfStatus === "function") setPdfStatus("PDF 로드 실패: " + err.message, "error");
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        console.error("[studio-pdf-input] 파일 읽기 실패:", err);
+      }
+
+      // 같은 파일 재선택을 허용하기 위해 값 초기화
+      e.target.value = "";
+    });
+  }
+
+  // DOM 준비 후 바인딩
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindInput);
+  } else {
+    bindInput();
+  }
+})();

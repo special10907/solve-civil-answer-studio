@@ -470,13 +470,225 @@ const Studio = {
     return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   },
 
+  _sanitizeDocxAuxText(rawText = "") {
+    const lines = String(rawText || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^\[web_research\]$/i.test(line))
+      .filter((line) => !/^\[mandatory_pipeline_context\]$/i.test(line))
+      .filter((line) => !/^\[deep_research_parsed\]$/i.test(line))
+      .filter((line) => !/^\[검색\s*컨텍스트\s*요약\]$/i.test(line))
+      .filter((line) => !/^\[심화\s*보강/i.test(line))
+      .filter((line) => !/^query\s*:/i.test(line))
+      .filter((line) => !/^status\s*:/i.test(line))
+      .filter((line) => !/^message\s*:/i.test(line))
+      .filter((line) => !/^title\s*:/i.test(line))
+      .filter((line) => !/^summary\s*:/i.test(line))
+      .filter((line) => !/^url\s*:/i.test(line))
+      .filter((line) => !/^references\s*:/i.test(line))
+      .filter((line) => !/^참고\s*링크\s*없음$/i.test(line))
+      .filter((line) => !/^근거첨부$/i.test(line))
+      .filter((line) => !/^-\s*요청사항\s*:/i.test(line))
+      .filter((line) => !/^-\s*탐색소스\s*:/i.test(line))
+      .filter((line) => !/^\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/i.test(line))
+      .filter((line) => !/^\|---\|---\|---\|---\|/.test(line))
+      .filter((line) => !/^\|\s*[1-5]\s*\|/.test(line));
+
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  },
+
+  _sanitizeDocxJsonPayload(llmData = {}) {
+    const safe = llmData && typeof llmData === "object" ? { ...llmData } : {};
+
+    safe.overview = this._sanitizeDocxAuxText(safe.overview || "");
+    safe.strategy = this._sanitizeDocxAuxText(safe.strategy || "");
+    safe.keywords = this._sanitizeDocxAuxText(safe.keywords || "").replace(/\n+/g, ", ");
+
+    safe.characteristics = (Array.isArray(safe.characteristics)
+      ? safe.characteristics
+      : []
+    )
+      .map((item) => {
+        const name = this._sanitizeDocxAuxText(item?.name || "");
+        const desc1 = this._sanitizeDocxAuxText(item?.desc1 || "");
+        const desc2 = this._sanitizeDocxAuxText(item?.desc2 || "");
+        if (!name && !desc1 && !desc2) return null;
+        return { name, desc1, desc2 };
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+
+    safe.insights = (Array.isArray(safe.insights) ? safe.insights : [])
+      .map((item) => {
+        const title = this._sanitizeDocxAuxText(item?.title || "");
+        const content = this._sanitizeDocxAuxText(item?.content || "");
+        if (!title && !content) return null;
+        return { title, content };
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+
+    safe.diagrams = (Array.isArray(safe.diagrams) ? safe.diagrams : [])
+      .map((item) => {
+        const title = this._sanitizeDocxAuxText(item?.title || "");
+        const content = this._sanitizeDocxAuxText(item?.content || "");
+        if (!title && !content) return null;
+        return { title, content };
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+
+    return safe;
+  },
+
+  _hasDocxPollutionSignals(input = "") {
+    const source =
+      input && typeof input === "object"
+        ? JSON.stringify(input)
+        : String(input || "");
+    const text = source.toLowerCase();
+    if (!text.trim()) return false;
+
+    const signals = [
+      "[web_research]",
+      "[mandatory_pipeline_context]",
+      "[deep_research_parsed]",
+      "[검색 컨텍스트 요약]",
+      "[심화 보강",
+      "query:",
+      "status:",
+      "message:",
+      "근거첨부",
+      "요청사항:",
+      "탐색소스:",
+      "| 단계 | 소스 | 핵심근거 | 답안 적용 |",
+      "|---|---|---|---|",
+      "참고 링크 없음",
+    ];
+
+    return signals.some((sig) => text.includes(sig));
+  },
+
+  _buildQuestionTokenSet(question = {}, max = 24) {
+    const stopwords = new Set([
+      "그리고",
+      "또한",
+      "대한",
+      "에서",
+      "으로",
+      "하는",
+      "있는",
+      "문제",
+      "검토",
+      "적용",
+      "정의",
+      "기준",
+      "구조",
+      "설계",
+    ]);
+
+    const src = `${question?.title || ""} ${question?.rawQuestion || ""}`
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣\s]/g, " ")
+      .split(/\s+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length >= 2 && !stopwords.has(w));
+
+    const uniq = [];
+    for (const token of src) {
+      if (!uniq.includes(token)) uniq.push(token);
+      if (uniq.length >= max) break;
+    }
+    return new Set(uniq);
+  },
+
+  _sanitizeDocxAnswerByQuestion(rawText = "", question = {}) {
+    const cleaned = this._sanitizeDocxAnswerText(rawText);
+    if (!cleaned) return "";
+
+    const tokenSet = this._buildQuestionTokenSet(question);
+    if (!tokenSet.size) return cleaned;
+
+    const sections = String(cleaned)
+      .split(/\n(?=\d+\.\s+)/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const hasStructuredSections = sections.length >= 2;
+    const blocks = hasStructuredSections
+      ? sections
+      : cleaned
+          .split(/\n\n+/g)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+    const seenHeaders = new Set();
+    const kept = [];
+
+    for (const block of blocks) {
+      const lines = block
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (!lines.length) continue;
+
+      const header = lines[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9가-힣\s.]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (header && seenHeaders.has(header)) {
+        continue;
+      }
+
+      const body = lines.join(" ").toLowerCase();
+      let overlap = 0;
+      for (const tk of tokenSet) {
+        if (body.includes(tk)) overlap += 1;
+      }
+
+      const essential = /결론|제언|요약|도해|비교표|기준|판정/.test(body);
+      const keep = overlap >= 1 || essential;
+      if (!keep) continue;
+
+      if (header) seenHeaders.add(header);
+      kept.push(block);
+    }
+
+    if (!kept.length) return cleaned;
+    return kept.join("\n\n").trim();
+  },
+
+  _isDRegionTopic(text = "") {
+    const src = String(text || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!src) return false;
+
+    if (/d[\s-]?region|응력\s*교란\s*구역|응력\s*교란|strut\s*[- ]?\s*tie|stm\b|스트럿\s*[-·]?\s*타이|스트럿타이/.test(src)) {
+      return true;
+    }
+
+    const hasStrut = /(^|[^a-z])strut([^a-z]|$)|스트럿/.test(src);
+    const hasTie = /(^|[^a-z])tie([^a-z]|$)|타이\s*모델|타이\s*부재|타이\s*요소/.test(src);
+    return hasStrut && hasTie;
+  },
+
   _buildRequiredVisualsForQuestion(question = {}, incomingVisuals = []) {
     const seed = `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`.toLowerCase();
-    const isDRegion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(seed);
+    const isDRegion = this._isDRegionTopic(seed);
     const sourceRows = Array.isArray(incomingVisuals) ? incomingVisuals : [];
 
     if (!isDRegion) {
-      return sourceRows;
+      const filtered = sourceRows.filter((item) =>
+        this._isVisualRelevantToQuestion(item, question),
+      );
+      if (filtered.length >= 2) {
+        return filtered.slice(0, 6);
+      }
+      return this._buildGenericFallbackVisuals(question);
     }
 
     const urlPool = sourceRows
@@ -507,10 +719,15 @@ const Studio = {
         imageUrl: pickUrl(),
       },
       {
-        kind: "image",
+        kind: "table",
         title: "B-Region vs D-Region 해석가정·절차·오류위험 비교표 이미지",
         purpose: "B-Region(선형변형률 가정)과 D-Region(STM 적용)의 해석 차이를 비교표로 제시",
-        spec: "열: 구분 | B-Region | D-Region | 행: 해석가정, 설계절차, 오류위험",
+        spec: [
+          "구분 | B-Region(선형변형률 가정) | D-Region(STM 적용)",
+          "해석가정 | 단면 변형률 선형 분포 가정 | 불연속부 비선형 응력 재분배 고려",
+          "설계절차 | 휨이론 중심 단면 검토 | Strut·Tie·Node 기반 STM 검토",
+          "오류위험 | D-Region 누락 시 과소평가 가능 | 경계 오판 시 정착/절점 취약부 과소평가",
+        ].join(" | "),
         scoringPoint: "해석가정·절차·오류위험 비교를 통한 적용 근거 명확화",
         imageUrl: pickUrl(),
       },
@@ -714,12 +931,409 @@ const Studio = {
     return overlap < 1;
   },
 
+  _computeQuestionTextOverlap(text = "", question = {}) {
+    const source = String(text || "").toLowerCase().trim();
+    if (!source) return 0;
+    const tokens = this._extractDocxKeyTokens(
+      `${question?.title || ""} ${question?.rawQuestion || ""}`,
+      24,
+    );
+    if (!tokens.length) return 0;
+    return tokens.filter((token) => source.includes(token)).length;
+  },
+
+  _isAnswerRelevantToQuestion(text = "", question = {}) {
+    const src = String(text || "").toLowerCase().trim();
+    if (!src) return false;
+
+    const overlap = this._computeQuestionTextOverlap(src, question);
+    if (overlap >= 2) return true;
+
+    const q = `${question?.title || ""} ${question?.rawQuestion || ""}`.toLowerCase();
+    const qIsDRegion = this._isDRegionTopic(q);
+    const qIsPsc = /psc|긴장재|응력부식|지연파괴|그라우팅/.test(q);
+    const aIsDRegion = this._isDRegionTopic(src);
+    const aIsPsc = /psc|긴장재|응력부식|지연파괴|그라우팅/.test(src);
+
+    if (qIsDRegion && aIsDRegion) return true;
+    if (qIsPsc && aIsPsc) return true;
+    if ((qIsDRegion && aIsPsc) || (qIsPsc && aIsDRegion)) return false;
+
+    return overlap >= 1 && src.replace(/\s+/g, "").length >= 400;
+  },
+
+  _isVisualRelevantToQuestion(visual = {}, question = {}) {
+    const body = [
+      visual?.title,
+      visual?.purpose,
+      visual?.spec,
+      visual?.scoringPoint,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!body.trim()) return false;
+
+    const overlap = this._computeQuestionTextOverlap(body, question);
+    if (overlap >= 1) return true;
+
+    const q = `${question?.title || ""} ${question?.rawQuestion || ""}`.toLowerCase();
+    const qIsDRegion = this._isDRegionTopic(q);
+    const qIsPsc = /psc|긴장재|응력부식|지연파괴|그라우팅/.test(q);
+    const vIsDRegion = this._isDRegionTopic(body);
+    const vIsPsc = /psc|긴장재|응력부식|지연파괴|그라우팅/.test(body);
+
+    if (qIsDRegion && vIsDRegion) return true;
+    if (qIsPsc && vIsPsc) return true;
+    if ((qIsDRegion && vIsPsc) || (qIsPsc && vIsDRegion)) return false;
+
+    return false;
+  },
+
+  _buildGenericFallbackVisuals(question = {}) {
+    const topic = String(question?.title || question?.rawQuestion || "핵심 구조 메커니즘")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40) || "핵심 구조 메커니즘";
+    const seed = `${question?.title || ""} ${question?.rawQuestion || ""}`.toLowerCase();
+    const isPsc = /psc|긴장재|응력부식|지연파괴|그라우팅/.test(seed);
+
+    if (isPsc) {
+      return [
+        {
+          kind: "diagram",
+          title: "PSC 정착·부식 진행 메커니즘 도해",
+          purpose: "긴장재 성능저하 경로와 취약부를 시각화",
+          spec: "요소: 정착부, 쉬스, 그라우팅 결함, 균열/부식 진행 화살표 | 판독 포인트: 원인-결과 경로",
+          scoringPoint: "응력부식·지연파괴의 인과관계 제시",
+        },
+        {
+          kind: "table",
+          title: "PSC 예방대책 비교표",
+          purpose: "설계·시공·유지관리 대책 비교",
+          spec: "구분 | 설계 단계 | 시공 단계 | 유지관리 단계 | 핵심 리스크 대응",
+          scoringPoint: "단계별 대책의 실무 적용성 제시",
+        },
+        {
+          kind: "graph",
+          title: "성능저하 추세 그래프",
+          purpose: "시간경과에 따른 성능저하 및 임계치 제시",
+          spec: "X축: 시간 | Y축: 성능지표 | 관리한계선 포함",
+          scoringPoint: "점검·보수 시점의 근거 확보",
+        },
+      ];
+    }
+
+    return [
+      {
+        kind: "diagram",
+        title: `${topic} 메커니즘 도해`,
+        purpose: "하중-저항-파괴 전이 경로 시각화",
+        spec: "요소: 하중, 지점, 주요 부재, 취약부 | 판독 포인트: 지배 거동",
+        scoringPoint: "답안 논리 흐름 가시화",
+      },
+      {
+        kind: "table",
+        title: `${topic} 대안 비교표`,
+        purpose: "안전성·시공성·경제성·유지관리성 비교",
+        spec: "항목 | 대안 A | 대안 B | 판정",
+        scoringPoint: "최종 대안 선택 근거 명확화",
+      },
+      {
+        kind: "graph",
+        title: `${topic} 성능-여유도 그래프`,
+        purpose: "조건 변화에 따른 여유도 추세 제시",
+        spec: "X축: 하중/조건 | Y축: 여유도 | 허용경계선 포함",
+        scoringPoint: "정량 근거 제시",
+      },
+    ];
+  },
+
   init() {
     console.log("Knowledge Studio Initializing...");
     this._loadDocxLogPrefs();
     this.bindEvents();
     this.updatePdfAreaView();
+    this.refreshDraftPlanUi();
     this.render();
+  },
+
+  _decodeHistoryText(encoded = "") {
+    try {
+      return decodeURIComponent(String(encoded || ""));
+    } catch {
+      return "";
+    }
+  },
+
+  _applyHistoryPlanText(encodedText = "") {
+    const textarea = document.getElementById("studio-q-draftPlan");
+    if (!textarea) return;
+    const decoded = this._decodeHistoryText(encodedText);
+    const text = String(decoded || "").trim();
+    if (!text) {
+      window.showToast?.("적용할 계획이 없습니다.", "info");
+      return;
+    }
+    textarea.value = text;
+    this.toggleDraftPlanPanel(true);
+    this.refreshDraftPlanUi();
+    window.showToast?.("히스토리 계획을 상단 패널에 적용했습니다.", "success");
+  },
+
+  _normalizePlanLines(text = "") {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  },
+
+  _tokenizePlanText(text = "", max = 200) {
+    const stop = new Set([
+      "그리고",
+      "또한",
+      "대한",
+      "에서",
+      "으로",
+      "하는",
+      "있는",
+      "검토",
+      "적용",
+      "정리",
+      "작성",
+      "계획",
+      "단계",
+      "한다",
+      "하기",
+    ]);
+
+    const tokens = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣\s]/g, " ")
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2 && !stop.has(t));
+
+    const uniq = [];
+    for (const t of tokens) {
+      if (!uniq.includes(t)) uniq.push(t);
+      if (uniq.length >= max) break;
+    }
+    return uniq;
+  },
+
+  _pickDiffFocusKeywords(onlyCurrent = [], onlyHistory = [], max = 8) {
+    const all = [...onlyCurrent, ...onlyHistory].join(" ");
+    return this._tokenizePlanText(all, 120).slice(0, max);
+  },
+
+  _highlightPlanLine(line = "", focusKeywords = []) {
+    const focusSet = new Set(
+      (Array.isArray(focusKeywords) ? focusKeywords : [])
+        .map((k) => String(k || "").toLowerCase().trim())
+        .filter(Boolean),
+    );
+    if (!focusSet.size) return this._escapeHtml(line);
+
+    return String(line || "")
+      .split(/(\s+)/)
+      .map((chunk) => {
+        if (!chunk || /^\s+$/.test(chunk)) return chunk;
+        const normalized = chunk
+          .toLowerCase()
+          .replace(/[^a-z0-9가-힣]/g, "")
+          .trim();
+        const safe = this._escapeHtml(chunk);
+        if (!normalized || !focusSet.has(normalized)) return safe;
+        return `<mark class="bg-indigo-100 text-indigo-800 px-0.5 rounded">${safe}</mark>`;
+      })
+      .join("");
+  },
+
+  _hideDraftPlanDiff() {
+    const viewer = document.getElementById("draftPlanDiffViewer");
+    const summary = document.getElementById("draftPlanDiffSummary");
+    const body = document.getElementById("draftPlanDiffBody");
+    if (viewer) viewer.classList.add("hidden");
+    if (summary) summary.textContent = "";
+    if (body) body.innerHTML = "";
+  },
+
+  _showDraftPlanDiff(encodedText = "") {
+    const currentPlan = String(
+      document.getElementById("studio-q-draftPlan")?.value || "",
+    ).trim();
+    const comparePlan = String(this._decodeHistoryText(encodedText) || "").trim();
+
+    if (!comparePlan) {
+      window.showToast?.("비교할 히스토리 계획이 없습니다.", "info");
+      return;
+    }
+    if (!currentPlan) {
+      window.showToast?.("현재 계획이 비어 있어 비교할 수 없습니다.", "info");
+      return;
+    }
+
+    const currentLines = this._normalizePlanLines(currentPlan);
+    const compareLines = this._normalizePlanLines(comparePlan);
+    const currentSet = new Set(currentLines);
+    const compareSet = new Set(compareLines);
+
+    const onlyCurrent = currentLines.filter((line) => !compareSet.has(line));
+    const onlyHistory = compareLines.filter((line) => !currentSet.has(line));
+    const currentTokens = new Set(this._tokenizePlanText(currentPlan));
+    const historyTokens = new Set(this._tokenizePlanText(comparePlan));
+    const union = new Set([...currentTokens, ...historyTokens]);
+    const intersectionSize = [...currentTokens].filter((t) =>
+      historyTokens.has(t),
+    ).length;
+    const similarity = union.size
+      ? Math.round((intersectionSize / union.size) * 100)
+      : 100;
+    const focusKeywords = this._pickDiffFocusKeywords(onlyCurrent, onlyHistory, 8);
+
+    const viewer = document.getElementById("draftPlanDiffViewer");
+    const summary = document.getElementById("draftPlanDiffSummary");
+    const body = document.getElementById("draftPlanDiffBody");
+    if (!viewer || !summary || !body) return;
+
+    const fmt = (arr = [], emptyText = "없음") =>
+      arr.length
+        ? arr
+            .map(
+              (line) =>
+                `<li class="text-[10px] text-slate-700 leading-relaxed">${this._highlightPlanLine(line, focusKeywords)}</li>`,
+            )
+            .join("")
+        : `<li class="text-[10px] text-slate-400">${emptyText}</li>`;
+
+    summary.innerHTML = `유사도 <strong>${similarity}%</strong> · 현재 전용 ${onlyCurrent.length}개 · 히스토리 전용 ${onlyHistory.length}개${focusKeywords.length ? ` · 핵심키워드: ${this._escapeHtml(focusKeywords.join(", "))}` : ""}`;
+    body.innerHTML = `
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+        <div class="text-[10px] font-bold text-emerald-700 mb-1">현재 계획에만 있는 항목</div>
+        <ul class="space-y-0.5">${fmt(onlyCurrent)}</ul>
+      </div>
+      <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-2">
+        <div class="text-[10px] font-bold text-amber-700 mb-1">선택 히스토리에만 있는 항목</div>
+        <ul class="space-y-0.5">${fmt(onlyHistory)}</ul>
+      </div>
+    `;
+
+    viewer.classList.remove("hidden");
+    window.showToast?.("계획 비교 결과를 표시했습니다.", "success");
+  },
+
+  refreshDraftPlanUi() {
+    const panel = document.getElementById("draftPlanPanel");
+    const textarea = document.getElementById("studio-q-draftPlan");
+    const stateEl = document.getElementById("draftPlanState");
+    const toggleBtn = document.getElementById("toggleDraftPlanBtn");
+    const historyEl = document.getElementById("draftPlanHistoryList");
+    if (!panel || !textarea || !stateEl || !toggleBtn) return;
+
+    const hasPlan = String(textarea.value || "").trim().length > 0;
+    stateEl.textContent = hasPlan ? "계획 있음" : "계획 없음";
+    stateEl.className = hasPlan
+      ? "text-[10px] font-bold text-emerald-700"
+      : "text-[10px] font-bold text-slate-400";
+
+    const opened = !panel.classList.contains("hidden");
+    toggleBtn.textContent = opened ? "계획 숨기기" : "계획 보기";
+
+    if (!historyEl) return;
+
+    let history = [];
+    try {
+      const data =
+        typeof window.getCurrentAnswerData === "function"
+          ? window.getCurrentAnswerData()
+          : { questions: [] };
+      const questions = Array.isArray(data?.questions) ? data.questions : [];
+      const editingIndex = Number(
+        document.getElementById("editing-questions-index")?.value,
+      );
+      const formId = String(
+        document.getElementById("studio-q-id")?.value || "",
+      ).trim();
+
+      let matched = null;
+      if (
+        Number.isInteger(editingIndex) &&
+        editingIndex >= 0 &&
+        questions[editingIndex]
+      ) {
+        matched = questions[editingIndex];
+      }
+      if (!matched && formId) {
+        matched =
+          questions.find(
+            (q) => String(q?.id || "").trim() === formId,
+          ) || null;
+      }
+      history = Array.isArray(matched?.draftPlanHistory)
+        ? matched.draftPlanHistory
+        : [];
+    } catch {
+      history = [];
+    }
+
+    const normalized = history
+      .map((entry) => {
+        if (typeof entry === "string") {
+          const text = String(entry || "").trim();
+          return text ? { text, createdAt: "" } : null;
+        }
+        if (!entry || typeof entry !== "object") return null;
+        const text = String(entry.text || entry.plan || "").trim();
+        if (!text) return null;
+        return {
+          text,
+          createdAt: String(entry.createdAt || "").trim(),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (!normalized.length) {
+      historyEl.innerHTML =
+        '<div class="text-[10px] text-slate-500">히스토리 없음</div>';
+      this._hideDraftPlanDiff();
+      return;
+    }
+
+    historyEl.innerHTML = normalized
+      .map((entry, idx) => {
+        const time = entry.createdAt
+          ? this._formatDocxTraceTime(entry.createdAt)
+          : "-";
+        const encodedText = encodeURIComponent(String(entry.text || ""));
+        return `
+          <div class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 space-y-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-bold text-slate-600">Plan #${idx + 1}</span>
+              <span class="text-[10px] text-slate-500 font-mono">${this._escapeHtml(time)}</span>
+            </div>
+            <div class="text-[10px] text-slate-700 whitespace-pre-wrap max-h-20 overflow-auto">${this._escapeHtml(entry.text)}</div>
+            <div class="flex items-center justify-end gap-1 pt-0.5">
+              <button type="button" data-history-compare="${encodedText}" class="px-1.5 py-0.5 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100">비교</button>
+              <button type="button" data-history-apply="${encodedText}" class="px-1.5 py-0.5 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100">적용</button>
+              <button type="button" data-history-copy="${encodedText}" class="px-1.5 py-0.5 text-[10px] rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100">복사</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  },
+
+  toggleDraftPlanPanel(forceOpen) {
+    const panel = document.getElementById("draftPlanPanel");
+    if (!panel) return;
+    const shouldOpen =
+      typeof forceOpen === "boolean"
+        ? forceOpen
+        : panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !shouldOpen);
+    this.refreshDraftPlanUi();
   },
 
   bindEvents() {
@@ -776,8 +1390,66 @@ const Studio = {
       });
     }
 
+    const draftPlanToggleBtn = document.getElementById("toggleDraftPlanBtn");
+    if (draftPlanToggleBtn && !draftPlanToggleBtn.dataset.boundClick) {
+      draftPlanToggleBtn.dataset.boundClick = "1";
+      draftPlanToggleBtn.addEventListener("click", () =>
+        this.toggleDraftPlanPanel(),
+      );
+    }
+
+    const draftPlanCopyBtn = document.getElementById("copyDraftPlanBtn");
+    if (draftPlanCopyBtn && !draftPlanCopyBtn.dataset.boundClick) {
+      draftPlanCopyBtn.dataset.boundClick = "1";
+      draftPlanCopyBtn.addEventListener("click", () => {
+        const text = document.getElementById("studio-q-draftPlan")?.value || "";
+        this._copyTextToClipboard(text);
+      });
+    }
+
+    const draftPlanDiffCloseBtn = document.getElementById("draftPlanDiffCloseBtn");
+    if (draftPlanDiffCloseBtn && !draftPlanDiffCloseBtn.dataset.boundClick) {
+      draftPlanDiffCloseBtn.dataset.boundClick = "1";
+      draftPlanDiffCloseBtn.addEventListener("click", () => this._hideDraftPlanDiff());
+    }
+
+    const draftPlanEl = document.getElementById("studio-q-draftPlan");
+    if (draftPlanEl && !draftPlanEl.dataset.boundInput) {
+      draftPlanEl.dataset.boundInput = "1";
+      draftPlanEl.addEventListener("input", () => this.refreshDraftPlanUi());
+      draftPlanEl.addEventListener("change", () => this.refreshDraftPlanUi());
+    }
+
+    const draftPlanHistoryEl = document.getElementById("draftPlanHistoryList");
+    if (draftPlanHistoryEl && !draftPlanHistoryEl.dataset.boundClick) {
+      draftPlanHistoryEl.dataset.boundClick = "1";
+      draftPlanHistoryEl.addEventListener("click", (event) => {
+        const compareBtn = event.target.closest("[data-history-compare]");
+        if (compareBtn) {
+          const encoded = compareBtn.getAttribute("data-history-compare") || "";
+          this._showDraftPlanDiff(encoded);
+          return;
+        }
+
+        const applyBtn = event.target.closest("[data-history-apply]");
+        if (applyBtn) {
+          const encoded = applyBtn.getAttribute("data-history-apply") || "";
+          this._applyHistoryPlanText(encoded);
+          return;
+        }
+
+        const copyBtn = event.target.closest("[data-history-copy]");
+        if (copyBtn) {
+          const encoded = copyBtn.getAttribute("data-history-copy") || "";
+          const text = this._decodeHistoryText(encoded);
+          this._copyTextToClipboard(text);
+        }
+      });
+    }
+
     this._syncDocxLogFilterUi();
     this._syncDocxPinUi();
+    this.refreshDraftPlanUi();
   },
 
   switchTab(tab) {
@@ -917,6 +1589,9 @@ const Studio = {
     if (btn) btn.textContent = "수정 저장";
 
     window.setDataStatus(`${item.id} 수정 모드`, "info");
+    if (type === "questions") {
+      this.refreshDraftPlanUi();
+    }
   },
 
   deleteEntry(type, index) {
@@ -947,6 +1622,9 @@ const Studio = {
     document.getElementById(`editing-${type}-index`).value = "";
     const btn = document.getElementById(`studio-${type}-submit-btn`);
     if (btn) btn.textContent = type === "questions" ? "답안 추가" : "이론 추가";
+    if (type === "questions") {
+      this.refreshDraftPlanUi();
+    }
   },
 
   async generateProfessionalDocx() {
@@ -984,11 +1662,24 @@ const Studio = {
     }
 
     const latestAnswerFromData = String(matchedQuestion?.modelAnswer || "").trim();
-    const effectiveModelAnswer =
-      latestAnswerFromData.length > modelAnswerText.length
-        ? latestAnswerFromData
-        : modelAnswerText;
     const effectiveRawQuestion = String(matchedQuestion?.rawQuestion || title || "").trim();
+    const formQuestionCtx = {
+      title,
+      rawQuestion: effectiveRawQuestion || title,
+    };
+    const formAnswerRelevant = this._isAnswerRelevantToQuestion(
+      modelAnswerText,
+      formQuestionCtx,
+    );
+    const dataAnswerRelevant = this._isAnswerRelevantToQuestion(
+      latestAnswerFromData,
+      formQuestionCtx,
+    );
+    const effectiveModelAnswer = formAnswerRelevant
+      ? modelAnswerText
+      : dataAnswerRelevant
+        ? latestAnswerFromData
+        : "";
 
     const insightSummary = String(window.latestAttachmentInsight?.summary || "").trim();
     const insightBoost = String(window.latestAttachmentInsight?.answerBoost || "").trim();
@@ -1021,7 +1712,7 @@ const Studio = {
 
       if (!effectiveModelAnswer || effectiveModelAnswer.length < 20) {
         window.showToast(
-          "모범 답안 본문이 짧아 일반 템플릿 문구가 생성될 수 있습니다. 본문을 먼저 보강하세요.",
+          "현재 문항과 연관된 모범답안이 부족하여, 문제 본문 중심으로 새로 생성합니다.",
           "info",
         );
       }
@@ -1103,6 +1794,30 @@ const Studio = {
         });
       }
 
+      llmData = this._sanitizeDocxJsonPayload(llmData);
+
+      if (this._hasDocxPollutionSignals(llmData)) {
+        const fallbackSeed = [
+          String(question.rawQuestion || "").trim(),
+          String(question.modelAnswer || "").trim(),
+          insightSummary,
+          insightBoost,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        llmData = this._buildDocxFallbackFromText(
+          fallbackSeed || String(aiResult.answer || ""),
+          title,
+        );
+        usedFallback = true;
+        this._setDocxGenerationModeBadge("fallback", "오염 신호 보정");
+        this._pushDocxGenerationTrace({
+          mode: "fallback",
+          detail: "메타/근거 로그 오염 신호 감지로 본문 기반 보정",
+          title,
+        });
+      }
+
       if (typeof aiResult?.answer === "string" && this._isWeakDocxAnswerText(aiResult.answer, question)) {
         const fallbackSeed = [
           String(question.rawQuestion || "").trim(),
@@ -1176,8 +1891,9 @@ const Studio = {
       const qNumMatch = (qId || "").match(/(\d+)/);
       const qNum = qNumMatch ? parseInt(qNumMatch[1]) : 1;
 
-      const sanitizedAnswerText = this._sanitizeDocxAnswerText(
+      const sanitizedAnswerText = this._sanitizeDocxAnswerByQuestion(
         question.modelAnswer || "",
+        question,
       );
 
       const payload = {

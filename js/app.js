@@ -1,16 +1,5 @@
-// --- Navigation Logic ---
-
-// --- 첨부파일 분석 파이프라인 ---
-
-// analyzeAttachedFiles 함수는 중복 선언 금지. 위에서 이미 선언된 경우 아래 선언을 제거하거나 통합해야 함.
-
-// PDF.js를 활용한 PDF 텍스트 추출 (1~2페이지만)
-
-// --- Navigation Logic (중복/문법 오류 수정) ---
-
-// --- 전역 회차 삭제 함수 (임시 구현) ---
-
 // --- Chart Initialization ---
+// (Navigation Logic, 첨부파일 파이프라인, OCR 관련 코드는 ingestion.js / ui.js로 이전 완료)
 
 // 1. Strategy Radar Chart
 const strategyCanvas = document.getElementById("strategyChart");
@@ -65,7 +54,7 @@ if (strategyCanvas) {
   });
 }
 
-// 2. Exam Distribution Chart (Doughnut)
+// 2. Exam Distribution Chart (Doughnut) - Analysis/Studio 섹션
 const examCanvas = document.getElementById("examDistChart");
 if (examCanvas) {
   const ctxExam = examCanvas.getContext("2d");
@@ -103,6 +92,50 @@ if (examCanvas) {
   });
 }
 
+// 2-b. Dashboard 미니 차트 (중복 ID 고유화 후 초기화)
+(function initDashboardMiniCharts() {
+  const examDash = document.getElementById("examDistChart-dash");
+  if (examDash) {
+    new Chart(examDash.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: ["구조역학", "RC/PSC", "강구조", "교량/유지관리", "기타"],
+        datasets: [{ data: [30, 25, 20, 15, 10], backgroundColor: ["rgba(59,130,246,0.8)","rgba(20,184,166,0.8)","rgba(249,115,22,0.8)","rgba(168,85,247,0.8)","rgba(148,163,184,0.8)"], borderWidth: 0 }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+    });
+  }
+
+  const stratDash = document.getElementById("strategyChart-dash");
+  if (stratDash) {
+    new Chart(stratDash.getContext("2d"), {
+      type: "radar",
+      data: {
+        labels: ["이론 이해도","계산 정확성","답안 형식","시간 관리","응용력"],
+        datasets: [
+          { label: "나의 스탯", data: [85, 70, 90, 80, 65], fill: true, backgroundColor: "rgba(59,130,246,0.2)", borderColor: "rgb(59,130,246)", pointRadius: 2 },
+          { label: "상위 10%", data: [95, 85, 90, 95, 80], fill: true, backgroundColor: "rgba(148,163,184,0.2)", borderColor: "rgb(148,163,184)", pointRadius: 2 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { r: { suggestedMin: 0, suggestedMax: 100 } }, plugins: { legend: { display: false } } },
+    });
+  }
+
+  const vibrDash = document.getElementById("vibrationChart-dash");
+  if (vibrDash) {
+    const labels = Array.from({ length: 50 }, (_, i) => i * 0.1);
+    const data = labels.map((t) => Math.exp(-0.05 * 2 * Math.PI * t) * Math.cos(2 * Math.PI * t));
+    new Chart(vibrDash.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: labels.map((v) => v.toFixed(1)),
+        datasets: [{ label: "진동", data, borderColor: "rgb(167,139,250)", borderWidth: 1.5, pointRadius: 0, tension: 0.4 }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } },
+    });
+  }
+})();
+
 // 3. Vibration Chart (Interactive Line)
 let vibrationChart;
 
@@ -134,7 +167,7 @@ if (bucklingCanvas) {
     designStress.push(Fcr);
   }
 
-  new Chart(ctxBuckling, {
+  window.bucklingChartInstance = new Chart(ctxBuckling, {
     type: "line",
     data: {
       labels: slenderness,
@@ -199,7 +232,9 @@ const AI_ENDPOINT_STORAGE_KEY = "solve120_ai_endpoint_v1";
 
 const AI_FOUNDRY_MODEL_STORAGE_KEY = "solve120_ai_foundry_model_v1";
 
-let lastEvaluationResults = [];
+// lastEvaluationResults — state.js evaluateRenderedAnswers()에서 직접 할당됨
+if (window.lastEvaluationResults === undefined)
+  window.lastEvaluationResults = [];
 
 let pendingDeleteIndex = -1;
 
@@ -207,13 +242,15 @@ let roundStatsChart = null;
 
 let pipelineRunning = false;
 
-let theoryAnalysisCache = {
-  duplicates: [],
-
-  reinforcements: [],
-
-  mergedDrafts: [],
-};
+// theoryAnalysisCache — state.js analyzeTheoryKnowledge()에서 갱신됨
+if (window.theoryAnalysisCache === undefined) {
+  window.theoryAnalysisCache = {
+    duplicates: [],
+    reinforcements: [],
+    mergedDrafts: [],
+  };
+}
+const theoryAnalysisCache = window.theoryAnalysisCache;
 
 window.latestAttachmentInsight = null;
 window.revCurrentPage = 1;
@@ -338,13 +375,6 @@ let dragRect = null;
 // app.js의 중복 리스너는 이중 처리/중복 confirm을 유발할 수 있어 제거함.
 
 const AI_PRESETS_STORAGE_KEY = "solve_ai_presets_v1";
-
-// Initialize PDF.js worker
-
-if (window.pdfjsLib) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-}
 
 function parseQuestionsFromText(text) {
   const cleaned = String(text || "")
@@ -492,6 +522,7 @@ Object.assign(window, {
   openDeleteConfirmModal,
 
   confirmDeleteModelAnswerEntry,
+  closeDeleteConfirmModal,
 
   cancelEditMode,
 
@@ -504,8 +535,6 @@ Object.assign(window, {
   openImportFileDialog,
 
   importAnswerDataFromFile,
-
-  addModelAnswerEntry,
 
   deleteSelectedGlobalRound,
 
@@ -624,10 +653,7 @@ safeAddListener("globalRoundSelect", "change", (event) => {
 
   if (modelInput) {
     modelInput.addEventListener("change", () => {
-      storage.setItem(
-        AI_FOUNDRY_MODEL_STORAGE_KEY,
-        modelInput.value.trim(),
-      );
+      storage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, modelInput.value.trim());
       if (typeof renderAvailableModelOptions === "function") {
         renderAvailableModelOptions(
           modelInput.value.trim() ? [modelInput.value.trim()] : [],
@@ -645,7 +671,9 @@ safeAddListener("globalRoundSelect", "change", (event) => {
           ? parseSelectedModelToken(selectedToken)
           : { provider: "", modelId: selectedToken };
 
-      modelInput.value = parsed.modelId || "";
+      if (modelInput) {
+        modelInput.value = parsed.modelId || "";
+      }
       storage.setItem(AI_FOUNDRY_MODEL_STORAGE_KEY, parsed.modelId || "");
       storage.setItem("solve120_ai_selected_model_v1", selectedToken);
 
@@ -659,14 +687,16 @@ safeAddListener("globalRoundSelect", "change", (event) => {
   const presetSelect = document.getElementById("aiModelPresets");
 
   if (presetSelect) {
-    presetSelect.addEventListener("change", (e) => applyAiPreset(e.target.value));
+    presetSelect.addEventListener("change", (e) =>
+      applyAiPreset(e.target.value),
+    );
   }
 
   loadAiPresets();
 
   // 실행 안정성 우선: 앱 시작 시 LM Studio 자동 프로브를 하지 않는다.
   // (오프라인 상태에서 /api/lmstudio-models 503 콘솔 노이즈 방지)
-  const initialModel = String(modelInput.value || "").trim();
+  const initialModel = String(modelInput?.value || "").trim();
   if (typeof renderAvailableModelOptions === "function") {
     renderAvailableModelOptions(
       initialModel ? [initialModel] : [],
@@ -688,12 +718,84 @@ if (typeof initAttachmentWebsiteControls === "function") {
 
 let saveTimeout;
 
-document
-
-  .getElementById("answerJsonInput")
-
-  .addEventListener("input", () => {
+const answerJsonInputEl = document.getElementById("answerJsonInput");
+if (answerJsonInputEl) {
+  answerJsonInputEl.addEventListener("input", () => {
     clearTimeout(saveTimeout);
-
     saveTimeout = setTimeout(() => saveAnswerData(true), 1000);
   });
+}
+
+// ─────────────────────────────────────────
+// v21.6.23: App 네임스페이스 및 initAiModels 구현
+// refreshModelList(ui.js)에서 window.App.initAiModels()를 호출함
+// ─────────────────────────────────────────
+window.App = window.App || {};
+window.App.State = window.App.State || { pdf: {} };
+
+/**
+ * AI 모델 목록 초기화 / 새로고침
+ * - 현재 선택된 AI Provider에 맞는 모델 옵션을 aiAvailableModelSelect에 채움
+ * - LM Studio가 선택된 경우 백엔드 API로 실제 모델 목록을 요청
+ */
+window.App.initAiModels = async function initAiModels() {
+  const providerEl = document.getElementById("aiProvider");
+  const modelSelect = document.getElementById("aiAvailableModelSelect");
+  if (!modelSelect) return;
+
+  const provider = providerEl ? providerEl.value : "gemini";
+
+  // CLOUD_MODEL_CATALOG는 api.js에 정의됨
+  if (typeof CLOUD_MODEL_CATALOG !== "undefined" && CLOUD_MODEL_CATALOG[provider]) {
+    const models = CLOUD_MODEL_CATALOG[provider];
+    const current = modelSelect.value;
+
+    // 옵션 재구성
+    modelSelect.innerHTML = "";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "모델 선택...";
+    modelSelect.appendChild(defaultOpt);
+
+    models.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = `${provider}::${m}`;
+      opt.textContent = m;
+      if (current && current.includes(m)) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+
+    if (typeof showToast === "function") {
+      showToast(`${provider} 모델 ${models.length}개 로드됨`, "success");
+    }
+    return;
+  }
+
+  // LM Studio: 백엔드에서 실제 목록 요청
+  if (provider === "lmstudio") {
+    try {
+      const baseUrl = typeof getBackendBaseUrl === "function" ? getBackendBaseUrl() : "http://localhost:8787";
+      const resp = await fetch(`${baseUrl}/api/lmstudio-models`, { signal: AbortSignal.timeout(3000) });
+      if (resp.ok) {
+        const json = await resp.json();
+        const modelIds = (json.data || []).map((m) => m.id || m);
+        modelSelect.innerHTML = "";
+        modelIds.forEach((id) => {
+          const opt = document.createElement("option");
+          opt.value = `lmstudio::${id}`;
+          opt.textContent = id;
+          modelSelect.appendChild(opt);
+        });
+        if (typeof showToast === "function") showToast(`LM Studio 모델 ${modelIds.length}개 감지`, "success");
+      } else {
+        if (typeof showToast === "function") showToast("LM Studio 응답 오류. 백엔드 서버를 확인하세요.", "error");
+      }
+    } catch (err) {
+      console.warn("[App.initAiModels] LM Studio 연결 실패:", err.message);
+      if (typeof showToast === "function") showToast("LM Studio에 연결할 수 없습니다.", "error");
+    }
+    return;
+  }
+
+  if (typeof showToast === "function") showToast("지원하지 않는 AI Provider입니다.", "info");
+};

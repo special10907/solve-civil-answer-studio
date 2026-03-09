@@ -167,6 +167,33 @@ function normalizeExamRound(value, fallback = "미지정") {
   return text;
 }
 
+function normalizeDraftPlanHistory(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries
+    .map((entry) => {
+      if (typeof entry === "string") {
+        const text = String(entry || "").trim();
+        return text ? { text, createdAt: "" } : null;
+      }
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const text = String(entry.text || entry.plan || "").trim();
+      if (!text) {
+        return null;
+      }
+      return {
+        text,
+        createdAt: String(entry.createdAt || "").trim(),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 function normalizeData(data) {
   const normalized = data && typeof data === "object" ? data : {};
   if (!Array.isArray(normalized.questions)) {
@@ -180,6 +207,10 @@ function normalizeData(data) {
     question.modelAnswer = question.modelAnswer || "";
     question.tags = Array.isArray(question.tags) ? question.tags : [];
     question.source = question.source || "-";
+    question.draftPlan = question.draftPlan || "";
+    question.draftPlanHistory = normalizeDraftPlanHistory(
+      question.draftPlanHistory,
+    );
     question.reviewed = !!question.reviewed;
     const fallbackRound = normalized.meta?.exam
       ? String(normalized.meta.exam).replace(/[^0-9가-힣회]/g, "") || "미지정"
@@ -2304,12 +2335,17 @@ function resetEntryForm() {
   safeSet("newQTags", "");
   safeSet("newQSource", "");
   safeSet("newQAnswer", "");
+  safeSet("newQDraftPlan", "");
+  safeSet("studio-q-draftPlan", "");
   safeSet("newQReviewed", false);
   safeSet("editingIndex", "");
   const submitBtn = document.getElementById("entrySubmitBtn");
   if (submitBtn) submitBtn.textContent = "모범답안 추가";
   if (typeof window.updateAttachmentBoostButtonState === "function") {
     window.updateAttachmentBoostButtonState();
+  }
+  if (window.Studio && typeof window.Studio.refreshDraftPlanUi === "function") {
+    window.Studio.refreshDraftPlanUi();
   }
 }
 
@@ -2388,6 +2424,7 @@ function editModelAnswerEntry(index) {
   );
   setValue("newQSource", "studio-q-source", target.source || "");
   setValue("newQAnswer", "studio-q-modelAnswer", target.modelAnswer || "");
+  setValue("newQDraftPlan", "studio-q-draftPlan", target.draftPlan || "");
 
   const reviewedEl =
     document.getElementById("newQReviewed") ||
@@ -2418,6 +2455,9 @@ function editModelAnswerEntry(index) {
   );
   if (typeof window.updateAttachmentBoostButtonState === "function") {
     window.updateAttachmentBoostButtonState();
+  }
+  if (window.Studio && typeof window.Studio.refreshDraftPlanUi === "function") {
+    window.Studio.refreshDraftPlanUi();
   }
 }
 

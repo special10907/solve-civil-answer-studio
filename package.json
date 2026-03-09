@@ -1,13 +1,23 @@
 {
   "name": "solve-civil-answer-studio",
   "version": "1.0.0",
-  "description": "Headless capture for solve_120.html",
+  "description": "Headless capture for solve_120.html and integrated backend",
   "private": true,
+  "type": "module",
   "scripts": {
-    "capture": "node ./.tools/headless_capture.js"
+    "capture": "node ./.tools/headless_capture.cjs",
+    "server": "node server/index.js",
+    "web": "python -m http.server 8000",
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
   },
   "dependencies": {
+    "body-parser": "^1.20.2",
     "canvas": "^3.2.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^4.22.1",
+    "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "^5.4.624",
     "sharp": "^0.34.5",
     "tesseract.js": "^7.0.0"

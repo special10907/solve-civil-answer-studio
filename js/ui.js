@@ -459,39 +459,170 @@ function selectAttachmentBoostTheories(targetQuestion, theories, maxItems = 3) {
     .map((row) => row.theory);
 }
 
+function isDRegionTopicForBoost(text = "") {
+  const src = String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!src) return false;
+
+  if (/d[\s-]?region|응력\s*교란\s*구역|응력\s*교란|strut\s*[- ]?\s*tie|stm\b|스트럿\s*[-·]?\s*타이|스트럿타이/.test(src)) {
+    return true;
+  }
+
+  const hasStrut = /(^|[^a-z])strut([^a-z]|$)|스트럿/.test(src);
+  const hasTie = /(^|[^a-z])tie([^a-z]|$)|타이\s*모델|타이\s*부재|타이\s*요소/.test(src);
+  return hasStrut && hasTie;
+}
+
+function inferBoostTopicType(target = {}) {
+  const seed = `${target?.title || ""} ${target?.rawQuestion || ""} ${target?.modelAnswer || ""}`;
+  const src = String(seed || "").toLowerCase();
+
+  if (isDRegionTopicForBoost(src)) {
+    return "d-region";
+  }
+  if (/psc|긴장재|부식|지연파괴|그라우팅/.test(src)) {
+    return "psc";
+  }
+  return "general";
+}
+
 function buildAttachmentBoostFallback({
   target,
   insight,
   userRequest,
-  sourceLabels,
+  sourceLabels: _sourceLabels,
   theorySnippets,
 }) {
+  const prompt = `${target?.title || ""} ${target?.rawQuestion || ""}`;
+  const isShort = /1\s*교시|10\s*점|단답|용어/.test(prompt);
+  const minChars = isShort ? 1200 : 2200;
+
   const insightBoost = String(insight?.answerBoost || "").trim();
   const summary = String(insight?.summary || "").trim();
-  const requestLine = userRequest
-    ? `- 요청 반영: ${userRequest}`
-    : "- 요청 반영: 기본 심화 보강(근거 강화 + 결론 명확화)";
-  const sourceLine = sourceLabels.length
-    ? `- 탐색 경로: ${sourceLabels.join(", ")}`
-    : "- 탐색 경로: 웹/이론/학습자료 통합";
-  const theoryLine = theorySnippets.length
-    ? `- 이론 연계: ${theorySnippets.map((item) => item.title || "이론").join(" / ")}`
-    : "- 이론 연계: 관련 이론 미매칭";
+  const answerDirection = userRequest
+    ? `${userRequest}`
+    : "정의 정확성, 메커니즘 인과성, 기준·수치 근거 중심";
+  const theoryScope = theorySnippets.length
+    ? theorySnippets.map((item) => item.title || "이론").join(" / ")
+    : "핵심어 기반 보강";
 
-  return [
-    "1. 핵심 쟁점 재정의",
+  const topicType = inferBoostTopicType(target);
+  const isDRegion = topicType === "d-region";
+  const isPsc = topicType === "psc";
+
+  const expanded = [
+    "1. 정의 및 적용 배경",
     `- 대상: ${target?.title || "문항"}`,
-    requestLine,
-    sourceLine,
-    theoryLine,
-    "2. 보강 근거",
-    summary ? `- 자료 요약: ${summary.slice(0, 280)}` : "- 자료 요약: 첨부/웹 기반 일반 심화",
+    `- 응답 방향: ${answerDirection}`,
+    isDRegion
+      ? "- 응력 교란구역(D-Region, Discontinuity Region)은 베르누이 평면유지 가정이 성립하지 않는 불연속 구간으로, 재하점·지점부·단면 급변부·개구부 인근에서 지배적으로 나타난다."
+      : isPsc
+        ? "- PSC 부재는 긴장재 정착·부식·그라우팅 결함에 따라 구조성능 저하가 급격히 진행될 수 있으므로, 하중저항 메커니즘과 내구 리스크를 통합 검토해야 한다."
+        : "- 본 문항은 하중 경로(Load Path), 내부력(Internal Force), 지배 파괴모드(Failure Mode)의 인과관계를 중심으로 해석·설계·시공·유지관리 대책을 일관되게 제시해야 한다.",
+    isDRegion
+      ? "- 따라서 단면해석 중심의 B-Region 접근만으로는 안전측 검토가 부족할 수 있으며, 하중 경로 기반의 국부 거동 검토가 필요하다."
+      : isPsc
+        ? "- 따라서 단순 강도 검토뿐 아니라 정착/부식/시공품질에 의한 성능저하 경로를 함께 점검해야 실무 안전성을 확보할 수 있다."
+        : "- 따라서 기준식 판정뿐 아니라 상세·시공 오차·운영단계 모니터링을 함께 고려해 실효성 있는 결론을 도출해야 한다.",
+    `- 관련 이론은 ${theoryScope}를 축으로 연계하여 기준·상세·시공 대책까지 일관되게 제시한다.`,
+    "",
+    "2. 거동 메커니즘 (Load Path → Internal Force → Failure Mode)",
+    isDRegion
+      ? "- 하중(Load)은 작용점에서 단면 내 압축연단/인장연단으로 전달되며, 전단지배 구간에서는 스트럿-타이(압축지주-인장타이) 거동을 동반한다."
+      : isPsc
+        ? "- 하중 전달 중 긴장재의 유효프리스트레스가 감소하면 균열 제어 및 내하력이 저하되고, 정착부/부식 취약 구간에서 파괴 위험이 증폭된다."
+        : "- 하중(Load)은 작용점에서 지점으로 전달되며, 이 과정에서 휨·전단·정착/부착 거동이 상호작용한다.",
+    isDRegion
+      ? "- 내부력 재분배 과정에서 응력집중이 발생하는 구간(재하점, 지점부, 단면 급변부)을 D-Region 후보로 식별하고, B-Region 가정과 분리해 검토한다."
+      : isPsc
+        ? "- 시공결함(그라우팅 공극·누수·염화물 유입)이 결합되면 긴장재 단면 손실과 국부 취약부가 확대되므로, 원인-결과 경로를 단계적으로 식별한다."
+        : "- 내부력 재분배 과정에서 취약 구간을 식별하고, 지배모드에 맞는 보강 상세를 우선순위화한다.",
+    "- 지배 파괴모드는 ① 휨 ② 전단 ③ 정착/부착 ④ 사용성(균열·처짐) 순으로 스크리닝하고, 최종 지배모드를 기준으로 보강 상세를 선정한다.",
+    "",
+    "3. 설계 검토 및 기준·수치 근거",
+    "- 코드 근거: KDS 관련 조항을 직접 명시하고, 설계 검토식(예: φMn ≥ Mu, Vn ≥ Vu, 정착길이 ld 검토)을 답안 본문에 병기한다.",
+    "- 수치 제시: 하중조합, 안전율/저항계수, 허용기준(균열폭·처짐)을 단위와 함께 표기한다.",
+    "- 판정 로직: 기준값 대비 여유도(Margin)를 제시하고, 여유도 부족 시 단면증대/배근보강/상세개선 대안을 제시한다.",
+    "",
+    "4. 상세·시공·유지관리 대책",
+    isDRegion
+      ? "- 상세 설계: D-Region 경계부의 정착 취약구간을 우선 식별하고 스터럽/정착길이/배근 정착상세를 보강한다."
+      : isPsc
+        ? "- 상세 설계: 긴장재 정착부, 쉬스 접합부, 그라우팅 품질 항목을 핵심 품질게이트로 설정하고 취약 상세를 우선 보강한다."
+        : "- 상세 설계: 취약 단면의 정착·전단·균열 제어 상세를 우선 식별하고 보강한다.",
+    "- 시공 관리: 배근 간섭, 피복두께, 다짐 품질, 타설 조인트를 품질게이트로 관리하여 취성파괴 위험을 억제한다.",
+    "- 유지관리: 균열폭·변위·누수 지표를 계측하고 임계치 초과 시 보수 시나리오를 즉시 적용한다.",
+    "",
+    "5. 도해 및 비교표",
+    "- [도해-1] 단면 기준 하중경로(Load Path), 내부력(휨모멘트/전단력), 취약 구간을 화살표 및 음영으로 표현",
+    isDRegion
+      ? "- [도해-2] D-Region과 B-Region 경계, 정착 취약부, 보강 상세(스터럽/정착길이) 배치도를 함께 제시"
+      : isPsc
+        ? "- [도해-2] PSC 정착부/그라우팅 취약부와 균열·부식 전이 경로를 단계도로 제시"
+        : "- [도해-2] 지배 파괴모드와 보강 상세(전단보강/정착/균열제어) 연계 배치도를 제시",
+    "- [비교표] 대안 A/B를 안전성·시공성·경제성·유지관리성·리스크(균열/내구) 항목으로 정량·정성 비교",
+    "",
+    "6. 결론 및 기술사 제언",
+    summary
+      ? `- 출처 요약 반영: ${summary.slice(0, 420)}`
+      : "- 출처 요약 반영: 첨부/웹 자료 핵심 포인트를 구조화하여 결론부에 연결함.",
     insightBoost
-      ? `- 기존 인사이트: ${insightBoost.slice(0, 320)}`
-      : "- 기존 인사이트: 없음(직접 심화 생성)",
-    "3. 답안 추가 문단",
-    "- 기준·메커니즘·실무 대책(시공/유지관리) 순으로 결론을 강화한다.",
+      ? `- 추가 근거: ${insightBoost.slice(0, 420)}`
+      : "- 추가 근거: 기준/수치/KDS 근거를 결론부까지 연결하고, 점검주기·모니터링 항목을 운영계획으로 명시함.",
+    "- 제언: 시공 단계 품질게이트(배근·정착·타설)와 유지관리 단계 모니터링(균열폭, 변위, 누수)을 연동한 폐루프 관리체계를 적용한다.",
   ].join("\n");
+
+  const compact = expanded.replace(/\s+/g, "").length;
+  if (compact >= minChars) {
+    return expanded;
+  }
+
+  const padding = [
+    "",
+    "[분량 보강 블록]",
+    "- 추가 검토: 하중조합별 지배 단면을 재산정하고, 취약 단면의 보강 전/후 여유도 변화를 정리한다.",
+    "- 추가 검토: 시공 단계 오차(피복두께, 정착길이, 다짐 품질)가 내구성·균열 제어에 미치는 영향을 사례 기반으로 기술한다.",
+    "- 추가 검토: 유지관리 단계에서 점검주기, 계측항목, 임계치 초과 시 대응 프로토콜을 제시한다.",
+  ].join("\n");
+
+  return `${expanded}${padding}`.trim();
+}
+
+function sanitizeBoostForExamSubmission(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\[심화\s*보강/i.test(line))
+    .filter((line) => !/^-\s*요청사항\s*:/i.test(line))
+    .filter((line) => !/^-\s*탐색소스\s*:/i.test(line))
+    .filter((line) => !/^\[연계\s*이론\s*스니펫\]/i.test(line))
+    .filter((line) => !/^\[분량\s*보강\s*블록\]/i.test(line))
+    .filter((line) => !/^\[검색\s*컨텍스트\s*요약\]/i.test(line))
+    .filter((line) => !/^근거첨부$/i.test(line))
+    .filter((line) => !/본\s*답안은.*원칙으로\s*작성/i.test(line))
+    .filter((line) => !/근거\s*반영\s*범위/i.test(line))
+    .filter((line) => !/연계\s*이론\s*축/i.test(line))
+    .filter((line) => !/^[-–—]\s*응답\s*방향\s*:/i.test(line))
+    .filter((line) => !/^-\s*요청\s*반영\s*:/i.test(line))
+    .filter((line) => !/^-\s*탐색\s*경로\s*:/i.test(line))
+    .filter((line) => !/^-\s*탐색소스\s*:/i.test(line))
+    .filter((line) => !/^-\s*이론\s*연계\s*:/i.test(line))
+    .filter((line) => !/^-\s*채점관\s*관점\s*핵심\s*:/i.test(line))
+    .filter((line) => !/^\d+\.\s*문제\s*재정의\s*및\s*채점\s*포인트/.test(line))
+    .filter((line) => !/^4\.\s*근거\s*통합/.test(line))
+    .filter((line) => !/^\|\s*단계\s*\|\s*소스\s*\|\s*핵심근거\s*\|\s*답안\s*적용\s*\|/i.test(line))
+    .filter((line) => !/^\|---\|---\|---\|---\|/.test(line))
+    .filter((line) => !/^\|\s*[1-5]\s*\|/.test(line))
+    .filter((line) => !/^\|\s*#\s*\|\s*이론명\s*\|/.test(line))
+    .filter((line) => !/^\|\s*\d+\s*\|/.test(line));
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 async function generateDeepAttachmentBoost({
@@ -523,15 +654,18 @@ async function generateDeepAttachmentBoost({
 
   const instruction = [
     "역할: 토목구조기술사 답안 심화 코치",
-    "목표: 기존 답안이 만족스럽지 않을 때, 추가 보강 문단을 생성한다.",
+    "목표: 기존 답안에 바로 붙일 수 있는 '직접 답안형 보강 문단'을 생성한다.",
     `탐색 경로(우선): ${sourceLabels.length ? sourceLabels.join(", ") : "웹 딥리서치, 이론 자료, Notebook LM, Flowith, 인터넷 검색"}`,
     userRequest
       ? `사용자 요청사항(최우선 반영): ${userRequest}`
       : "사용자 요청사항: 없음(기본 심화 보강)",
     "작성 규칙:",
-    "- 불필요한 서론 없이 바로 보강 본문 작성",
+    "- 절대 메타 지시문(예: 작성합니다/포함합니다) 금지, 직접 답안 문장으로 작성",
+    "- 번호형 개조식(예: 5., 5.1, 5.2)으로 바로 제출 가능한 본문 작성",
     "- 기준/메커니즘/실무대책/결론의 4단 구조",
-    "- 수험 답안에 바로 붙여넣기 가능한 개조식",
+    "- 최소 분량: 1교시는 1200자 이상, 2~4교시는 2200자 이상",
+    "- 제출 본문에는 탐색 로그/타임스탬프/근거첨부 표를 쓰지 않는다(내부 audit로만 관리)",
+    "- [도해] 1개, [비교표] 1개를 본문에 명시",
     "- 기존 답안과 중복 최소화",
     "",
     "[첨부/웹 인사이트 요약]",
@@ -550,8 +684,40 @@ async function generateDeepAttachmentBoost({
     modelAnswer: target?.modelAnswer || "",
   };
 
+  const sourceBundle = {
+    blocks: {
+      storedTheory: theorySnippets.length
+        ? theorySnippets
+            .map((item, idx) => {
+              const body = String(item?.content || "")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 180);
+              return `- 저장 이론 ${idx + 1}: ${item?.title || "이론"} | ${body}`;
+            })
+            .join("\n")
+        : "- 저장 이론 매칭 없음",
+      notebookLm: sourceLabels.includes("Notebook LM")
+        ? `- Notebook LM 활성 | ${insightSummary.slice(0, 180) || "요약 없음"}`
+        : "- Notebook LM 비활성",
+      flowith: sourceLabels.includes("Flowith 지식정원")
+        ? `- Flowith 활성 | ${insightBoost.slice(0, 180) || "보강 없음"}`
+        : "- Flowith 비활성",
+      insight: `- 웹/첨부 인사이트: ${insightSummary.slice(0, 260) || "없음"}`,
+    },
+  };
+
   try {
-    const response = await window.generateAnswer(questionPayload, instruction, "text");
+    const response = await window.generateAnswer(
+      questionPayload,
+      instruction,
+      "text",
+      {
+        mandatoryPipeline: true,
+        sourceBundle,
+        outputStyle: "exam-answer",
+      },
+    );
     return String(response?.answer || "").trim();
   } catch {
     return "";
@@ -730,6 +896,76 @@ async function runAttachmentOcr(source) {
   }
 }
 
+function scoreDecodedAttachmentText(text) {
+  const raw = String(text || "");
+  if (!raw) return 0;
+
+  const controlCount = Array.from(raw).reduce((acc, ch) => {
+    const code = ch.charCodeAt(0);
+    if ((code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31)) {
+      return acc + 1;
+    }
+    return acc;
+  }, 0);
+
+  const replacementPenalty = (raw.match(/�/g) || []).length * 5;
+  const controlPenalty = controlCount * 4;
+  const hangulBonus = (raw.match(/[가-힣]/g) || []).length * 2;
+  const printable = (raw.match(/[\p{L}\p{N}\p{P}\p{Zs}]/gu) || []).length;
+  const mojibakePenalty = (raw.match(/[ÃÂâ€™â€œâ€â€˜]/g) || []).length * 3;
+
+  return printable + hangulBonus - replacementPenalty - controlPenalty - mojibakePenalty;
+}
+
+function repairUtf8FromLatin1LikeText(text) {
+  const source = String(text || "");
+  if (!source) return source;
+
+  try {
+    const bytes = Uint8Array.from(
+      Array.from(source).map((ch) => ch.charCodeAt(0) & 0xff),
+    );
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return source;
+  }
+}
+
+async function decodeTextFileSmart(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const candidates = ["utf-8", "euc-kr", "windows-1252", "iso-8859-1"];
+
+  let best = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const encoding of candidates) {
+    try {
+      const decoded = new TextDecoder(encoding, { fatal: false }).decode(bytes);
+      const repaired = repairUtf8FromLatin1LikeText(decoded);
+      const scoreDecoded = scoreDecodedAttachmentText(decoded);
+      const scoreRepaired = scoreDecodedAttachmentText(repaired);
+      const candidate = scoreRepaired > scoreDecoded ? repaired : decoded;
+      const candidateScore = Math.max(scoreDecoded, scoreRepaired);
+
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore;
+        best = candidate;
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  if (best) return best;
+
+  try {
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
 async function extractPdfPageTextWithOcr(page) {
   try {
     const viewport = page.getViewport({ scale: 2.2 });
@@ -749,7 +985,7 @@ async function readAttachmentTextExcerpt(file) {
   const type = file.type || "";
 
   if (type.startsWith("text/") || ["txt", "md", "csv", "json"].includes(ext)) {
-    const text = await file.text();
+    const text = await decodeTextFileSmart(file);
     return text.slice(0, 50000); // 5000 -> 50000 확장
   }
 
@@ -1074,25 +1310,68 @@ async function applyAttachmentInsightToQuestion() {
       theorySnippets,
     });
 
-    const finalBoost = String(generatedBoost || "").trim() ||
-      buildAttachmentBoostFallback({
-        target,
-        insight,
-        userRequest,
-        sourceLabels,
-        theorySnippets,
-      });
+    const looksLikeWeakBoost = (text) => {
+      const src = String(text || "").toLowerCase();
+      if (!src) return true;
+      const genericPatterns = [
+        "핵심 개념은 하중(load) 전달 경로와 저항(resistance) 메커니즘의 정합성",
+        "설계 검토는 1) 지배 하중조합",
+        "도해는 하중 작용점",
+        "최종 제언은 시공 오차 저감",
+        "정의 및 핵심 개념",
+        "도해 1개",
+        "비교표 1개",
+      ];
+      const genericHit = genericPatterns.filter((p) => src.includes(p)).length;
+      const hasDiagram = /\[도해-?1\]|\[도해-?2\]|\[도해\]/.test(src);
+      const hasQuestionAnalysis = /문제\s*핵심\s*분석|지배\s*파괴모드|검토\s*순서/.test(src);
+      const hasConclusion = /결론|기술사\s*제언/.test(src);
+      const compactLen = src.replace(/\s+/g, "").length;
+      return (
+        genericHit >= 2 ||
+        compactLen < 1200 ||
+        !hasDiagram ||
+        !hasQuestionAnalysis ||
+        !hasConclusion
+      );
+    };
 
-    const requestLine = userRequest ? `요청사항: ${userRequest}` : "요청사항: 기본 심화";
-    const sourceLine = sourceLabels.length
-      ? `탐색소스: ${sourceLabels.join(", ")}`
-      : "탐색소스: 기본(웹/이론/학습자료)";
-    const timestamp = new Date().toLocaleString("ko-KR");
-    const boostHeader = `[심화 보강 ${timestamp}]\n- ${requestLine}\n- ${sourceLine}`;
-    const boostBlock = `\n\n${boostHeader}\n${finalBoost}`;
+    const generatedTrimmed = String(generatedBoost || "").trim();
+    const finalBoost =
+      generatedTrimmed && !looksLikeWeakBoost(generatedTrimmed)
+        ? generatedTrimmed
+        : buildAttachmentBoostFallback({
+            target,
+            insight,
+            userRequest,
+            sourceLabels,
+            theorySnippets,
+          });
+
+    const sanitizedBoost = sanitizeBoostForExamSubmission(finalBoost);
+    const boostBlock = `\n\n${sanitizedBoost}`;
     const currentAnswer = String(target.modelAnswer || "").trim();
 
-    target.modelAnswer = `${currentAnswer}${boostBlock}`.trim();
+    const looksLikeGenericScaffold = (text) => {
+      const src = String(text || "").toLowerCase();
+      if (!src) return true;
+      const patterns = [
+        "정의 및 핵심 개념",
+        "문제의 핵심 개념을 영어 병기",
+        "하중, 저항, 파괴모드를",
+        "도해 1개",
+        "비교표 1개",
+      ];
+      const hit = patterns.filter((p) => src.includes(p)).length;
+      const compactLen = src.replace(/\s+/g, "").length;
+      return hit >= 2 || compactLen < 350;
+    };
+
+    if (looksLikeGenericScaffold(currentAnswer)) {
+      target.modelAnswer = sanitizedBoost;
+    } else {
+      target.modelAnswer = `${currentAnswer}${boostBlock}`.trim();
+    }
 
     if (!target.source || target.source === "-") {
       target.source = "Intelligence Hub DeepBoost";
@@ -1105,6 +1384,14 @@ async function applyAttachmentInsightToQuestion() {
         data,
         `${target.id || `Q${selectedIndex + 1}`} 문항 심화 보강 완료`,
       );
+    }
+
+    if (typeof window.editModelAnswerEntry === "function") {
+      try {
+        window.editModelAnswerEntry(selectedIndex);
+      } catch {
+        // 편집 폼 동기화 실패 시에도 보강 반영 자체는 유지
+      }
     }
 
     const statusDetail = sourceLabels.length
