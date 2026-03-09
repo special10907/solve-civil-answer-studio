@@ -458,6 +458,65 @@ const Studio = {
     };
   },
 
+  _sanitizeDocxAnswerText(rawText = "") {
+    const lines = String(rawText || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/시각화\s*요약/i.test(line))
+      .filter((line) => !/^\d+\)\s*(그림|표|그래프)\s*[:：]/i.test(line))
+      .filter((line) => !/^[-*•]\s*(목적|작성\s*기준|채점\s*포인트)\s*[:：]/i.test(line));
+
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  },
+
+  _buildRequiredVisualsForQuestion(question = {}, incomingVisuals = []) {
+    const seed = `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`.toLowerCase();
+    const isDRegion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(seed);
+    const sourceRows = Array.isArray(incomingVisuals) ? incomingVisuals : [];
+
+    if (!isDRegion) {
+      return sourceRows;
+    }
+
+    const urlPool = sourceRows
+      .map((row) => String(row?.imageUrl || "").trim())
+      .filter(Boolean);
+
+    let cursor = 0;
+    const pickUrl = () => {
+      if (cursor >= urlPool.length) return "";
+      return urlPool[cursor++];
+    };
+
+    return [
+      {
+        kind: "diagram",
+        title: "하중점→지점 하중경로 및 Strut·Tie·Node 도해",
+        purpose: "하중 전달 경로와 Strut(압축)·Tie(인장)·Node를 시각적으로 제시",
+        spec: "요소: 하중점, 지점, Strut(압축), Tie(인장), Node | 표현: 하중/내부력 화살표(→) | 판독 포인트: 지배 파괴모드와 보강상세 연결",
+        scoringPoint: "STM 핵심 메커니즘을 빠르게 판독 가능하게 제시",
+        imageUrl: pickUrl(),
+      },
+      {
+        kind: "image",
+        title: "D-Region과 B-Region 경계 단면 도해",
+        purpose: "D-Region/B-Region 경계를 단면도에 함께 표시하여 적용 해석법 차이를 제시",
+        spec: "요소: 단면 경계, D/B 구역, 재하점·지점 | 표현: 경계선/해칭 + 주석 | 판독 포인트: 영역별 해석 접근 차이",
+        scoringPoint: "경계 설정과 적용 해석법의 정합성 확보",
+        imageUrl: pickUrl(),
+      },
+      {
+        kind: "image",
+        title: "B-Region vs D-Region 해석가정·절차·오류위험 비교표 이미지",
+        purpose: "B-Region(선형변형률 가정)과 D-Region(STM 적용)의 해석 차이를 비교표로 제시",
+        spec: "열: 구분 | B-Region | D-Region | 행: 해석가정, 설계절차, 오류위험",
+        scoringPoint: "해석가정·절차·오류위험 비교를 통한 적용 근거 명확화",
+        imageUrl: pickUrl(),
+      },
+    ];
+  },
+
   _ensureDocxDiagramRule(content = "") {
     const source = String(content || "").trim();
     const lines = source
@@ -1080,8 +1139,19 @@ const Studio = {
 
       llmData = this._enforceDocxVisualizationRules(llmData, question);
 
-      if (Array.isArray(aiResult?.visuals) && aiResult.visuals.length) {
-        llmData.visuals = aiResult.visuals
+      const normalizedVisuals = Array.isArray(aiResult?.visuals)
+        ? aiResult.visuals
+        : Array.isArray(llmData?.visuals)
+          ? llmData.visuals
+          : [];
+
+      const requiredVisuals = this._buildRequiredVisualsForQuestion(
+        question,
+        normalizedVisuals,
+      );
+
+      if (Array.isArray(requiredVisuals) && requiredVisuals.length) {
+        llmData.visuals = requiredVisuals
           .map((item) => {
             if (!item || typeof item !== "object") return null;
             return {
@@ -1106,6 +1176,10 @@ const Studio = {
       const qNumMatch = (qId || "").match(/(\d+)/);
       const qNum = qNumMatch ? parseInt(qNumMatch[1]) : 1;
 
+      const sanitizedAnswerText = this._sanitizeDocxAnswerText(
+        question.modelAnswer || "",
+      );
+
       const payload = {
         title,
         exam_no: examNo,
@@ -1113,7 +1187,7 @@ const Studio = {
         q_num: qNum,
         docx_style: "submission",
         raw_question: question.rawQuestion || "",
-        answer_text: question.modelAnswer || "",
+        answer_text: sanitizedAnswerText,
         llm_data: llmData,
       };
 

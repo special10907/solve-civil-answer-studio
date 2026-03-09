@@ -125,6 +125,9 @@ def _is_noise_line(text):
         r"^\|\s*단계\s*\|\s*소스\s*\|",
         r"^\|\s*---",
         r"^\|\s*[1-5]\s*\|",
+        r"시각화\s*요약",
+        r"^\d+\)\s*(그림|표|그래프)\s*[:：]",
+        r"^[-*•]\s*(목적|작성\s*기준|채점\s*포인트)\s*[:：]",
         r"^\[?OCR\]?",
         r"텍스트\s*레이어\s*(없음|미존재|누락)",
         r"image\s*text\s*layer\s*(missing|not\s*found)",
@@ -386,8 +389,19 @@ def _download_image_from_url(image_url, out_path):
     )
 
     try:
-        with urlopen(req, timeout=8) as response:
-            raw = response.read(5 * 1024 * 1024)
+        with urlopen(req, timeout=10) as response:
+            chunks = []
+            total = 0
+            max_bytes = 20 * 1024 * 1024
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    return False
+                chunks.append(chunk)
+            raw = b"".join(chunks)
     except OSError:
         return False
 

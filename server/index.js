@@ -341,7 +341,7 @@ function sanitizeExamAnswerText(text = "") {
     .filter((line) => !/^references\s*:/i.test(line))
     .filter((line) => !/^참고\s*링크\s*없음$/i.test(line))
     .filter((line) => !/^근거첨부$/i.test(line))
-    .filter((line) => !/^시각화\s*요약\s*\(그림·표·그래프\)/i.test(line))
+    .filter((line) => !/시각화\s*요약/i.test(line))
     .filter((line) => !/^\d+\)\s*(그림|표|그래프)\s*:/i.test(line))
     .filter((line) => !/^[-–—]\s*(목적|작성\s*기준|채점\s*포인트)\s*:/i.test(line))
     .filter((line) => !/^-\s*요청사항\s*:/i.test(line))
@@ -896,18 +896,18 @@ async function extractImageCandidatesFromReference(refUrl = "") {
   }
 
   try {
-    const response = await axios.get(src, {
-      timeout: 7000,
-      maxRedirects: 3,
-      responseType: "text",
+    const response = await fetch(src, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
-      validateStatus: (status) => status >= 200 && status < 400,
+      signal: AbortSignal.timeout(7000),
     });
+    if (!response.ok) {
+      return [];
+    }
 
-    const html = String(response?.data || "");
+    const html = String(await response.text() || "");
     if (!html) return [];
 
     const candidates = [];
@@ -943,6 +943,165 @@ async function extractImageCandidatesFromReference(refUrl = "") {
   }
 }
 
+function isPreferredImageUrl(url = "") {
+  const safe = normalizeHttpUrl(url);
+  if (!safe) return false;
+  return /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(safe);
+}
+
+function isStructuralImageCandidate(url = "") {
+  const src = String(url || "").toLowerCase();
+  if (!src) return false;
+
+  const include = [
+    "truss",
+    "bridge",
+    "beam",
+    "column",
+    "concrete",
+    "reinforced",
+    "bending",
+    "shear",
+    "moment",
+    "stress",
+    "strain",
+    "load",
+    "node",
+    "diagram",
+    "struct",
+  ];
+  const exclude = [
+    "aircraft",
+    "fighter",
+    "rafale",
+    "missile",
+    "bird",
+    "animal",
+    "portrait",
+    "celebrity",
+  ];
+
+  if (exclude.some((w) => src.includes(w))) return false;
+  return include.some((w) => src.includes(w));
+}
+
+function isImageTitleRelevant(title = "", query = "") {
+  const t = String(title || "").toLowerCase();
+  const qTokens = String(query || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3)
+    .filter((w) => !["and", "for", "with", "the", "model"].includes(w));
+
+  if (!qTokens.length) return true;
+  const hit = qTokens.filter((tk) => t.includes(tk)).length;
+  return hit >= 1;
+}
+
+async function fetchWikipediaImageUrlsByQuery(query = "", max = 3) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+
+  try {
+    const endpoint =
+      "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*" +
+      `&generator=search&gsrsearch=${encodeURIComponent(q)}` +
+      "&gsrlimit=8&prop=pageimages&piprop=original|thumbnail&pithumbsize=1400";
+
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(7000),
+      headers: {
+        "User-Agent": "solve-civil-answer-studio/1.0 (image-fallback)",
+      },
+    });
+    if (!response.ok) return [];
+    const payload = await response.json().catch(() => null);
+    const pages = payload?.query?.pages && typeof payload.query.pages === "object"
+      ? Object.values(payload.query.pages)
+      : [];
+
+    const out = [];
+    for (const p of pages) {
+      const original = normalizeHttpUrl(p?.original?.source || "");
+      const thumb = normalizeHttpUrl(p?.thumbnail?.source || "");
+      const candidate = isPreferredImageUrl(original) ? original : thumb;
+      if (!candidate || !isPreferredImageUrl(candidate)) continue;
+      if (!out.includes(candidate)) out.push(candidate);
+      if (out.length >= max) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWikimediaCommonsImageUrlsByQuery(query = "", max = 3) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+
+  try {
+    const endpoint =
+      "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*" +
+      `&generator=search&gsrsearch=${encodeURIComponent(q)}` +
+      "&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url&iiurlwidth=1400";
+
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(7000),
+      headers: {
+        "User-Agent": "solve-civil-answer-studio/1.0 (image-fallback)",
+      },
+    });
+    if (!response.ok) return [];
+    const payload = await response.json().catch(() => null);
+    const pages = payload?.query?.pages && typeof payload.query.pages === "object"
+      ? Object.values(payload.query.pages)
+      : [];
+
+    const out = [];
+    for (const p of pages) {
+      const title = String(p?.title || "").trim();
+      if (!isImageTitleRelevant(title, q)) continue;
+
+      const thumb = normalizeHttpUrl(p?.imageinfo?.[0]?.thumburl || "");
+      const original = normalizeHttpUrl(p?.imageinfo?.[0]?.url || "");
+      const picked = isPreferredImageUrl(thumb)
+        ? thumb
+        : isPreferredImageUrl(original)
+          ? original
+          : "";
+
+      if (!picked) continue;
+      if (!out.includes(picked)) out.push(picked);
+      if (out.length >= max) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function collectOpenKnowledgeImageUrls(question = {}, max = 3) {
+  const queries = buildVisualImageFallbackQueries(question);
+  const out = [];
+
+  for (const q of queries) {
+    const wiki = await fetchWikipediaImageUrlsByQuery(q, max);
+    for (const url of wiki) {
+      if (!out.includes(url)) out.push(url);
+      if (out.length >= max) return out;
+    }
+
+    const commons = await fetchWikimediaCommonsImageUrlsByQuery(q, max);
+    for (const url of commons) {
+      if (!out.includes(url)) out.push(url);
+      if (out.length >= max) return out;
+    }
+  }
+
+  return out;
+}
+
 async function collectRelatedImageUrlsFromDeepResearch(parsed = {}, max = 3) {
   const refs = Array.isArray(parsed?.references) ? parsed.references : [];
   if (!refs.length) return [];
@@ -965,7 +1124,10 @@ async function collectRelatedImageUrlsFromDeepResearch(parsed = {}, max = 3) {
 function attachImageUrlsToVisuals(visuals = [], imageUrls = []) {
   const rows = Array.isArray(visuals) ? visuals : [];
   const imgs = Array.isArray(imageUrls)
-    ? imageUrls.map((u) => normalizeHttpUrl(u)).filter(Boolean)
+    ? imageUrls
+        .map((u) => normalizeHttpUrl(u))
+        .filter(Boolean)
+        .filter((u) => isStructuralImageCandidate(u))
     : [];
 
   if (!rows.length || !imgs.length) return rows;
@@ -1164,8 +1326,9 @@ function buildVisualImageFallbackQueries(question = {}) {
 
   if (isDRegion) {
     return [
-      "Strut and Tie Model D-Region load path diagram reinforced concrete",
-      "B-Region D-Region comparison STM reinforced concrete",
+      "reinforced concrete strut and tie model diagram",
+      "D-region B-region reinforced concrete beam column joint",
+      "load path strut tie node concrete structure",
     ];
   }
 
@@ -1177,6 +1340,14 @@ function buildVisualImageFallbackQueries(question = {}) {
   }
 
   return [];
+}
+
+function buildStructuralBackstopQueries() {
+  return [
+    "reinforced concrete beam bending diagram",
+    "truss bridge load path structure",
+    "shear force bending moment structural diagram",
+  ];
 }
 
 function parseJsonObjectFromText(content = "") {
@@ -2044,6 +2215,55 @@ app.post("/api/generate-answer", async (req, res) => {
     }
   }
 
+  if (!relatedImageUrls.length) {
+    const openSourceUrls = await collectOpenKnowledgeImageUrls(question, 3);
+    for (const url of openSourceUrls) {
+      if (!relatedImageUrls.includes(url)) {
+        relatedImageUrls.push(url);
+      }
+      if (relatedImageUrls.length >= 3) break;
+    }
+  }
+
+  const isDRegionQuestion = /d-region|응력\s*교란|응력교란|스트럿|타이|stm/.test(
+    `${String(question?.title || "")} ${String(question?.rawQuestion || "")}`.toLowerCase(),
+  );
+
+  if (isDRegionQuestion) {
+    const structuralCount = relatedImageUrls.filter((u) =>
+      isStructuralImageCandidate(u),
+    ).length;
+
+    if (structuralCount < 3) {
+      for (const q of buildStructuralBackstopQueries()) {
+        const wiki = await fetchWikipediaImageUrlsByQuery(q, 3);
+        const commons = await fetchWikimediaCommonsImageUrlsByQuery(q, 3);
+        for (const u of [...wiki, ...commons]) {
+          const safe = normalizeHttpUrl(u);
+          if (!safe || !isStructuralImageCandidate(safe)) continue;
+          if (!relatedImageUrls.includes(safe)) {
+            relatedImageUrls.push(safe);
+          }
+          if (relatedImageUrls.filter((x) => isStructuralImageCandidate(x)).length >= 3) {
+            break;
+          }
+        }
+        if (relatedImageUrls.filter((x) => isStructuralImageCandidate(x)).length >= 3) {
+          break;
+        }
+      }
+    }
+  }
+
+  const curatedRelatedImageUrls = Array.from(
+    new Set(
+      relatedImageUrls
+        .map((u) => normalizeHttpUrl(u))
+        .filter(Boolean)
+        .filter((u) => (isDRegionQuestion ? isStructuralImageCandidate(u) : true)),
+    ),
+  ).slice(0, 6);
+
   if (strictMandatory && stepChecks && !stepChecks.allPassed) {
     return res.status(424).json({
       ok: false,
@@ -2090,12 +2310,12 @@ app.post("/api/generate-answer", async (req, res) => {
     const visualized = ensureVisualGuideInAnswer(result, question);
     const withImages = attachImageUrlsToVisuals(
       visualized.visuals,
-      relatedImageUrls,
+      curatedRelatedImageUrls,
     );
     return {
       answer: visualized.answer,
       visuals: withImages,
-      relatedImages: relatedImageUrls,
+      relatedImages: curatedRelatedImageUrls,
     };
   };
 
@@ -2142,9 +2362,9 @@ app.post("/api/generate-answer", async (req, res) => {
           answer: fallbackVisualized.answer,
           visuals: attachImageUrlsToVisuals(
             fallbackVisualized.visuals,
-            relatedImageUrls,
+            curatedRelatedImageUrls,
           ),
-          relatedImages: relatedImageUrls,
+          relatedImages: curatedRelatedImageUrls,
           source: "local-fallback",
           context,
           mandatoryPipeline: !!mandatoryPipeline,
@@ -2205,9 +2425,9 @@ app.post("/api/generate-answer", async (req, res) => {
       answer: fallbackVisualized.answer,
       visuals: attachImageUrlsToVisuals(
         fallbackVisualized.visuals,
-        relatedImageUrls,
+        curatedRelatedImageUrls,
       ),
-      relatedImages: relatedImageUrls,
+      relatedImages: curatedRelatedImageUrls,
       source: "local-fallback",
       context,
       mandatoryPipeline: !!mandatoryPipeline,
@@ -2245,9 +2465,9 @@ app.post("/api/generate-answer", async (req, res) => {
     answer: fallbackVisualized.answer,
     visuals: attachImageUrlsToVisuals(
       fallbackVisualized.visuals,
-      relatedImageUrls,
+      curatedRelatedImageUrls,
     ),
-    relatedImages: relatedImageUrls,
+    relatedImages: curatedRelatedImageUrls,
     source: "local-fallback",
     context,
     mandatoryPipeline: !!mandatoryPipeline,
