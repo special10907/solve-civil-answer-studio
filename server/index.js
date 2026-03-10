@@ -2067,7 +2067,17 @@ app.post("/api/lmstudio-models", async (req, res) => {
       process.env.LM_STUDIO_BASE_URL ||
       "http://127.0.0.1:1234",
   ).trim();
-  const normalizedBaseUrl = rawBaseUrl.replace(/\/$/, "");
+
+  // Normalize and sanitize incoming base URL: strip trailing known LM Studio/OpenAI-compatible paths
+  let normalizedBaseUrl = rawBaseUrl.replace(/\/$/, "");
+  // Remove common LM Studio endpoints that may have been provided accidentally
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/v1\/chat\/completions\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/v1\/responses\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/v1\/completions\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/v1\/models\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/api\/lmstudio-models\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/api\/v1\/chat\/?$/i, "");
+  normalizedBaseUrl = normalizedBaseUrl.replace(/\/$/, "");
 
   const candidates = [];
   const pushCandidate = (url) => {

@@ -344,17 +344,109 @@ const Studio = {
   _extractJsonCandidate(text) {
     const source = String(text || "").trim();
     if (!source) return "";
-
+    // 1) extract fenced JSON block if present
     const fenced = source.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (fenced?.[1]) return fenced[1].trim();
 
-    const start = source.indexOf("{");
-    const end = source.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      return source.slice(start, end + 1).trim();
+    // 2) attempt to extract any JSON-like substrings and pick the most plausible
+    const candidates = [];
+    // find braces-balanced substrings using simple scan
+    for (let i = 0; i < source.length; i++) {
+      if (source[i] !== '{' && source[i] !== '[') continue;
+      const openChar = source[i];
+      const closeChar = openChar === '{' ? '}' : ']';
+      let depth = 0;
+      for (let j = i; j < source.length; j++) {
+        const ch = source[j];
+        if (ch === openChar) depth++;
+        else if (ch === closeChar) depth--;
+        if (depth === 0) {
+          const substr = source.slice(i, j + 1);
+          candidates.push(substr);
+          break;
+        }
+      }
     }
 
-    return source;
+    // fallback: entire source as one candidate
+    if (!candidates.length) candidates.push(source);
+
+    const normalize = (s) => String(s || '')
+      .replace(/\uFEFF/g, '') // BOM
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '') // control chars
+      .replace(/[“”]/g, '"').replace(/[‘’]/g, "'") // smart quotes
+      .replace(/\r\n?/g, '\n')
+      .trim();
+
+    const repair = (raw) => {
+      let c = normalize(raw);
+      // Remove code block fences inside
+      c = c.replace(/```[\s\S]*?```/g, '');
+      // Replace unescaped newlines inside strings by escaped newline when they look like string breaks
+      c = c.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (m) => m.replace(/\n/g, '\\n'));
+      // Remove trailing commas before } or ]
+      c = c.replace(/,\s*([}\]])/g, '$1');
+      // Collapse multiple commas
+      c = c.replace(/,\s*,+/g, ',');
+      // Replace single quotes around simple tokens to double quotes
+      c = c.replace(/'([^'\\]*)'/g, '"$1"');
+      // Ensure property names are quoted (simple heuristic: words before colon)
+      c = c.replace(/([,{\s])(\w[\w\d_-]*)\s*:/g, '$1"$2":');
+      // Remove stray backticks
+      c = c.replace(/`/g, '');
+      // Reduce excessive backslashes
+      c = c.replace(/\\{2,}/g, '\\');
+      return c;
+    };
+
+    // Try parsing candidates, prefer the one that parses or is largest after repair
+    let best = null;
+    for (const cand of candidates) {
+      try {
+        const attempt = repair(cand);
+        JSON.parse(attempt);
+        return attempt;
+      } catch (e) {
+        // keep largest repaired candidate for fallback
+        const rep = repair(cand);
+        if (!best || rep.length > best.length) best = rep;
+      }
+    }
+
+    // final fallback: try a more aggressive extraction (strip leading non-json text
+    // and take the first balanced braces block) then attempt repair+parse.
+    try {
+      const firstBraceIdx = source.search(/[\[{]/);
+      if (firstBraceIdx >= 0) {
+        // find matching close for the first opening brace
+        const openChar = source[firstBraceIdx];
+        const closeChar = openChar === '{' ? '}' : ']';
+        let depth = 0;
+        for (let j = firstBraceIdx; j < source.length; j++) {
+          const ch = source[j];
+          if (ch === openChar) depth++;
+          else if (ch === closeChar) depth--;
+          if (depth === 0) {
+            const aggressive = source.slice(firstBraceIdx, j + 1);
+            const rep = repair(aggressive);
+            try {
+              JSON.parse(rep);
+              console.debug('Studio._extractJsonCandidate: aggressive parse succeeded');
+              return rep;
+            } catch {
+              // continue to fallback
+            }
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore aggressive attempt errors
+      console.debug('Studio._extractJsonCandidate: aggressive attempt failed', e);
+    }
+
+    // final fallback: return the best repaired candidate or the original source
+    return best || source;
   },
 
   _buildDocxFallbackFromText(rawText, title = "") {

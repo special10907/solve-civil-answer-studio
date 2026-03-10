@@ -1580,8 +1580,48 @@
       </div>
     </div>
 
-    <!-- Legacy container placeholders (safe, hidden) -->
-    <div id="toast-container" class="hidden" aria-hidden="true"></div>
+    <div
+      id="pipelineAuditModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4"
+    >
+      <div class="w-full max-w-2xl rounded-xl bg-white border border-slate-200 shadow-xl p-5 overflow-auto max-h-[80vh]">
+        <h4 class="text-lg font-bold text-slate-800 mb-2">파이프라인 감사 (pipelineAudit)</h4>
+        <p class="text-sm text-slate-600 mb-2">서버에서 반환한 파이프라인 감사 정보를 확인하세요. 부족한 항목을 보강한 뒤 재시도하십시오.</p>
+        <div id="pipelineAuditGuide" class="text-sm text-slate-700 mb-3 bg-amber-50 p-3 rounded">
+          <strong>보강 가이드 (요약)</strong>
+          <ul class="mt-2 ml-4 list-disc">
+            <li><strong>저장자료:</strong> 관련 교재/노트/내부 문서의 근거 링크 또는 요약을 첨부하세요.</li>
+            <li><strong>NotebookLM:</strong> NotebookLM에서 해당 문항 관련 추출 결과(요약/참조)를 활성화하세요.</li>
+            <li><strong>Flowith 지식정원:</strong> Flowith에 관련 지식(노드/요약)을 연결하거나 요약을 붙이세요.</li>
+            <li><strong>딥리서치:</strong> 웹 딥리서치를 통해 최소 1개 이상의 신뢰 가능한 참조(URL)를 확보하세요.</li>
+            <li><strong>통합작성:</strong> 위 근거들을 통합한 sourceBundle(요약 블록)을 제공하세요.</li>
+          </ul>
+          <div class="mt-2 text-xs text-slate-500">각 항목을 채운 뒤 다시 시도하면 강제 파이프라인 모드에서 성공 확률이 높아집니다.</div>
+        </div>
+        <pre id="pipelineAuditContent" class="text-xs text-slate-700 bg-slate-50 p-3 rounded mb-4 overflow-auto" style="white-space:pre-wrap; word-break:break-word; max-height:28vh;"></pre>
+        <div class="mb-3">
+          <label class="inline-flex items-center mr-4"><input id="pipeline_check_stored" type="checkbox" class="mr-2">저장자료 보강</label>
+          <label class="inline-flex items-center mr-4"><input id="pipeline_check_notebook" type="checkbox" class="mr-2">NotebookLM 보강</label>
+          <label class="inline-flex items-center mr-4"><input id="pipeline_check_flowith" type="checkbox" class="mr-2">Flowith 보강</label>
+          <label class="inline-flex items-center mr-4"><input id="pipeline_check_deep" type="checkbox" class="mr-2">딥리서치 참조 확보</label>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="pipelineRetryLast(false)" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">재시도(강제 해제)</button>
+          <button type="button" onclick="pipelineRetryLast(true)" class="px-3 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700">재시도(강제 유지)</button>
+          <button type="button" onclick="closePipelineAuditModal()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">닫기</button>
+        </div>
+        <div class="mt-4">
+          <h5 class="text-sm font-medium text-slate-700 mb-2">재시도 로그</h5>
+          <div id="pipelineAuditLog" class="text-xs text-slate-700 bg-slate-50 p-2 rounded max-h-36 overflow-auto" style="white-space:pre-wrap; word-break:break-word;"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="closePipelineAuditModal()" class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300">닫기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legacy container placeholders (safe) -->
+    <div id="toast-container" aria-hidden="true"></div>
     <div id="pdfVisualModal" class="hidden" aria-hidden="true"></div>
     <button id="entrySubmitBtn" type="button" class="hidden" aria-hidden="true">모범답안 추가</button>
     <input id="newQReviewed" type="checkbox" class="hidden" aria-hidden="true" />

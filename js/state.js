@@ -2386,6 +2386,49 @@ function confirmDeleteModelAnswerEntry() {
   closeDeleteConfirmModal();
 }
 
+function openPipelineAuditModal(payload) {
+  try {
+    const modal = document.getElementById("pipelineAuditModal");
+    const content = document.getElementById("pipelineAuditContent");
+    if (!modal || !content) return;
+    const pretty = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+    content.textContent = pretty;
+
+    // If there's a dedicated guide container, populate summary guidance based on audit
+    try {
+      const guideEl = document.getElementById("pipelineAuditGuide");
+      if (guideEl && payload && typeof payload === "object") {
+        // build a short checklist status
+        const audit = payload;
+        const parts = [];
+        parts.push(`<div class=\"text-sm font-medium mb-2\">파이프라인 상태 요약</div>`);
+        parts.push(`<ul class=\"ml-4 list-disc text-sm\">`);
+        parts.push(`<li>딥리서치 실행: ${audit.deepResearchExecuted ? "예" : "아니오"}</li>`);
+        parts.push(`<li>딥리서치 구조화(Parsed): ${audit.deepResearchParsed ? "예" : "아니오"}</li>`);
+        parts.push(`<li>딥리서치 활용 가능성: ${audit.deepResearchUsable ? "예" : "아니오"}</li>`);
+        parts.push(`<li>참조 수: ${audit.deepResearchReferences || 0}</li>`);
+        parts.push(`</ul>`);
+        parts.push(`<div class=\"mt-2 text-xs text-slate-500\">권장: "아니오" 항목을 우선 보강하세요. 저장자료/NotebookLM/Flowith/웹딥리서치 중 하나 이상을 추가하면 재시도 가능합니다.</div>`);
+        guideEl.innerHTML = parts.join("");
+      }
+    } catch (e) {
+      console.error("pipeline guide render failed", e);
+    }
+
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  } catch (e) {
+    console.error("openPipelineAuditModal error:", e);
+  }
+}
+
+function closePipelineAuditModal() {
+  const modal = document.getElementById("pipelineAuditModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+}
+
 function cancelEditMode() {
   resetEntryForm();
   setDataStatus("수정 모드를 취소했습니다.", "info");
@@ -2657,6 +2700,46 @@ function importAnswerDataFromFile(event) {
   };
 
   reader.readAsText(file, "utf-8");
+}
+// Pipeline audit modal helpers
+function openPipelineAuditModal(payload) {
+  const modal = document.getElementById('pipelineAuditModal');
+  const content = document.getElementById('pipelineAuditContent');
+  if(content) content.textContent = JSON.stringify(payload, null, 2);
+  // reset checkboxes
+  ['pipeline_check_stored','pipeline_check_notebook','pipeline_check_flowith','pipeline_check_deep'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.checked = false;
+  });
+  // store last payload for retry
+  window.__lastPipelineAudit = payload;
+  if(modal) modal.classList.remove('hidden');
+}
+
+function closePipelineAuditModal() {
+  const modal = document.getElementById('pipelineAuditModal');
+  if(modal) modal.classList.add('hidden');
+}
+
+// Retry helper invoked by modal buttons
+function pipelineRetryLast(forceMandatory) {
+  const payload = window.__lastPipelineAudit;
+  if(!payload) return closePipelineAuditModal();
+  // collect user-checked hints
+  const hints = {};
+  ['stored','notebook','flowith','deep'].forEach(k=>{
+    const el = document.getElementById('pipeline_check_'+k);
+    if(el && el.checked) hints[k] = true;
+  });
+  // call api retry hook if available
+  if(window.pipelineAuditRetry) {
+    try {
+      window.pipelineAuditRetry({payload, hints, forceMandatory});
+    } catch (e) {
+      console.warn('pipelineAuditRetry handler failed', e);
+    }
+  }
+  closePipelineAuditModal();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

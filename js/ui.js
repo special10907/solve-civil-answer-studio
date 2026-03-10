@@ -719,7 +719,36 @@ async function generateDeepAttachmentBoost({
       },
     );
     return String(response?.answer || "").trim();
-  } catch {
+  } catch (err) {
+    // If backend returned a structured payload (e.g., 424 mandatory_pipeline_incomplete), show details
+    const payload = err && err.payload ? err.payload : null;
+    if (payload && payload.pipelineAudit) {
+      const audit = payload.pipelineAudit;
+      const refs = `딥리서치 참조 수: ${audit.deepResearchReferences || 0}`;
+      const missingSteps = [];
+      if (!audit.deepResearchParsed) missingSteps.push("딥리서치(구조화) 부족");
+      if (!audit.stepChecks || !audit.stepChecks.allPassed) missingSteps.push("강제 단계 미통과");
+      const msg = `강제 파이프라인 불충분: ${missingSteps.join(", ")}. ${refs}. 자세한 내용은 서버의 pipelineAudit를 확인하세요.`;
+      if (typeof window.showToast === "function") {
+        window.showToast(msg, "error");
+      } else {
+        setBackendStatus(msg, "error");
+      }
+      // open modal with full audit details if available
+      if (typeof window.openPipelineAuditModal === "function") {
+        try {
+          window.openPipelineAuditModal(payload.pipelineAudit);
+        } catch (e) {
+          console.error("Failed to open pipeline audit modal:", e);
+        }
+      }
+    } else {
+      if (typeof window.showToast === "function") {
+        window.showToast("강제 파이프라인 검증 실패: 저장자료/NotebookLM/Flowith/딥리서치 중 근거가 부족합니다.", "error");
+      } else {
+        setBackendStatus("강제 파이프라인 검증 실패: 저장자료/NotebookLM/Flowith/딥리서치 중 근거가 부족합니다.", "error");
+      }
+    }
     return "";
   }
 }

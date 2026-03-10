@@ -245,7 +245,11 @@ async function generateAnswer(
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
+      const err = new Error(errorData.error || `HTTP ${response.status}`);
+      // attach status and parsed payload for callers to inspect (e.g., pipelineAudit)
+      err.status = response.status;
+      err.payload = errorData;
+      throw err;
     }
     return response.json();
   } catch (error) {
@@ -253,6 +257,107 @@ async function generateAnswer(
     throw error;
   }
 }
+
+// Handler used by pipeline audit modal to retry the last failed request
+window.pipelineAuditRetry = async function ({ payload, hints = {}, forceMandatory = true } = {}) {
+  try {
+    const last = window.__lastPipelineRequest;
+    if (!last || !last.endpoint || !last.requestBody) {
+      window.showToast && window.showToast('재시도 실패: 최근 요청 정보가 없습니다.', 'error');
+      return null;
+    }
+
+    const endpoint = last.endpoint;
+    const apiKey = last.apiKey || '';
+    const selectedModelId = last.selectedModelId || '';
+    const providerValue = last.providerValue || '';
+
+    const body = JSON.parse(JSON.stringify(last.requestBody || {}));
+    // apply user choice: if forceMandatory === false, disable mandatoryPipeline
+    if (forceMandatory === false) {
+      body.mandatoryPipeline = false;
+    } else if (typeof body.mandatoryPipeline === 'undefined') {
+      body.mandatoryPipeline = true;
+    }
+
+    // merge hints into sourceBundle if present
+    if (!body.sourceBundle || typeof body.sourceBundle !== 'object') {
+      body.sourceBundle = {};
+    }
+    body.sourceBundle.auditHints = {
+      ...(body.sourceBundle.auditHints || {}),
+      ...(hints || {}),
+    };
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      window.showToast && window.showToast(`재시도 실패: ${err?.message || err?.error || 'Server Error'}`, 'error');
+      // append to pipelineAuditLog if present
+      try {
+        const logEl = document.getElementById('pipelineAuditLog');
+        if (logEl) {
+          const time = new Date().toISOString();
+          const entry = `【${time}】 재시도 실패\n${JSON.stringify(err, null, 2)}\n`;
+          logEl.textContent = entry + '\n' + logEl.textContent;
+        }
+      } catch (e) {}
+      return { ok: false, error: err };
+    }
+
+    const payloadResp = await resp.json().catch(() => null);
+    window.showToast && window.showToast('재시도 요청이 성공했습니다. 결과를 확인하세요.', 'success');
+    // optionally surface results to UI
+    try {
+      const logEl = document.getElementById('pipelineAuditLog');
+      if (logEl) {
+        const time = new Date().toISOString();
+        const summary = {
+          status: 'ok',
+          model: selectedModelId || providerValue || 'unknown',
+          mandatory: !!body.mandatoryPipeline,
+          diagnostics: payloadResp?.llmDiagnostics || null,
+        };
+        const entry = `【${time}】 재시도 성공\n${JSON.stringify(summary, null, 2)}\n`;
+        logEl.textContent = entry + '\n' + logEl.textContent;
+      }
+    } catch (e) {}
+    if (payloadResp && payloadResp.answer) {
+      try {
+        // try to insert into current dataset if applicable
+        const data = window.getCurrentAnswerData ? window.getCurrentAnswerData() : null;
+        if (data && Array.isArray(data.questions)) {
+          // if last request included question, find matching by id
+          const qid = body.question?.id || body.question?.title || null;
+          if (qid) {
+            const idx = data.questions.findIndex(q=>String(q.id||q.title||'') === String(body.question.id||body.question.title||''));
+            if (idx >= 0) {
+              data.questions[idx].modelAnswer = String(payloadResp.answer || '').trim();
+              if (window.syncJsonAndRender) {
+                window.syncJsonAndRender(data);
+              }
+            }
+          }
+        }
+      } catch {}
+
+    }
+
+    return { ok: true, payload: payloadResp };
+  } catch (e) {
+    console.error('pipelineAuditRetry failed', e);
+    window.showToast && window.showToast('재시도 중 오류가 발생했습니다.', 'error');
+    return { ok: false, error: e };
+  }
+};
 
 async function requestDocxGeneration(payload) {
   const base = await discoverAnalyzeBackendBaseUrl();
@@ -2541,6 +2646,24 @@ async function generateDraftAnswersByApi(options = {}) {
         const serverMsg = String(
           errPayload?.message || errPayload?.error || `HTTP ${response.status}`,
         );
+        // If backend indicates mandatory pipeline incomplete, surface audit modal
+        if (response.status === 424 && errPayload?.pipelineAudit) {
+          try {
+            // store last request for potential retry
+            window.__lastPipelineRequest = { endpoint, requestBody, apiKey, selectedModelId, providerValue };
+            if (typeof window.openPipelineAuditModal === 'function') {
+              window.openPipelineAuditModal(errPayload.pipelineAudit);
+            }
+          } catch (e) {
+            console.warn('Failed to open pipeline audit modal', e);
+          }
+          // throw a specific error so caller can handle if needed
+          const e = new Error(serverMsg);
+          e.status = response.status;
+          e.payload = errPayload;
+          throw e;
+        }
+
         throw new Error(serverMsg);
       }
 
