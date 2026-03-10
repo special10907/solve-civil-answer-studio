@@ -1647,6 +1647,41 @@
       // 렌더링 잠금
       window._isRenderingPage = null;
     </script>
+    <!-- Fallback stubs: 안전을 위해 모달/재시도 헬퍼가 정의되지 않았을 때 no-op 구현 제공 -->
+    <script>
+      (function(){
+        function warnOnce(name){
+          var k = '__fallback_warn_' + name;
+          if(window[k]) return;
+          window[k] = true;
+          try{ console.warn('[Fallback] ' + name + ' was not defined; installed no-op stub.'); }catch(e){}
+        }
+
+        if(typeof window.openPipelineAuditModal !== 'function'){
+          window.openPipelineAuditModal = function(payload){
+            warnOnce('openPipelineAuditModal');
+            try{
+              var modal = document.getElementById && document.getElementById('pipelineAuditModal');
+              var content = document.getElementById && document.getElementById('pipelineAuditContent');
+              if(content) content.textContent = typeof payload === 'string' ? payload : (window.JSON ? JSON.stringify(payload, null, 2) : String(payload));
+              if(modal) modal.classList.remove('hidden');
+            }catch(e){}
+          };
+        }
+
+        if(typeof window.closePipelineAuditModal !== 'function'){
+          window.closePipelineAuditModal = function(){ warnOnce('closePipelineAuditModal'); try{ var m = document.getElementById && document.getElementById('pipelineAuditModal'); if(m) m.classList.add('hidden'); }catch(e){} };
+        }
+
+        if(typeof window.pipelineAuditRetry !== 'function'){
+          window.pipelineAuditRetry = async function(opts){ warnOnce('pipelineAuditRetry'); console.warn('[Fallback] pipelineAuditRetry invoked (no-op)'); return { ok: false, error: 'fallback' }; };
+        }
+
+        if(typeof window.pipelineRetryLast !== 'function'){
+          window.pipelineRetryLast = function(force){ warnOnce('pipelineRetryLast'); try{ if(window.pipelineAuditRetry) window.pipelineAuditRetry({ forceMandatory: !!force }); }catch(e){} };
+        }
+      })();
+    </script>
     <script src="js/utils.js?v=21.6.23"></script>
     <script src="js/state.js?v=21.6.30"></script>
     <script src="js/api.js?v=21.6.23"></script>

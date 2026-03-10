@@ -261,9 +261,15 @@ async function generateAnswer(
 // Handler used by pipeline audit modal to retry the last failed request
 window.pipelineAuditRetry = async function ({ payload, hints = {}, forceMandatory = true } = {}) {
   try {
+    // diagnostic hook for E2E: collect internal steps
+    try {
+      window.__pipelineAuditRetryDiagnostics = window.__pipelineAuditRetryDiagnostics || [];
+      window.__pipelineAuditRetryDiagnostics.push({ step: 'start', ts: Date.now(), payload, hints, forceMandatory });
+    } catch (e) {}
     const last = window.__lastPipelineRequest;
     if (!last || !last.endpoint || !last.requestBody) {
       window.showToast && window.showToast('재시도 실패: 최근 요청 정보가 없습니다.', 'error');
+      try { window.__pipelineAuditRetryDiagnostics.push({ step: 'no-last-request' }); } catch (e) {}
       return null;
     }
 
@@ -289,31 +295,68 @@ window.pipelineAuditRetry = async function ({ payload, hints = {}, forceMandator
       ...(hints || {}),
     };
 
-    const resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
+    try { window.__pipelineAuditRetryDiagnostics.push({ step: 'before-fetch-retry', endpoint, body }); } catch (e) {}
+    // keep a lightweight fetch status log for E2E visibility
+    try { window.__lastFetchStatuses = window.__lastFetchStatuses || []; window.__lastFetchStatuses.push({ url: endpoint, stage: 'fetch-start', ts: Date.now(), bodyPreview: (JSON.stringify(body || {})).slice(0,2000) }); } catch (e) {}
+
+    // perform the POST and capture raw text when possible
+    let _rawRespText = null;
+    let resp = null;
+    try {
+      resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      try {
+        _rawRespText = await resp.clone().text();
+      } catch (e) {
+        _rawRespText = null;
+      }
+
+      try { window.__lastFetchStatuses.push({ url: endpoint, stage: 'fetch-end', ts: Date.now(), status: resp.status, ok: !!resp.ok, bodyPreview: (_rawRespText || '').slice(0,2000) }); } catch (e) {}
+    } catch (fetchErr) {
+      try { window.__lastFetchStatuses.push({ url: endpoint, stage: 'fetch-error', ts: Date.now(), message: String(fetchErr && fetchErr.message ? fetchErr.message : fetchErr) }); } catch (ee) {}
+      throw fetchErr;
+    }
+
+    try { window.__pipelineAuditRetryDiagnostics.push({ step: 'after-fetch-retry', status: resp ? resp.status : null, ok: !!(resp && resp.ok) }); } catch (e) {}
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
+      // try to parse JSON from the raw text, fallback to empty object
+      let err = {};
+      try {
+        err = _rawRespText ? JSON.parse(_rawRespText) : {};
+      } catch (e) {
+        err = {};
+      }
+      try { window.__pipelineAuditRetryDiagnostics.push({ step: 'parsed-error', parsed: err }); } catch (e) {}
       window.showToast && window.showToast(`재시도 실패: ${err?.message || err?.error || 'Server Error'}`, 'error');
-      // append to pipelineAuditLog if present
+      // append diagnostics to pipelineAuditLog if present
       try {
         const logEl = document.getElementById('pipelineAuditLog');
         if (logEl) {
           const time = new Date().toISOString();
-          const entry = `【${time}】 재시도 실패\n${JSON.stringify(err, null, 2)}\n`;
+          const entry = `【${time}】 재시도 실패 (status=${resp.status})\nRAW_RESPONSE:\n${String(_rawRespText || '')}\nPARSED_ERROR:\n${JSON.stringify(err, null, 2)}\n`;
           logEl.textContent = entry + '\n' + logEl.textContent;
         }
       } catch (e) {}
       return { ok: false, error: err };
     }
 
-    const payloadResp = await resp.json().catch(() => null);
+    // successful response path - parse payload and log raw text for debugging
+    let payloadResp = null;
+    try {
+      payloadResp = _rawRespText ? JSON.parse(_rawRespText) : null;
+    } catch (e) {
+      try { window.__pipelineAuditRetryDiagnostics.push({ step: 'parse-error', message: String(e && e.message) }); } catch (inner) {}
+      payloadResp = await resp.json().catch(() => null);
+    }
+    try { window.__pipelineAuditRetryDiagnostics.push({ step: 'payload-parsed', payloadResp: (payloadResp && JSON.parse(JSON.stringify(payloadResp))) || null }); } catch (e) {}
     window.showToast && window.showToast('재시도 요청이 성공했습니다. 결과를 확인하세요.', 'success');
     // optionally surface results to UI
     try {
@@ -351,11 +394,13 @@ window.pipelineAuditRetry = async function ({ payload, hints = {}, forceMandator
 
     }
 
+    try { window.__pipelineAuditRetryDiagnostics.push({ step: 'final-result', ok: true, payloadExists: !!payloadResp }); } catch (e) {}
     return { ok: true, payload: payloadResp };
   } catch (e) {
     console.error('pipelineAuditRetry failed', e);
+    try { window.__pipelineAuditRetryDiagnostics.push({ step: 'uncaught-exception', message: String(e && e.message), stack: (e && e.stack) ? String(e.stack).slice(0,2000) : null, rawRespPreview: (typeof _rawRespText !== 'undefined' ? ((_rawRespText && String(_rawRespText).slice(0,2000)) || null) : null) }); } catch (inner) {}
     window.showToast && window.showToast('재시도 중 오류가 발생했습니다.', 'error');
-    return { ok: false, error: e };
+    return { ok: false, error: (e && (e.message || e.stack) ? { message: e.message, stack: e.stack } : {}) };
   }
 };
 
@@ -2560,46 +2605,58 @@ async function generateDraftAnswersByApi(options = {}) {
         data.theories || [],
         3,
       );
-      try {
-        setPdfStatus(
-          `문제 인식/작성 계획 수립 중... (${updated + blockedCount + 1}/${targetTotal})`,
-          "info",
-        );
-        const planInstruction = buildDraftPlanInstruction(question, relatedTheories);
-        const planBody = {
-          question,
-          instruction: planInstruction,
-          mandatoryPipeline: false,
-          outputStyle: "exam-answer",
-        };
-        if (providerValue) {
-          planBody.provider = providerValue;
-        }
-        if (selectedModelId) {
-          planBody.model = selectedModelId;
-        }
+        try {
+          setPdfStatus(
+            `문제 인식/작성 계획 수립 중... (${updated + blockedCount + 1}/${targetTotal})`,
+            "info",
+          );
+          const planInstruction = buildDraftPlanInstruction(question, relatedTheories);
+          const planBody = {
+            question,
+            instruction: planInstruction,
+            mandatoryPipeline: false,
+            outputStyle: "exam-answer",
+          };
+          if (providerValue) {
+            planBody.provider = providerValue;
+          }
+          if (selectedModelId) {
+            planBody.model = selectedModelId;
+          }
 
-        const planResp = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-          },
-          body: JSON.stringify(planBody),
-        });
-        if (planResp.ok) {
-          const planPayload = await planResp.json().catch(() => ({}));
+          if (!window.__pipelineAuditRetryDiagnostics) window.__pipelineAuditRetryDiagnostics = [];
+          try { window.__pipelineAuditRetryDiagnostics.push({ step: 'before-fetch', endpoint, body: planBody }); } catch (e) {}
+
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            },
+            body: JSON.stringify(planBody),
+          });
+
+          // capture raw response text for diagnostics (helps when server responses are empty or non-JSON)
+          const _rawRespText = await resp.text().catch(() => "");
+          try { window.__pipelineAuditRetryDiagnostics.push({ step: 'after-fetch', status: resp.status, ok: !!resp.ok, raw: (_rawRespText||'').slice(0,2000) }); } catch (e) {}
+
+          let planPayload = {};
+          try {
+            planPayload = JSON.parse(_rawRespText);
+          } catch (e) {
+            // ignore parse errors; planPayload stays as {}
+          }
+
           planText = String(
             planPayload?.answer ||
-              planPayload?.content ||
-              planPayload?.result ||
-              planPayload?.choices?.[0]?.message?.content ||
-              "",
+            planPayload?.content ||
+            planPayload?.result ||
+            (planPayload?.choices && planPayload.choices[0] && planPayload.choices[0].message && planPayload.choices[0].message.content) ||
+            ""
           ).trim();
+        } catch (e) {
+          planText = "";
         }
-      } catch {
-        planText = "";
-      }
 
       const sourceBundle = collectMandatoryFiveStepSources(question, data);
       const qualityInstructionBase = buildHighQualityAnswerInstruction(

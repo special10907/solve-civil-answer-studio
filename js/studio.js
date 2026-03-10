@@ -396,6 +396,22 @@ const Studio = {
       c = c.replace(/`/g, '');
       // Reduce excessive backslashes
       c = c.replace(/\\{2,}/g, '\\');
+      // Aggressive: remove standalone bracketed headings like [비교표], [첨부 인사이트]
+      try {
+        c = c.replace(/^\s*\[[^\]\n]{1,60}\]\s*$/gim, '');
+      } catch (e) {}
+      // Aggressive: quote bare tokens inside simple arrays that contain non-numeric text
+      c = c.replace(/\[([^\]]+)\]/g, function (m, inner) {
+        // if there's any quote or brace inside, skip
+        if (/['"{}\[\]]/.test(inner)) return m;
+        // split by comma
+        const parts = inner.split(',').map(p => p.trim()).filter(Boolean);
+        // if any part contains non-numeric letters (e.g., Korean), wrap all parts in quotes
+        const hasLetters = parts.some(p => /[\p{L}\p{M}]/u.test(p) && !/^[-+]?\d+(\.\d+)?$/.test(p));
+        if (!hasLetters) return m;
+        const quoted = parts.map(p => '"' + p.replace(/"/g, '\\"') + '"').join(', ');
+        return '[' + quoted + ']';
+      });
       return c;
     };
 
@@ -1845,6 +1861,19 @@ const Studio = {
             title,
           });
         } catch (e) {
+          try {
+            // Log raw LLM response for debugging (avoid huge console flood)
+            if (typeof llmData === 'string') {
+              const preview = llmData.length > 2000 ? llmData.slice(0, 2000) + '\n...[truncated]' : llmData;
+              console.debug('RAW LLM RESPONSE (preview):', preview);
+            } else {
+              console.debug('RAW LLM RESPONSE (non-string):', llmData);
+            }
+            // Expose full raw candidate for manual inspection in devtools
+            try { window.__lastLLMCandidate = llmData; } catch (ee) {}
+          } catch (logErr) {
+            console.warn('Failed to record raw LLM response for debug', logErr);
+          }
           console.warn("JSON Parsing Error. Fallback to structured text:", e);
           const fallbackSeed = [
             String(question.rawQuestion || "").trim(),
