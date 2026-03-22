@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Knowledge Studio: Integrity Test Suite (Stark v27.2)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .status-ok { color: #059669; }
+        .status-fail { color: #dc2626; }
+        .bg-glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-8 text-slate-800">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-extrabold text-slate-900 flex items-center gap-3">
+                <i class="fas fa-shield-virus text-indigo-600"></i>
+                System Integrity Test
+            </h1>
+            <p class="text-slate-500 mt-2">Stark Edition v27.2 - 전역 함수 및 모듈 바인딩 무결성 검사</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="test-results">
+            <!-- Results will be injected here -->
+        </div>
+
+        <div class="mt-8 p-6 bg-glass border border-slate-200 rounded-xl shadow-sm">
+            <h3 class="text-lg font-bold mb-4">최종 진단 보고서</h3>
+            <div id="final-verdict" class="p-4 rounded-lg font-bold text-center text-xl">
+                시스템 로딩 중...
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="window.location.reload()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                    재검사 실행
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Modules -->
+    <script type="module">
+        import './js/api.js';
+        import './js/state.js';
+        import './js/ui.js';
+        import './js/pdf.js';
+        import './js/app.js';
+
+        const REQUIRED_GLOBALS = [
+          'toggleDarkMode','toggleViewMode','showSection','switchTab',
+          'refreshAvailableModels','refreshModelList','extractQuestionsFromPdfText',
+          'updateVibration','updateBuckling','showToast','evaluateRoundQuality',
+          'evaluateRenderedAnswers','analyzeTheoryKnowledge',
+          'analyzeTheoryArchiveFiles','clearTheoryArchiveAiPanel',
+          'applyAttachmentInsightToQuestion','deleteSelectedGlobalRound',
+          'openDeleteConfirmModal','closeDeleteConfirmModal',
+          'confirmDeleteModelAnswerEntry','editModelAnswerEntry',
+          'deleteModelAnswerEntry','openImportFileDialog',
+          'exportAnswerDataToFile','deleteCapturedQuestion',
+          'markCurrentAreaAsImage', 'analyzeCurrentArea', 
+          'commitAreaToList', 'generateDraftForCurrentArea', 
+          'bindAddAreaButton'
+        ];
+
+        window.addEventListener('load', () => {
+            const resultsContainer = document.getElementById('test-results');
+            let failCount = 0;
+
+            REQUIRED_GLOBALS.forEach(fn => {
+                const isDefined = typeof window[fn] === 'function';
+                if (!isDefined) failCount++;
+
+                const card = document.createElement('div');
+                card.className = "p-4 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between";
+                card.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-sm font-mono font-bold">${fn}</span>
+                        <span class="text-[10px] text-slate-400">Global Function</span>
+                    </div>
+                    <div class="${isDefined ? 'status-ok' : 'status-fail'}">
+                        <i class="fas ${isDefined ? 'fa-check-circle' : 'fa-times-circle'} text-lg"></i>
+                    </div>
+                `;
+                resultsContainer.appendChild(card);
+            });
+
+            const verdictEl = document.getElementById('final-verdict');
+            if (failCount === 0) {
+                verdictEl.textContent = "ALL SYSTEMS GO: 100% INTEGRITY";
+                verdictEl.className = "p-4 rounded-lg font-bold text-center text-xl bg-emerald-100 text-emerald-700 border border-emerald-200";
+            } else {
+                verdictEl.textContent = `SYSTEM ALERT: ${failCount} DISCONNECTIONS FOUND`;
+                verdictEl.className = "p-4 rounded-lg font-bold text-center text-xl bg-rose-100 text-rose-700 border border-rose-200";
+            }
+        });
+    </script>
+</body>
+</html>

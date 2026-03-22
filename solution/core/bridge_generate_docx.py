@@ -18,6 +18,25 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from docx.shared import Cm
+import requests
+# MCP LLM API 호출 함수
+def llm_api_call(prompt):
+    mcp_url = "https://edge.flowith.io/external/use/llm"
+    payload = {
+        "prompt": prompt,
+        "model": "gpt-4o",
+        "max_tokens": 2048
+    }
+    try:
+        response = requests.post(mcp_url, json=payload)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"MCP LLM API 호출 실패: {response.status_code} {response.text}")
+            return None
+    except Exception as e:
+        print(f"MCP LLM API 호출 오류: {e}")
+        return None
 
 # Add research directory to sys.path
 ROOT_DIR = Path(__file__).resolve().parent

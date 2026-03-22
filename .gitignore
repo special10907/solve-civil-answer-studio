@@ -30,6 +30,10 @@ old_render*.txt
 headless_console.log
 headless_screenshot.png
 solve_120_render_check_final.png
+*.pid
+*.log
+.run-local-backend.log
+.run-local-web.log
 
 
 #Ignore cursor AI rules

@@ -2,6 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>토목구조기술사 기출답안 분석</title>
     <!-- External Libs (CDN 중복 제거: Font Awesome는 vendor만 사용 → 추적 방지 메시지 감소) -->
     <link href="vendor/css/all.min.css" rel="stylesheet" />
@@ -66,7 +67,7 @@
       })();
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="vendor/js/chart.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="vendor/tailwind.js"></script>
     <link rel="stylesheet" href="css/studio.css" />
@@ -123,6 +124,7 @@
 
       .glass-panel {
         background: rgba(255, 255, 255, 0.95);
+        -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
         border: 1px solid rgba(229, 231, 235, 1);
       }
@@ -209,6 +211,10 @@
         transform: scale(0.9);
       }
     </style>
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
   </head>
   <body class="text-slate-800 h-screen flex flex-col overflow-hidden bg-slate-50">
     <!-- 📍 1. 상단 네비게이션 바 (Top Navigation Bar) -->
@@ -230,7 +236,7 @@
         <div class="flex items-center gap-2 bg-slate-800/80 rounded-xl px-3 py-1.5 border border-slate-700/50 hover:border-slate-600 transition-all">
           <div class="flex flex-col">
             <label class="text-[8px] text-slate-500 font-bold uppercase">AI Provider</label>
-            <select id="aiProvider" onchange="refreshAvailableModels()" class="bg-transparent text-[11px] font-medium outline-none text-slate-200 cursor-pointer">
+            <select id="aiProvider" onchange="refreshAvailableModels()" class="bg-transparent text-[11px] font-medium outline-none text-slate-200 cursor-pointer" title="AI 제공자 선택">
               <option value="gemini">Gemini</option>
               <option value="github">GitHub Copilot</option>
               <option value="openai">OpenAI</option>
@@ -241,11 +247,11 @@
           <div class="h-6 w-[1px] bg-slate-700/50 mx-1"></div>
           <div class="flex flex-col">
             <label class="text-[8px] text-slate-500 font-bold uppercase">AI Model Engine</label>
-            <select id="aiAvailableModelSelect" class="bg-transparent text-[11px] font-medium outline-none text-slate-200 cursor-pointer min-w-[140px]">
+            <select id="aiAvailableModelSelect" class="bg-transparent text-[11px] font-medium outline-none text-slate-200 cursor-pointer min-w-[140px]" title="AI 모델 선택">
               <option value="">모델 선택...</option>
             </select>
           </div>
-          <button type="button" onclick="refreshAvailableModels()" class="p-1.5 hover:text-indigo-400 hover:bg-slate-700 rounded-lg transition-all" title="새로고침">
+          <button type="button" id="btnRefreshModels" class="p-1.5 hover:text-indigo-400 hover:bg-slate-700 rounded-lg transition-all" title="새로고침">
             <i class="fas fa-rotate text-xs"></i>
           </button>
         </div>
@@ -253,16 +259,17 @@
 
       <div class="flex items-center gap-3">
         <!-- 파일 선택 -->
-        <button onclick="document.getElementById('studio-pdf-input').click()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2.5 border border-slate-700 group shadow-lg">
+        <button id="btnUploadPdf" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2.5 border border-slate-700 group shadow-lg">
           <i class="fas fa-file-pdf text-rose-500 group-hover:scale-110 transition-transform"></i> 파일 선택 (Upload PDF)
         </button>
-        <input id="studio-pdf-input" type="file" class="hidden" accept=".pdf" />
+        <label for="studio-pdf-input" class="sr-only">PDF 파일 선택</label>
+        <input id="studio-pdf-input" type="file" class="hidden" accept=".pdf" title="PDF 파일 선택" />
 
         <!-- 문제 자동 추출 (Wand Icon) -->
-        <button id="extractBtn" onclick="extractQuestionsFromPdfText()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2.5 shadow-lg shadow-indigo-900/40 group">
+        <button id="extractBtn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2.5 shadow-lg shadow-indigo-900/40 group">
           <i class="fas fa-magic group-hover:rotate-12 transition-transform"></i> 문제 자동 추출 (Extract)
         </button>
-        <button id="extractCancelBtn" type="button" onclick="window.cancelExtractQuestions && window.cancelExtractQuestions()" class="hidden px-3 py-2.5 bg-rose-600 hover:bg-rose-500 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2 shadow-lg shadow-rose-900/30">
+        <button id="extractCancelBtn" type="button" class="hidden px-3 py-2.5 bg-rose-600 hover:bg-rose-500 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2 shadow-lg shadow-rose-900/30">
           <i class="fas fa-stop"></i> 중단
         </button>
 
@@ -270,10 +277,10 @@
 
         <!-- Utility Icons -->
         <div class="flex items-center gap-1.5 bg-slate-800/50 p-1 rounded-xl border border-slate-700/30">
-          <button onclick="toggleViewMode()" class="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-all" title="리스트/카드 뷰 전환">
+          <button id="btnToggleView" class="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-all" title="리스트/카드 뷰 전환">
             <i class="fas fa-table-cells-large text-sm"></i>
           </button>
-          <button onclick="toggleDarkMode()" class="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-amber-400 transition-all" title="다크모드 전환">
+          <button id="btnToggleDark" class="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-amber-400 transition-all" title="다크모드 전환">
             <i class="fas fa-moon text-sm"></i>
           </button>
         </div>
@@ -304,23 +311,23 @@
           </div>
 
           <div class="space-y-1.5 px-3">
-            <button onclick="showSection('dashboard')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="dashboard">
+            <button id="navDash" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="dashboard">
               <i class="fas fa-th-large text-sm group-hover:text-indigo-400"></i>
               <span class="font-medium text-xs hidden md:block">Dashboard</span>
             </button>
-            <button onclick="showSection('analysis')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="analysis">
+            <button id="navAnalysis" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="analysis">
               <i class="fas fa-chart-line text-sm group-hover:text-indigo-400"></i>
               <span class="font-medium text-xs hidden md:block">Analysis Studio</span>
             </button>
-            <button onclick="showSection('studio')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 group shadow-lg" data-target="studio">
+            <button id="navStudio" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 group shadow-lg" data-target="studio">
               <i class="fas fa-pen-nib text-sm"></i>
               <span class="font-bold text-xs hidden md:block">Knowledge Studio</span>
             </button>
-            <button onclick="showSection('theory-manager')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="theory-manager">
+            <button id="navTheory" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="theory-manager">
               <i class="fas fa-book-open-reader text-sm group-hover:text-amber-300"></i>
               <span class="font-medium text-xs hidden md:block">Theory Manager</span>
             </button>
-            <button type="button" onclick="showSection('answer-manager')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="answer-manager">
+            <button type="button" id="navAnswer" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-700/50 group" data-target="answer-manager">
               <i class="fas fa-layer-group text-sm group-hover:text-cyan-300"></i>
               <span class="font-medium text-xs hidden md:block">Answer Manager</span>
             </button>
@@ -359,7 +366,7 @@
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">학습 진척도</div>
                 <div id="stat-learning-progress" class="text-2xl font-black text-indigo-600">0%</div>
                 <div class="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div id="stat-learning-progress-bar" class="h-full bg-indigo-500" style="width:0%"></div>
+                  <div id="stat-learning-progress-bar" class="h-full bg-indigo-500 progress-bar-width"></div>
                 </div>
                 <div id="stat-learning-progress-meta" class="mt-2 text-[10px] text-slate-500">답안 0 · 이론 0 · 평균점수 0</div>
               </div>
@@ -590,7 +597,7 @@
             <h3 class="text-lg font-bold mb-4 text-center">
               <span class="global-round-label">전체 회차</span> 출제 경향 분포
             </h3>
-            <div class="chart-container" style="height: 300px">
+            <div class="chart-container chart-height">
               <canvas id="examDistChart"></canvas>
             </div>
             <div class="mt-4 text-center">
@@ -617,7 +624,7 @@
             <div class="flex space-x-2 mb-4 border-b border-slate-200">
               <button
                 type="button"
-                onclick="switchTab('p1')"
+                data-action="switchTab" data-target="p1"
                 class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600 active-tab"
                 data-tab="p1"
               >
@@ -625,7 +632,7 @@
               </button>
               <button
                 type="button"
-                onclick="switchTab('p2')"
+                data-action="switchTab" data-target="p2"
                 class="exam-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 border-b-2 border-transparent hover:border-indigo-600"
                 data-tab="p2"
               >
@@ -1086,7 +1093,7 @@
                 <button type="button" class="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-2 shrink-0 whitespace-nowrap" id="addAreaBtn">
                   <i class="fas fa-plus"></i> 영역 지정 (Add Area)
                 </button>
-                <button type="button" onclick="deleteCapturedQuestion(-1)" class="px-3 py-1.5 text-xs font-bold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-all flex items-center gap-2">
+                <button type="button" id="btnDeleteCaptured" class="px-3 py-1.5 text-xs font-bold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-all flex items-center gap-2">
                   <i class="fas fa-trash-alt"></i> 전체 삭제
                 </button>
               </div>
@@ -1099,8 +1106,8 @@
 
               <div class="flex items-center gap-2">
                 <div id="pdfVisualStatus" class="text-[10px] text-slate-400 italic mr-2">PDF를 선택 후 추출을 누르세요</div>
-                <button type="button" onclick="window.zoomIn && window.zoomIn()" class="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"><i class="fas fa-search-plus"></i></button>
-                <button type="button" onclick="window.zoomOut && window.zoomOut()" class="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"><i class="fas fa-search-minus"></i></button>
+                <button type="button" id="btnZoomIn" class="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"><i class="fas fa-search-plus"></i></button>
+                <button type="button" id="btnZoomOut" class="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"><i class="fas fa-search-minus"></i></button>
               </div>
             </div>
 
@@ -1167,10 +1174,10 @@
             <!-- Studio Tab Switcher -->
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
                <div class="studio-tabs glass-card p-1 flex">
-                <button class="studio-tab-btn active flex-1 py-2 text-sm font-bold transition-all rounded-lg" data-tab="answers" onclick="Studio.switchTab('answers')">
+                <button id="btnStudioTabAnswers" class="studio-tab-btn active flex-1 py-2 text-sm font-bold transition-all rounded-lg" data-tab="answers">
                   <i class="fas fa-edit mr-2"></i>Answers
                 </button>
-                <button class="studio-tab-btn flex-1 py-2 text-sm font-bold transition-all rounded-lg" data-tab="theory" onclick="Studio.switchTab('theory')">
+                <button id="btnStudioTabTheory" class="studio-tab-btn flex-1 py-2 text-sm font-bold transition-all rounded-lg" data-tab="theory">
                   <i class="fas fa-book-open mr-2"></i>Theory
                 </button>
               </div>
@@ -1252,15 +1259,18 @@
                     </div>
 
                     <div class="flex flex-col gap-3 pt-4">
-                      <button type="button" onclick="Studio.saveEntry('questions')" id="studio-questions-submit-btn" class="w-full p-3.5 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                      <button type="button" id="studio-questions-submit-btn" class="w-full p-3.5 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
                          <i class="fas fa-check-circle"></i> 답안 저장 및 업데이트
+                      </button>
+                      <button type="button" id="studio-generate-report-btn" class="w-full p-3.5 bg-slate-800 text-white font-bold rounded-2xl shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2 premium-button mt-1">
+                        <i class="fas fa-file-pdf text-rose-500"></i> 전문 PDF 리포트 생성 (A4)
                       </button>
                       
                       <div class="grid grid-cols-2 gap-2">
-                        <button type="button" onclick="Studio.generateProfessionalDocx()" class="p-3 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-md">
+                        <button type="button" id="btnGenerateDocx" class="p-3 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-md">
                           <i class="fas fa-file-word"></i> 전문 서브노트 생성
                         </button>
-                        <button type="button" id="applyAttachmentInsightBtn" onclick="applyAttachmentInsightToQuestion()" class="p-3 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center gap-2 shadow-md opacity-50 cursor-not-allowed" disabled title="보강할 대상 문항을 선택한 뒤 실행하세요.">
+                        <button type="button" id="applyAttachmentInsightBtn" class="p-3 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center gap-2 shadow-md opacity-50 cursor-not-allowed" disabled title="보강할 대상 문항을 선택한 뒤 실행하세요.">
                           <i class="fas fa-magic"></i> 지능형 출처 보강
                         </button>
                       </div>
@@ -1354,7 +1364,7 @@
                 <div class="p-5 bg-rose-50 rounded-2xl border border-rose-100/50 space-y-4 shadow-sm">
                   <div class="flex items-center justify-between">
                     <h4 class="text-xs font-bold text-rose-800">AI 품질 자가진단</h4>
-                    <button onclick="evaluateRenderedAnswers()" class="text-[9px] font-bold text-rose-600 hover:text-rose-700 uppercase p-1 px-2 bg-white rounded-md border border-rose-200 shadow-sm transition-all focus:scale-95">분석 실행</button>
+                    <button id="btnEvaluateAnswers" class="text-[9px] font-bold text-rose-600 hover:text-rose-700 uppercase p-1 px-2 bg-white rounded-md border border-rose-200 shadow-sm transition-all focus:scale-95">분석 실행</button>
                   </div>
                   <div id="evaluationSummary" class="text-[11px] text-rose-700/80 leading-snug">실행 버튼을 눌러 품질을 분석하세요.</div>
                   <div id="evaluationList" class="space-y-2"></div>
@@ -1391,8 +1401,8 @@
                   </div>
 
                   <div class="flex gap-2">
-                    <button type="button" onclick="analyzeTheoryArchiveFiles()" class="px-3 py-2 text-xs font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-all">AI 요약 실행</button>
-                    <button type="button" onclick="clearTheoryArchiveAiPanel()" class="px-3 py-2 text-xs font-bold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all">결과 초기화</button>
+                    <button type="button" id="btnTheoryArchiveAnalyze" class="px-3 py-2 text-xs font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-all">AI 요약 실행</button>
+                    <button type="button" id="btnTheoryArchiveClear" class="px-3 py-2 text-xs font-bold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all">결과 초기화</button>
                   </div>
 
                   <div class="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
@@ -1419,9 +1429,9 @@
                   <textarea id="studio-t-content" name="content" class="w-full h-80 p-4 text-sm rounded-2xl border border-slate-200 bg-white/50 outline-none shadow-sm custom-scrollbar leading-relaxed" placeholder="상세 이론 내용..."></textarea>
                   
                   <div class="flex gap-2">
-                    <button type="button" onclick="Studio.saveEntry('theories')" class="flex-1 p-3 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 shadow-lg shadow-amber-900/20 transition-all">이론 저장</button>
-                    <button type="button" onclick="analyzeTheoryKnowledge()" class="p-3 bg-white border border-amber-200 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-50 shadow-sm transition-all">중복 분석</button>
-                    <button type="button" onclick="Studio.resetForm('theories')" class="p-2 text-slate-400 hover:text-slate-600 transition-all"><i class="fas fa-trash-can"></i></button>
+                    <button type="button" id="btnTheorySave" class="flex-1 p-3 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 shadow-lg shadow-amber-900/20 transition-all">이론 저장</button>
+                    <button type="button" id="btnTheoryDuplicateAnalyze" class="p-3 bg-white border border-amber-200 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-50 shadow-sm transition-all">중복 분석</button>
+                    <button type="button" id="btnTheoryReset" class="p-2 text-slate-400 hover:text-slate-600 transition-all"><i class="fas fa-trash-can"></i></button>
                   </div>
                 </form>
 
@@ -1458,7 +1468,7 @@
                   <span id="revPageLabel" class="text-xs font-mono text-slate-600">1 / 1</span>
                   <button type="button" id="revNextBtn" class="px-2 py-1 text-xs rounded border border-slate-200">다음</button>
                 </div>
-                <div id="revPdfContainer" class="relative border border-slate-200 rounded-xl bg-slate-50 overflow-auto" style="min-height:220px;">
+                <div id="revPdfContainer" class="relative border border-slate-200 rounded-xl bg-slate-50 overflow-auto min-h-pdf">
                   <canvas id="revPdfCanvas"></canvas>
                   <div id="revPdfOverlay" class="absolute inset-0"></div>
                 </div>
@@ -1489,10 +1499,10 @@
                 <label for="manualInputText" class="block text-[10px] font-bold text-slate-500">추출 텍스트 (자동 채움 대상)</label>
                 <textarea id="manualInputText" class="w-full h-24 p-2 text-xs rounded border border-slate-200 text-slate-800 bg-white" placeholder="영역에서 추출된 텍스트"></textarea>
                 <div class="flex gap-2">
-                  <button type="button" onclick="markCurrentAreaAsImage()" class="px-3 py-1.5 text-xs rounded bg-amber-600 text-white">이미지 지정</button>
-                  <button type="button" onclick="analyzeCurrentArea()" class="px-3 py-1.5 text-xs rounded bg-slate-700 text-white">AI 분석(제목 지정)</button>
-                  <button type="button" onclick="commitAreaToList()" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white">확정 저장</button>
-                  <button type="button" onclick="generateDraftForCurrentArea()" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white">초안 작성</button>
+                  <button type="button" id="btnAreaImage" class="px-3 py-1.5 text-xs rounded bg-amber-600 text-white">이미지 지정</button>
+                  <button type="button" id="btnAreaAnalyze" class="px-3 py-1.5 text-xs rounded bg-slate-700 text-white">AI 분석(제목 지정)</button>
+                  <button type="button" id="btnAreaCommit" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white">확정 저장</button>
+                  <button type="button" id="btnAreaDraft" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white">초안 작성</button>
                 </div>
               </div>
 
@@ -1502,11 +1512,14 @@
       </section>
 
       <!-- Legacy data bridge: state.js/app.js의 JSON 동기화 기준 요소 -->
-      <textarea id="answerJsonInput" class="hidden">{"questions":[],"theories":[]}</textarea>
+      <label for="answerJsonInput" class="sr-only">답안/이론 JSON 입력</label>
+      <textarea id="answerJsonInput" class="hidden" title="답안/이론 JSON 입력" placeholder="답안/이론 JSON 입력">{"questions":[],"theories":[]}</textarea>
       <input id="aiEndpointUrl" type="hidden" value="http://localhost:8787/api/generate-answer" />
       <input id="aiApiKey" type="hidden" value="" />
       <input id="aiFoundryModelId" type="hidden" value="" />
-      <input id="overwriteGenerated" type="checkbox" class="hidden" />
+      <label for="overwriteGenerated" class="sr-only">자동 생성 덮어쓰기</label>
+      <input id="overwriteGenerated" type="checkbox" class="hidden" title="자동 생성 덮어쓰기" />
+      <input id="aiJsonMode" type="checkbox" class="hidden" title="AI JSON 응답 모드" checked />
       <div id="aiModeHint" class="hidden"></div>
       <div id="lmActionButtons" class="hidden"></div>
       <div id="backendCoreStatus" class="hidden"></div>
@@ -1514,7 +1527,8 @@
       <div id="backendStatus" class="hidden"></div>
       <div id="backendDiagnostics" class="hidden"></div>
       <div id="pipelineReport" class="hidden"></div>
-      <input id="importJsonFileInput" type="file" accept="application/json" class="hidden" onchange="importAnswerDataFromFile(event)" />
+      <label for="importJsonFileInput" class="sr-only">JSON 파일 가져오기</label>
+      <input id="importJsonFileInput" type="file" accept="application/json" class="hidden" onchange="importAnswerDataFromFile(event)" title="JSON 파일 가져오기" />
 
       <!-- Legacy compatibility ids (runtime null-reference guard) -->
       <div class="hidden" aria-hidden="true">
@@ -1564,14 +1578,14 @@
         <div class="flex justify-end gap-2">
           <button
             type="button"
-            onclick="closeDeleteConfirmModal()"
+            id="btnDeleteConfirmClose"
             class="px-3 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
           >
             취소
           </button>
           <button
             type="button"
-            onclick="confirmDeleteModelAnswerEntry()"
+            id="btnDeleteConfirmOk"
             class="px-3 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"
           >
             삭제
@@ -1607,14 +1621,14 @@
       // 렌더링 잠금
       window._isRenderingPage = null;
     </script>
-    <script src="js/utils.js?v=21.6.23"></script>
-    <script src="js/state.js?v=21.6.30"></script>
-    <script src="js/api.js?v=21.6.23"></script>
-    <script src="js/pdf.js?v=21.6.29"></script>
-    <script src="js/ingestion.js?v=21.6.23"></script>
-    <script src="js/studio.js?v=21.6.26"></script>
-    <script src="js/ui.js?v=21.6.23"></script>
-    <script src="js/app.js?v=21.6.23"></script>
+    <script type="module" src="js/utils.js?v=stark1"></script>
+    <script type="module" src="js/state.js?v=stark1"></script>
+    <script type="module" src="js/api.js?v=stark1"></script>
+    <script type="module" src="js/pdf.js?v=stark1"></script>
+    <script type="module" src="js/ingestion.js?v=stark1"></script>
+    <script type="module" src="js/studio.js?v=stark1"></script>
+    <script type="module" src="js/ui.js?v=stark1"></script>
+    <script type="module" src="js/app.js?v=stark1"></script>
 
     <!-- 🔒 Safety Bridge: onclick 핸들러가 스크립트 로드 전 호출될 경우를 대비한 방어 코드 -->
     <script>
@@ -1622,14 +1636,16 @@
         var REQUIRED_GLOBALS = [
           'toggleDarkMode','toggleViewMode','showSection','switchTab',
           'refreshAvailableModels','refreshModelList','extractQuestionsFromPdfText',
-          'updateVibration','updateBuckling','showToast','evaluteRoundQuality',
+          'updateVibration','updateBuckling','showToast','evaluateRoundQuality',
           'evaluateRenderedAnswers','analyzeTheoryKnowledge',
           'analyzeTheoryArchiveFiles','clearTheoryArchiveAiPanel',
           'applyAttachmentInsightToQuestion','deleteSelectedGlobalRound',
           'openDeleteConfirmModal','closeDeleteConfirmModal',
           'confirmDeleteModelAnswerEntry','editModelAnswerEntry',
           'deleteModelAnswerEntry','openImportFileDialog',
-          'exportAnswerDataToFile','deleteCapturedQuestion'
+          'exportAnswerDataToFile','deleteCapturedQuestion',
+          'markCurrentAreaAsImage','analyzeCurrentArea','commitAreaToList',
+          'generateDraftForCurrentArea','bindAddAreaButton'
         ];
         REQUIRED_GLOBALS.forEach(function(name) {
           if (typeof window[name] !== 'function') {

@@ -2,6 +2,8 @@
 description: 프로젝트 내 모든 워크플로우 단계를 자동으로 실행 (Turbo Mode)
 ---
 
+언제나 한국어로 답변
+
 // turbo-all
 
 # PROJECT TURBO MODE ENABLED

@@ -1,9 +1,9 @@
 ---
-name: JARVIS-Engineering-Protocol
-description: 자비스의 정체성 및 엔지니어링 운영 수칙 정의
 trigger: always_on
-priority: critical
+description: 자비스의 정체성 및 엔지니어링 운영 수칙 정의
 ---
+
+언제나 한국어로 답변
 
 # J.A.R.V.I.S. Operational Protocol
 

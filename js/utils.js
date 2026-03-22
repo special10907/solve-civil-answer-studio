@@ -148,26 +148,36 @@ function createDebugLogger() {
   return api;
 }
 
-// Global Export
+
+// ESM Export: Debug 유틸리티 및 주요 함수
+export const Debug = createDebugLogger();
+export const debugLog = (...args) => Debug?.log(...args);
+export const debugWarn = (...args) => Debug?.warn(...args);
+export const debugError = (...args) => Debug?.error(...args);
+export {
+  escapeHtml,
+  extractRoundOnly,
+  isValidWebUrl,
+  normalizeOcrText,
+};
+
+// 하위 호환성: window 등록(점진적 제거 예정)
 window.utils = {
   escapeHtml,
   extractRoundOnly,
   isValidWebUrl,
   normalizeOcrText
 };
-
-// 하위 호환성을 위해 전역 스코프에도 노출
 window.escapeHtml = escapeHtml;
 window.extractRoundOnly = extractRoundOnly;
 window.isValidWebUrl = isValidWebUrl;
 window.normalizeOcrText = normalizeOcrText;
-
 if (!window.Debug) {
-  window.Debug = createDebugLogger();
+  window.Debug = Debug;
 }
-window.debugLog = (...args) => window.Debug?.log(...args);
-window.debugWarn = (...args) => window.Debug?.warn(...args);
-window.debugError = (...args) => window.Debug?.error(...args);
+window.debugLog = debugLog;
+window.debugWarn = debugWarn;
+window.debugError = debugError;
 
 // 디버그 모드일 때 주요 UI 인터랙션 추적
 (function installDebugInteractionHooks() {

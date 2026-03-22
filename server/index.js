@@ -3,6 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
 import fs from "fs";
+import fetch from "node-fetch";
+import puppeteer from "puppeteer";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -810,7 +814,6 @@ function getRagContext(query) {
         .toLowerCase()
         .split(/\s+/)
         .filter((t) => t.length > 1);
-      // Fix: idx가 배열이 아니라 { documents: [...] } 형태임을 반영
       const docs = Array.isArray(idx) ? idx : idx.documents || [];
 
       const scoredDocs = docs.map((doc) => {
@@ -870,20 +873,21 @@ async function fetchWebContext(query) {
         },
       });
 
-    try {
-      const stdout = run("python");
-      return stdout || "";
-    } catch (firstError) {
-      if (process.platform === "win32") {
-        try {
-          const stdout = run("py -3");
-          return stdout || "";
-        } catch {
-          throw firstError;
-        }
+    const candidates = process.platform === "win32"
+      ? ["python", "py -3", "python3"]
+      : ["python", "python3"];
+
+    let lastError = null;
+    for (const cmd of candidates) {
+      try {
+        const stdout = run(cmd);
+        return stdout || "";
+      } catch (error) {
+        lastError = error;
       }
-      throw firstError;
     }
+
+    throw lastError || new Error("No Python runtime available for web research");
   } catch (error) {
     console.error("Python Web Research Error:", error);
     return "";
@@ -1600,6 +1604,8 @@ async function callAnthropic({ apiKey, model, userPrompt, temperature = 0.3 }) {
 }
 
 const isValidKey = (key) => Boolean(key && !String(key).includes("your_"));
+const getOpenAIKey = () =>
+  process.env.OPENAI_API_KEY || process.env.openai_api_key || "";
 
 /**
  * AI Provider 우선순위 정책 (Sir의 요청에 따름):
@@ -1628,12 +1634,12 @@ async function generateTextWithProviders({
     },
     {
       provider: "openai",
-      enabled: isValidKey(process.env.OPENAI_API_KEY),
+      enabled: isValidKey(getOpenAIKey()),
       run: async () =>
         callOpenAICompatible({
           provider: "openai",
           baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-          apiKey: process.env.OPENAI_API_KEY,
+          apiKey: getOpenAIKey(),
           model: process.env.OPENAI_MODEL || "gpt-4o-mini",
           systemPrompt,
           userPrompt,
@@ -1698,7 +1704,7 @@ async function generateTextWithProviders({
 
 function getProviderConfigStatus() {
   return {
-    openai: isValidKey(process.env.OPENAI_API_KEY),
+    openai: isValidKey(getOpenAIKey()),
     gemini: isValidKey(process.env.GEMINI_API_KEY),
     anthropic: isValidKey(process.env.ANTHROPIC_API_KEY),
     lmstudio: isValidKey(process.env.LMSTUDIO_BASE_URL),
@@ -2059,7 +2065,7 @@ app.get("/api/dropzone-status", (req, res) => {
   }
 });
 
-// [REMOVED] Redundant /api/validate-keys (Merged logic below)
+
 
 app.post("/api/lmstudio-models", async (req, res) => {
   const rawBaseUrl = String(
@@ -2161,7 +2167,7 @@ app.get("/api/validate-keys", async (req, res) => {
       await callOpenAICompatible({
         provider: "openai",
         baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: getOpenAIKey(),
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         systemPrompt: "System",
         userPrompt: testPrompt,
@@ -2236,6 +2242,22 @@ app.post("/api/search-context", async (req, res) => {
   const parsed = parseWebResearchContext(contextRaw);
   const context = renderParsedWebResearchContext(parsed, contextRaw);
   res.json({ query: query || "", context, parsed, rawContext: contextRaw });
+});
+
+app.post("/api/generate-image", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "프롬프트가 필요합니다." });
+    }
+
+    // 실제 API 연동 전 placeholder 이미지 반환
+    const imageUrl = `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0,40))}`;
+
+    res.json({ imageUrl });
+  } catch (err) {
+    res.status(500).json({ error: "이미지 생성 실패", detail: err.message });
+  }
 });
 
 app.post("/api/generate-answer", async (req, res) => {
@@ -2641,6 +2663,43 @@ app.post("/api/generate-docx", async (req, res) => {
   } catch (error) {
     console.error("DOCX Bridge Error:", error);
     return res.status(500).json({ ok: false, error: String(error) });
+  }
+});
+
+app.post("/api/generate-pdf-report", async (req, res) => {
+  try {
+    const { examRound, questions } = req.body;
+    console.log(`[STARK] Generating High-Res PDF for Round: ${examRound}`);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
+    const page = await browser.newPage();
+    
+    // 로컬 서버 URL로 접속 (workspaceRoot가 static으로 서빙됨)
+    const url = `http://localhost:${port}/solve_120.html?v=${Date.now()}`;
+    await page.goto(url, { waitUntil: "networkidle0" });
+    
+    // 특정 회차 데이터 로드 및 렌더링을 기다리는 로직 필요 (여기서는 단순 캡처 예시)
+    // 실제로는 클라이언트에서 해당 데이터를 렌더링하도록 강제해야 함
+    
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "15mm", right: "10mm", bottom: "15mm", left: "10mm" },
+      displayHeaderFooter: true,
+      headerTemplate: '<div style="font-size: 8px; margin-left: 10mm;">Knowledge Studio: Stark Edition</div>',
+      footerTemplate: '<div style="font-size: 8px; margin-left: auto; margin-right: 10mm;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>'
+    });
+
+    await browser.close();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("[STARK] PDF Generation Error:", error);
+    res.status(500).json({ error: "PDF Generation Failed" });
   }
 });
 

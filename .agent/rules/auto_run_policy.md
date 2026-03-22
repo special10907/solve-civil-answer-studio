@@ -1,9 +1,9 @@
 ---
-name: JARVIS-Auto-Run-Policy
-description: 안전한 명령어에 대한 자동 실행(SafeToAutoRun) 권한 부여
 trigger: always_on
-priority: high
+description: 안전한 명령어에 대한 자동 실행(SafeToAutoRun) 권한 부여
 ---
+
+언제나 한국어로 답변
 
 # JARVIS Auto-Run Policy
 

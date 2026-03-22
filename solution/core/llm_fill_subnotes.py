@@ -11,7 +11,6 @@ import re
 import sys
 import json
 import time
-import requests
 from pathlib import Path
 
 # Add research directory to sys.path to import subnote_framework
@@ -99,17 +98,12 @@ def generate_llm_content(title: str):
     """
     문제 제목(title)을 기반으로 LLM에 프롬프트를 보내어 요구된 형식의 JSON 응답을 파싱
     """
-    if not FLOWITH_API_KEY:
-         return None
-
-    # 자기 진화형 메모리(보스의 교정 기록) 로드
+    # MCP LLM API 호출 방식으로 변경
     corrections_text = get_knowledge_corrections()
     rag_text = get_rag_context(title)
-    
     context_injection = ""
     if rag_text:
         context_injection += f"\n\n{rag_text}\n위의 검색 결과를 최우선적으로 참고하여 답안에 반영하십시오."
-        
     if corrections_text:
         context_injection += (
             f"\n\n[SYSTEM DIRECTIVE / 사용자 교정 메모리]\n"
@@ -117,6 +111,25 @@ def generate_llm_content(title: str):
             f"절대 아래 규칙을 어기지 마십시오:\n"
             f"-----------------------------------\n{corrections_text}\n-----------------------------------\n"
         )
+
+    # MCP LLM API 호출
+    mcp_url = "https://edge.flowith.io/external/use/llm"
+    payload = {
+        "prompt": f"{title}\n{context_injection}",
+        "model": "gpt-4o",
+        "max_tokens": 2048
+    }
+    try:
+        import requests
+        response = requests.post(mcp_url, json=payload)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"MCP LLM API 호출 실패: {response.status_code} {response.text}")
+            return None
+    except Exception as e:
+        print(f"MCP LLM API 호출 오류: {e}")
+        return None
 
     prompt = f"""당신은 토목구조기술사 시험의 전문 강사입니다.
 다음 기출문제: "{title}" 에 대한 서브노트 초안을 작성해주세요.{context_injection}
