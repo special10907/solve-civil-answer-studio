@@ -189,6 +189,9 @@ function generateDraftAnswersLocal() {
     return generateDraftAnswersByApi({ forceLocal: true }); 
 }
 
+window.generateDraftAnswersByActiveModel = generateDraftAnswersByActiveModel;
+window.generateDraftAnswersLocal = generateDraftAnswersLocal;
+
 export {
   runAutoPipeline, getSafeStorage, setBackendStatus, updateAiModeUx,
   detectLmStudioModelId, AI_ENDPOINT_STORAGE_KEY, applyAiPreset,
