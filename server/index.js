@@ -7,6 +7,7 @@ import fetch from "node-fetch";
 import puppeteer from "puppeteer";
 import path from "path";
 import { fileURLToPath } from "url";
+import { execSync, spawn, spawnSync } from "child_process";
 
 dotenv.config();
 
@@ -768,10 +769,6 @@ function buildMandatorySourceBundleContext(sourceBundle = {}) {
     insight,
   ].join("\n");
 }
-
-import { execSync, spawn, spawnSync } from "child_process";
-import path from "path";
-import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
