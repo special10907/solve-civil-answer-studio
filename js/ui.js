@@ -105,7 +105,10 @@ export async function refreshModelList() {
 }
 
 export function evaluateRoundQuality() {
-  showToast("현재 뷰에서는 품질 분석이 지원되지 않습니다.", "info");
+  if (typeof window.evaluateRenderedAnswers === 'function') {
+    return window.evaluateRenderedAnswers();
+  }
+  showToast("품질 분석 엔진을 로드할 수 없습니다.", "error");
 }
 
 const UI = {
