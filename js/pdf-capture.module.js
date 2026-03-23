@@ -158,8 +158,33 @@ export function markCurrentAreaAsImage() {
 }
 
 export async function analyzeCurrentArea() {
-  setPdfStatus("AI 분석 중...", "info");
-  showToast("지능형 분석 기능은 향후 API 연동 시 활성화됩니다.", "info");
+  const media = getActiveCaptureImagePayload();
+  if (!media) return setPdfStatus("분석할 영역이 없습니다.", "error");
+
+  setPdfStatus("영역 이미지 분석 중 (OCR)...", "info");
+  try {
+    const text = await extractTextByOcrFromImage(media.thumbnailDataUrl);
+    if (!text) throw new Error("텍스트 추출 실패");
+
+    const textEl = document.getElementById("manualInputText");
+    if (textEl) textEl.value = text;
+
+    setPdfStatus("AI 제목 생성 중...", "info");
+    // AI를 통한 제목/번호 자동 추출 시도
+    if (typeof window.generateDraftAnswersByActiveModel === "function") {
+      const prompt = `다음 텍스트에서 문항 번호(예: Q1, 문제 1) 또는 핵심 제목(10자 이내) 하나만 추출해줘. 텍스트: ${text.slice(0, 100)}`;
+      const aiResult = await window.generateDraftAnswersByActiveModel(prompt);
+      const title = aiResult.replace(/["'#*]/g, "").trim();
+      const numEl = document.getElementById("manualQNum");
+      if (numEl) numEl.value = title;
+    }
+
+    setPdfStatus("지능형 분석 완료", "success");
+    if (typeof window.updateManualContentModeBadge === "function") window.updateManualContentModeBadge();
+  } catch (err) {
+    console.error("[STARK] analyzeCurrentArea error:", err);
+    setPdfStatus("분석 실패: " + err.message, "error");
+  }
 }
 
 export function commitAreaToList() {
